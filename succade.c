@@ -256,24 +256,23 @@ int main(void)
 	char blocksdir[256];
 	if (get_blocks_dir(blocksdir, sizeof(blocksdir)))
 	{
-		prinf("Blocks: %s\n", blocksdir);
+		printf("Blocks: %s\n", blocksdir);
 	}
 
 	DIR *dir;
 	dir = opendir(blocksdir);
-	if (!dir)
+	if (dir == NULL)
 	{
 		perror("Could not open config dir");
 		return -1;
 	}
-	
 	int num_blocks = count_ex_files(dir);
 	// printf("%d files in blocks dir", count_ex_files(dir));
 	printf("%d files in blocks dir\n", num_blocks);
-	
-	struct block blocks[num_blocks];
 
+	struct block blocks[num_blocks];
 	int num_blocks_found = fill_my_blocks_bitch(dir, blocks, num_blocks);
+	
 	closedir(dir);
 
 	printf("Blocks found: ");
