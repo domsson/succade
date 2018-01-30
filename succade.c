@@ -17,7 +17,7 @@ struct block
 	char align;
 };
 
-void bar(struct block *blocks, int num_blocks)
+FILE *open_bar()
 {
 	// File descriptor for our lemonbar process
 	FILE *stream;
@@ -27,48 +27,82 @@ void bar(struct block *blocks, int num_blocks)
 	stream = popen("lemonbar -g x24 -b -B '#FFFFFF' -F '#000000'", "w");
 	
 	// Check if we were able to create the process/pipe
-	if (stream == NULL)
+	if (stream != NULL)
 	{
-		printf("Failed to run lemonbar\n");
-		exit(1);
+		// The stream is usually unbuffered, so we would have
+		// to call fflush(stream) after each and every line,
+		// instead we set the stream to be line buffered.
+		setlinebuf(stream);
 	}
 
-	// The stream is usually unbuffered, so we would have
-	// to call fflush(stream) after each and every line,
-	// instead we set the stream to be line buffered.
-	setlinebuf(stream);
+	return stream;
+}
 
-	// Some initial test output
-	fputs("Initializing ...\n", stream);
-	sleep(2); // So we can actually see it	
-	// We close the stream or file descriptor or pipe or whatever
-	//pclose(stream);
+void close_bar(FILE *bar)
+{
+	if (bar != NULL)
+	{
+		pclose(bar);
+	}
+}
 
-	char lemonbar_str[1024];
-
+void open_blocks(struct block *blocks, int num_blocks)
+{
 	char block_dir[] = "/home/julien/.config/succade/blocks/";
 
 	int i;
 	for(i=0; i<num_blocks; ++i)
 	{
 		int block_path_length = sizeof(block_dir) + sizeof(blocks[i].name);
-			char *block_path = malloc(block_path_length);
+		char *block_path = malloc(block_path_length);
 		strcpy(block_path, block_dir);
 		strcat(block_path, blocks[i].name);
 		blocks[i].fd = popen(block_path, "r");	
-		
-		fetch_block_info(&blocks[i]);
-		
+		//fetch_block_info(&blocks[i]);
 		free(block_path);
 	}
+}
 
+void close_blocks(struct block *blocks, int num_blocks)
+{
+	int i;
+	for(i=0; i<num_blocks; ++i)
+	{
+		pclose(blocks[i].fd);
+	}
+}
+
+void bar(FILE *stream, struct block *blocks, int num_blocks)
+{
+	// Some initial test output
+	//fputs("Initializing ...\n", stream);
+	//sleep(2); // So we can actually see it	
+	// We close the stream or file descriptor or pipe or whatever
+	//pclose(stream);
+
+	char lemonbar_str[1024];
+
+/*
+	char block_dir[] = "/home/julien/.config/succade/blocks/";
+
+	int i;
+	for(i=0; i<num_blocks; ++i)
+	{
+		int block_path_length = sizeof(block_dir) + sizeof(blocks[i].name);
+		char *block_path = malloc(block_path_length);
+		strcpy(block_path, block_dir);
+		strcat(block_path, blocks[i].name);
+		blocks[i].fd = popen(block_path, "r");	
+		//fetch_block_info(&blocks[i]);
+		free(block_path);
+	}
+*/
 	lemonbar_str[0] = '\0';
 	
 	for(i=0; i<num_blocks; ++i)
 	{
 		char *block_res = malloc(64);
 		block_res[0] = '\0';
-		//run_block(blocks[i].fd, block_res, sizeof(block_res));
 		run_block(blocks[i].fd, block_res, sizeof(block_res));
 		char *fg = malloc(16);
 		strcpy(fg, "%{F");
@@ -96,6 +130,7 @@ void bar(struct block *blocks, int num_blocks)
 	printf("%s\n", lemonbar_str);
 	strcat(lemonbar_str, "\n");
 	fputs(lemonbar_str, stream);
+/*
 	sleep(2);
 
 	for(i=0; i<num_blocks; ++i)
@@ -104,6 +139,7 @@ void bar(struct block *blocks, int num_blocks)
 	}
 
 	pclose(stream);
+*/
 }
 
 void fetch_block_info(struct block *b)
@@ -156,7 +192,6 @@ int count_ex_files(DIR *dir)
 	{
 		if (entry->d_type == DT_REG)
 		{
-			//printf("%s", entry->d_name);
 			++count;
 		}
 	}
@@ -267,7 +302,6 @@ int main(void)
 		return -1;
 	}
 	int num_blocks = count_ex_files(dir);
-	// printf("%d files in blocks dir", count_ex_files(dir));
 	printf("%d files in blocks dir\n", num_blocks);
 
 	struct block blocks[num_blocks];
@@ -283,6 +317,13 @@ int main(void)
 	}
 	printf("\n");
 
-	bar(blocks, num_blocks_found);
+	FILE *bar = open_bar();
+	open_blocks(blocks, num_blocks_found);
+	while (1)
+	{
+		bar(*bar, blocks, num_blocks_found);
+	}
+	close_blocks();
+	close_bar();
 	return 0;
 }
