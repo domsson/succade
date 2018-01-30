@@ -1,0 +1,1 @@
+gcc -o succade ini.c succade.c
