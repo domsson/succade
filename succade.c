@@ -10,10 +10,10 @@
 
 struct block
 {
-	char *name;
+	char name[64];
 	FILE *fd;
-	char *fg;
-	char *bg;
+	char fg[16];
+	char bg[16];
 	char align;
 };
 
