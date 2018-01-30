@@ -6,12 +6,14 @@
 #include "succade.h"
 #include "ini.h"
 
+#define NAME "succade"
+
 struct block
 {
-	char name[64];
+	char *name;
 	FILE *fd;
-	char fg[16];
-	char bg[16];
+	char *fg;
+	char *bg;
 	char align;
 };
 
@@ -26,12 +28,12 @@ void bar(struct block *blocks, int num_blocks)
 	
 	// Check if we were able to create the process/pipe
 	if (stream == NULL)
-       	{
+	{
 		printf("Failed to run lemonbar\n");
 		exit(1);
 	}
 
-        // The stream is usually unbuffered, so we would have
+	// The stream is usually unbuffered, so we would have
 	// to call fflush(stream) after each and every line,
 	// instead we set the stream to be line buffered.
 	setlinebuf(stream);
@@ -50,7 +52,7 @@ void bar(struct block *blocks, int num_blocks)
 	for(i=0; i<num_blocks; ++i)
 	{
 		int block_path_length = sizeof(block_dir) + sizeof(blocks[i].name);
-        	char *block_path = malloc(block_path_length);
+			char *block_path = malloc(block_path_length);
 		strcpy(block_path, block_dir);
 		strcat(block_path, blocks[i].name);
 		blocks[i].fd = popen(block_path, "r");	
@@ -230,23 +232,48 @@ int fill_my_blocks_bitch(DIR *block_dir, struct block *blocks, int num_blocks)
 	return i;
 }
 
+int get_blocks_dir(char *buffer, int buffer_size)
+{
+	char *config_home = getenv("XDG_CONFIG_HOME");
+	if (config_home != NULL)
+	{
+		return snprintf(buffer, buffer_size, "%s/%s/%s", config_home, NAME, "blocks");
+	}
+	else
+	{
+		return snprintf(buffer, buffer_size, "%s/%s/%s/%s", getenv("HOME"), ".config", NAME, "blocks");
+	}
+}
+
 int main(void)
 {
 	char *homedir = getenv("HOME");
 	if (homedir != NULL)
 	{
-		printf("%s\n", homedir);
+		printf("Home: %s\n", homedir);
 	}
 
-        DIR *dir;
-	dir = opendir("/home/julien/.config/succade/blocks");
-        int num_blocks = count_ex_files(dir);
+	char blocksdir[256];
+	if (get_blocks_dir(blocksdir, sizeof(blocksdir)))
+	{
+		prinf("Blocks: %s\n", blocksdir);
+	}
+
+	DIR *dir;
+	dir = opendir(blocksdir);
+	if (!dir)
+	{
+		perror("Could not open config dir");
+		return -1;
+	}
+	
+	int num_blocks = count_ex_files(dir);
 	// printf("%d files in blocks dir", count_ex_files(dir));
 	printf("%d files in blocks dir\n", num_blocks);
 	
-        struct block blocks[num_blocks];
+	struct block blocks[num_blocks];
 
-        int num_blocks_found = fill_my_blocks_bitch(dir, blocks, num_blocks);
+	int num_blocks_found = fill_my_blocks_bitch(dir, blocks, num_blocks);
 	closedir(dir);
 
 	printf("Blocks found: ");
