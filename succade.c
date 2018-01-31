@@ -272,7 +272,7 @@ int main(void)
 	printf("%d files in blocks dir\n", num_blocks);
 
 	struct block blocks[num_blocks];
-	int num_blocks_found = fill_my_blocks_bitch(dir, blocks, num_blocks);
+	int num_blocks_found = init_blocks(dir, blocks, num_blocks);
 	
 	closedir(dir);
 
