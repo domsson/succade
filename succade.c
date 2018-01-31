@@ -19,14 +19,10 @@ struct block
 
 FILE *open_bar()
 {
-	// File descriptor for our lemonbar process
-	FILE *stream;
-
 	// Run lemonbar via popen() in write mode,
 	// this enables us to send data to lemonbar's stdin
-	stream = popen("lemonbar -g x24 -b -B '#FFFFFF' -F '#000000'", "w");
+	FILE *stream = popen("lemonbar -g x24 -b -B '#FFFFFF' -F '#000000'", "w");
 	
-	// Check if we were able to create the process/pipe
 	if (stream != NULL)
 	{
 		// The stream is usually unbuffered, so we would have
@@ -74,29 +70,8 @@ void close_blocks(struct block *blocks, int num_blocks)
 
 void bar(FILE *stream, struct block *blocks, int num_blocks)
 {
-	// Some initial test output
-	//fputs("Initializing ...\n", stream);
-	//sleep(2); // So we can actually see it	
-	// We close the stream or file descriptor or pipe or whatever
-	//pclose(stream);
-
 	char lemonbar_str[1024];
 
-/*
-	char block_dir[] = "/home/julien/.config/succade/blocks/";
-
-	int i;
-	for(i=0; i<num_blocks; ++i)
-	{
-		int block_path_length = sizeof(block_dir) + sizeof(blocks[i].name);
-		char *block_path = malloc(block_path_length);
-		strcpy(block_path, block_dir);
-		strcat(block_path, blocks[i].name);
-		blocks[i].fd = popen(block_path, "r");	
-		//fetch_block_info(&blocks[i]);
-		free(block_path);
-	}
-*/
 	lemonbar_str[0] = '\0';
  
 	int i;	
@@ -131,16 +106,6 @@ void bar(FILE *stream, struct block *blocks, int num_blocks)
 	printf("%s\n", lemonbar_str);
 	strcat(lemonbar_str, "\n");
 	fputs(lemonbar_str, stream);
-/*
-	sleep(2);
-
-	for(i=0; i<num_blocks; ++i)
-	{
-		pclose(blocks[i].fd);
-	}
-
-	pclose(stream);
-*/
 }
 
 void fetch_block_info(struct block *b)
@@ -185,7 +150,7 @@ int run_blocki(struct block *b, char *result, int num)
 	return run_block(b->fd, result, num);
 }
 
-int count_ex_files(DIR *dir)
+int count_files(DIR *dir)
 {
 	int count = 0;
 	struct dirent *entry;
@@ -224,24 +189,25 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	return 1;
 }
 
-void fill_this_block(struct block *b)
+void configure_block(struct block *b)
 {
-
 	char blockini[256];
+	snprintf(blockini, sizeof(blockini), "%s/%s.%s", "/home/julien/.config/succade/blocks", b->name, "ini");
+	/*
 	strcpy(blockini, "/home/julien/.config/succade/blocks/");
 	strcat(blockini, b->name);
 	strcat(blockini, ".ini");
+	*/
 	if(ini_parse(blockini, block_ini_handler, b) < 0)
 	{
-		printf("Can't parse block ini %s\n", blockini);
+		printf("Can't parse block INI: %s\n", blockini);
 		return;
 	}
-	printf("INI loaded: fg=%s, bg=%s, align=%s\n",
-			b->fg, b->bg, b->align);
+	printf("Block INI loaded: fg=%s, bg=%s, align=%s\n", b->fg, b->bg, b->align);
 	return;		
 }
 
-int fill_my_blocks_bitch(DIR *block_dir, struct block *blocks, int num_blocks)
+int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
 {
 	struct dirent *entry;
 	int i = 0;
@@ -253,7 +219,7 @@ int fill_my_blocks_bitch(DIR *block_dir, struct block *blocks, int num_blocks)
 			{
 				struct block b;
 				strcpy(b.name, entry->d_name);
-				fill_this_block(&b);
+				configure_block(&b);
 
 				blocks[i] = b;
 				++i;
@@ -302,7 +268,7 @@ int main(void)
 		perror("Could not open config dir");
 		return -1;
 	}
-	int num_blocks = count_ex_files(dir);
+	int num_blocks = count_files(dir);
 	printf("%d files in blocks dir\n", num_blocks);
 
 	struct block blocks[num_blocks];
@@ -318,14 +284,23 @@ int main(void)
 	}
 	printf("\n");
 
+	/* MAIN LOGIC/LOOP */
+
 	FILE *lemonbar = open_bar();
+	if (lemonbar == NULL)
+	{
+		perror("Could not open bar process");
+		exit(1);
+	}
+	
 	while (1)
 	{
 		open_blocks(blocks, num_blocks_found);
 		bar(lemonbar, blocks, num_blocks_found);
 		close_blocks(blocks, num_blocks_found);
 		sleep(2);
+	
 	}
-		close_bar(lemonbar);
+	close_bar(lemonbar);
 	return 0;
 }
