@@ -42,19 +42,16 @@ void close_bar(FILE *bar)
 	}
 }
 
-void open_blocks(struct block *blocks, int num_blocks)
+void open_blocks(struct block *blocks, int num_blocks, const *char blocks_dir)
 {
-	char block_dir[] = "/home/julien/.config/succade/blocks/";
-
 	int i;
 	for(i=0; i<num_blocks; ++i)
 	{
-		int block_path_length = sizeof(block_dir) + sizeof(blocks[i].name);
+		// block path length = blocks dir length + '/' + block name length + '\0'
+		size_t block_path_length = strlen(blocks_dir) + 1 + strlen(blocks[i].name) + 1;
 		char *block_path = malloc(block_path_length);
-		strcpy(block_path, block_dir);
-		strcat(block_path, blocks[i].name);
-		blocks[i].fd = popen(block_path, "r");	
-		//fetch_block_info(&blocks[i]);
+		snprintf(block_path, block_path_length, "%s/%s", blocks_dir, blocks[i].name);
+		blocks[i].fd = popen(block_path, "r");
 		free(block_path);
 	}
 }
@@ -108,28 +105,6 @@ void bar(FILE *stream, struct block *blocks, int num_blocks)
 	fputs(lemonbar_str, stream);
 }
 
-void fetch_block_info(struct block *b)
-{
-	char block_dir[] = "/home/julien/.config/succade/blocks/";
-	char *file_path = malloc(128);
-	file_path[0] = '\0';
-	strcat(file_path, b->name);
-	/*
-	if (access(file_path, F_OK) != -1)
-	{
-		strcpy(b->fg, "#000000");
-		strcpy(b->bg, "#FFFF00");
-		b->align = 'l';
-	}
-	else
-	{
-		strcpy(b->fg, "#FFFFFF");
-		strcpy(b->bg, "#000000");
-		b->align = 'c';
-	}
-	*/	
-}
-
 int run_block(FILE *blockfd, char *result, int result_length)
 {
 	if (blockfd == NULL)
@@ -145,34 +120,10 @@ int run_block(FILE *blockfd, char *result, int result_length)
 	return 1;
 }
 
-int run_blocki(struct block *b, char *result, int num)
-{
-	return run_block(b->fd, result, num);
-}
-
-int count_files(DIR *dir)
-{
-	int count = 0;
-	struct dirent *entry;
-	while ((entry = readdir(dir)) != NULL)
-	{
-		if (entry->d_type == DT_REG)
-		{
-			++count;
-		}
-	}
-	rewinddir(dir);
-	return count;
-}
-
 int is_ini(char *filename)
 {
 	char *dot = strrchr(filename, '.');
-	if (dot && !strcmp(dot, ".ini"))
-	{
-		return 1;
-	}
-	return 0;
+	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
 }
 
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
@@ -189,15 +140,10 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	return 1;
 }
 
-void configure_block(struct block *b)
+void configure_block(struct block *b, const char *blocks_dir)
 {
 	char blockini[256];
-	snprintf(blockini, sizeof(blockini), "%s/%s.%s", "/home/julien/.config/succade/blocks", b->name, "ini");
-	/*
-	strcpy(blockini, "/home/julien/.config/succade/blocks/");
-	strcat(blockini, b->name);
-	strcat(blockini, ".ini");
-	*/
+	snprintf(blockini, sizeof(blockini), "%s/%s.%s", blocks_dir, b->name, "ini");
 	if(ini_parse(blockini, block_ini_handler, b) < 0)
 	{
 		printf("Can't parse block INI: %s\n", blockini);
@@ -205,6 +151,21 @@ void configure_block(struct block *b)
 	}
 	printf("Block INI loaded: fg=%s, bg=%s, align=%s\n", b->fg, b->bg, b->align);
 	return;		
+}
+
+int count_blocks(DIR *dir)
+{
+	int count = 0;
+	struct dirent *entry;
+	while ((entry = readdir(dir)) != NULL)
+	{
+		if (entry->d_type == DT_REG && !is_ini(entry->d_name))
+		{
+			++count;
+		}
+	}
+	rewinddir(dir);
+	return count;
 }
 
 int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
@@ -219,10 +180,9 @@ int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
 			{
 				struct block b;
 				strcpy(b.name, entry->d_name);
-				configure_block(&b);
+				//configure_block(&b, blocks_dir);
 
-				blocks[i] = b;
-				++i;
+				blocks[i++] = b;
 			}
 			else
 			{
@@ -232,6 +192,15 @@ int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
 	}
 	rewinddir(block_dir);
 	return i;
+}
+
+int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
+{
+	int i;
+	for (i=0; i<num_blocks; ++i)
+	{
+		configure_block(&b, blocks_dir);
+	}
 }
 
 int get_blocks_dir(char *buffer, int buffer_size)
@@ -268,12 +237,14 @@ int main(void)
 		perror("Could not open config dir");
 		return -1;
 	}
-	int num_blocks = count_files(dir);
+
+	int num_blocks = count_blocks(dir);
 	printf("%d files in blocks dir\n", num_blocks);
 
 	struct block blocks[num_blocks];
 	int num_blocks_found = init_blocks(dir, blocks, num_blocks);
-	
+	configure_blocks(blocks, num_blocks_found, blocksdir);
+
 	closedir(dir);
 
 	printf("Blocks found: ");
@@ -295,11 +266,10 @@ int main(void)
 	
 	while (1)
 	{
-		open_blocks(blocks, num_blocks_found);
+		open_blocks(blocks, num_blocks_found, blocksdir);
 		bar(lemonbar, blocks, num_blocks_found);
 		close_blocks(blocks, num_blocks_found);
 		sleep(2);
-	
 	}
 	close_bar(lemonbar);
 	return 0;
