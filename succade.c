@@ -42,7 +42,7 @@ void close_bar(FILE *bar)
 	}
 }
 
-void open_blocks(struct block *blocks, int num_blocks, const *char blocks_dir)
+void open_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
 	int i;
 	for(i=0; i<num_blocks; ++i)
@@ -199,7 +199,7 @@ int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_di
 	int i;
 	for (i=0; i<num_blocks; ++i)
 	{
-		configure_block(&b, blocks_dir);
+		configure_block(&blocks[i], blocks_dir);
 	}
 }
 
