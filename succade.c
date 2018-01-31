@@ -75,29 +75,21 @@ void bar(FILE *stream, struct block *blocks, int num_blocks)
 	for(i=0; i<num_blocks; ++i)
 	{
 		char *block_res = malloc(64);
-		block_res[0] = '\0';
-		run_block(blocks[i].fd, block_res, sizeof(block_res));
+		run_block(blocks[i].fd, block_res, 64);
+
 		char *fg = malloc(16);
-		strcpy(fg, "%{F");
-		strcat(fg, blocks[i].fg);
-		strcat(fg, "}");
+		snprintf(fg, 16, "%{F%s}", (strlen(blocks[i].fg) ? blocks[i].fg : "-"));
 		strcat(lemonbar_str, fg);
+		free(fg);
+
 		char *bg = malloc(16);
-		strcpy(bg, "%{B");
-		strcat(bg, blocks[i].bg);
-		strcat(bg, "}");
+		snprintf(bg, 16, "%{B%s}", (strlen(blocks[i].bg) ? blocks[i].bg : "-"));
 		strcat(lemonbar_str, bg);
-		/*
-		char *a = malloc(4);
-		strcpy(a, "%{x");
-		strcat(a, "}");
-		a[2] = blocks[i].align;
-		strcat(lemonbar_str, a);
-		*/
+		free(bg);
+
+		block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
 		strcat(lemonbar_str, block_res);
 		free(block_res);
-		free(fg);
-		free(bg);
 	}
 
 	printf("%s\n", lemonbar_str);
@@ -149,8 +141,9 @@ void configure_block(struct block *b, const char *blocks_dir)
 		printf("Can't parse block INI: %s\n", blockini);
 		return;
 	}
+
 	printf("Block INI loaded: fg=%s, bg=%s, align=%s\n", b->fg, b->bg, b->align);
-	return;		
+	return;	
 }
 
 int count_blocks(DIR *dir)
@@ -269,7 +262,7 @@ int main(void)
 		open_blocks(blocks, num_blocks_found, blocksdir);
 		bar(lemonbar, blocks, num_blocks_found);
 		close_blocks(blocks, num_blocks_found);
-		sleep(2);
+		sleep(1);
 	}
 	close_bar(lemonbar);
 	return 0;
