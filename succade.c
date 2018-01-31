@@ -98,7 +98,8 @@ void bar(FILE *stream, struct block *blocks, int num_blocks)
 	}
 */
 	lemonbar_str[0] = '\0';
-	
+ 
+	int i;	
 	for(i=0; i<num_blocks; ++i)
 	{
 		char *block_res = malloc(64);
@@ -317,13 +318,14 @@ int main(void)
 	}
 	printf("\n");
 
-	FILE *bar = open_bar();
-	open_blocks(blocks, num_blocks_found);
+	FILE *lemonbar = open_bar();
 	while (1)
 	{
-		bar(*bar, blocks, num_blocks_found);
+		open_blocks(blocks, num_blocks_found);
+		bar(lemonbar, blocks, num_blocks_found);
+		close_blocks(blocks, num_blocks_found);
+		sleep(2);
 	}
-	close_blocks();
-	close_bar();
+		close_bar(lemonbar);
 	return 0;
 }
