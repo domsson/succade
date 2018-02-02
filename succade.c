@@ -17,28 +17,77 @@ struct block
 	char align;
 };
 
-FILE *open_bar()
+struct bar
+{
+	char name[64];
+	FILE *fd;
+	char fg[16];
+	char bg[16];
+	size_t width;
+	size_t height;
+	size_t x;
+	size_t y;
+	int bottom;
+	int force;
+};
+
+int open_bar(struct bar *b)
 {
 	// Run lemonbar via popen() in write mode,
 	// this enables us to send data to lemonbar's stdin
-	FILE *stream = popen("lemonbar -g x24 -b -B '#FFFFFF' -F '#000000'", "w");
+	char barprocess[512];
+
+	char fg[13];
+	snprintf(fg, 13, "-F%s", (strlen(b->fg) ? b->fg : "#333333"));
 	
-	if (stream != NULL)
+	char bg[13];
+	snprintf(bg, 13, "-B%s", (strlen(b->bg) ? b->bg : "#EEEEEE"));
+	
+	char geom[32];
+        char width[8];
+	char height[8];
+
+	snprintf(width, 8, "%d", b->width);
+	snprintf(height, 8, "%d", b->height);
+
+	strcpy(geom, "-g ");
+	if (b->width > 0) strcat(geom, width);
+	strcat(geom, "x");
+	if (b->height > 0) strcat(geom, height);
+
+	snprintf(barprocess, 512, "lemonbar %s %s %s", geom, fg, bg);
+
+	if (b->bottom)
+	{
+		strcat(barprocess, " -b");
+	}
+
+	if (b->force)
+	{
+		strcat(barprocess, " -f");
+	}
+
+	printf("Bar process: %s\n", barprocess);	
+
+	b->fd = popen(barprocess, "w");
+	
+	if (b->fd != NULL)
 	{
 		// The stream is usually unbuffered, so we would have
 		// to call fflush(stream) after each and every line,
 		// instead we set the stream to be line buffered.
-		setlinebuf(stream);
+		setlinebuf(b->fd);
+		return 1;
 	}
 
-	return stream;
+	return 0;
 }
 
-void close_bar(FILE *bar)
+void close_bar(struct bar *b)
 {
-	if (bar != NULL)
+	if (b->fd != NULL)
 	{
-		pclose(bar);
+		pclose(b->fd);
 	}
 }
 
@@ -118,6 +167,61 @@ int is_ini(char *filename)
 	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
 }
 
+int equals(const char *str1, const char *str2)
+{
+	return strcmp(str1, str2) == 0;
+}
+
+static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
+{
+	struct bar *bar = (struct bar*) b;
+	if (equals(name, "fg") || equals(name, "foreground"))
+	{
+		strcpy(bar->fg, value);
+		return 1;
+	}
+	if (equals(name, "bg") || equals(name, "background"))
+	{
+		strcpy(bar->bg, value);
+		return 1;
+	}
+	if (equals(name, "h") || equals(name, "height"))
+	{
+		bar->height = atoi(value);
+		return 1;
+	}
+	if (equals(name, "w") || equals(name, "width"))
+	{
+		bar->width = atoi(value);
+		return 1;
+	}
+	if (equals(name, "dock"))
+	{
+		bar->bottom = (equals(value, "bottom")) ? 1 : 0;
+		return 1;
+	}
+	if (equals(name, "force"))
+	{
+		bar->force = (equals(value, "true")) ? 1 : 0;
+		return 1;
+	}
+	return 0; // unknown section/name, error
+}
+
+int configure_bar(struct bar *b, const char *config_dir)
+{
+	char rc[256];
+	snprintf(rc, sizeof(rc), "%s/%src", config_dir, NAME);
+	if (ini_parse(rc, bar_ini_handler, b) < 0)
+	{
+		printf("Can't parse rc file %s\n", rc);
+		return 0;
+	}
+
+	printf("RC file loaded: fg=%s, bg=%s, height=%i\n", b->fg, b->bg, b->height);
+	return 1;
+}
+
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct block *block = (struct block*) b;
@@ -132,18 +236,18 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	return 1;
 }
 
-void configure_block(struct block *b, const char *blocks_dir)
+int configure_block(struct block *b, const char *blocks_dir)
 {
 	char blockini[256];
 	snprintf(blockini, sizeof(blockini), "%s/%s.%s", blocks_dir, b->name, "ini");
-	if(ini_parse(blockini, block_ini_handler, b) < 0)
+	if (ini_parse(blockini, block_ini_handler, b) < 0)
 	{
 		printf("Can't parse block INI: %s\n", blockini);
-		return;
+		return 0;
 	}
 
 	printf("Block INI loaded: fg=%s, bg=%s, align=%s\n", b->fg, b->bg, b->align);
-	return;	
+	return 1;
 }
 
 int count_blocks(DIR *dir)
@@ -173,8 +277,6 @@ int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
 			{
 				struct block b;
 				strcpy(b.name, entry->d_name);
-				//configure_block(&b, blocks_dir);
-
 				blocks[i++] = b;
 			}
 			else
@@ -193,6 +295,19 @@ int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_di
 	for (i=0; i<num_blocks; ++i)
 	{
 		configure_block(&blocks[i], blocks_dir);
+	}
+}
+
+int get_config_dir(char *buffer, int buffer_size)
+{
+	char *config_home = getenv("XDF_CONFIG_HOME");
+	if (config_home != NULL)
+	{
+		return snprintf(buffer, buffer_size, "%s/%s", config_home, NAME);
+	}
+	else
+	{
+		return snprintf(buffer, buffer_size, "%s/%s/%s", getenv("HOME"), ".config", NAME);
 	}
 }
 
@@ -215,6 +330,12 @@ int main(void)
 	if (homedir != NULL)
 	{
 		printf("Home: %s\n", homedir);
+	}
+
+	char configdir[256];
+	if (get_config_dir(configdir, sizeof(configdir)))
+	{
+		printf("Config: %s\n", configdir);
 	}
 
 	char blocksdir[256];
@@ -250,8 +371,20 @@ int main(void)
 
 	/* MAIN LOGIC/LOOP */
 
-	FILE *lemonbar = open_bar();
-	if (lemonbar == NULL)
+	struct bar lemonbar;
+	lemonbar.width = 0;
+	lemonbar.height = 0;
+	lemonbar.x = 0;
+	lemonbar.y = 0;
+	if (!configure_bar(&lemonbar, configdir))
+	{
+		perror("Could not load RC file");
+		exit(1);
+	}
+	//FILE *lemonbar = open_bar();
+	open_bar(&lemonbar);
+	//if (lemonbar == NULL)
+	if (lemonbar.fd == NULL)
 	{
 		perror("Could not open bar process");
 		exit(1);
@@ -260,10 +393,12 @@ int main(void)
 	while (1)
 	{
 		open_blocks(blocks, num_blocks_found, blocksdir);
-		bar(lemonbar, blocks, num_blocks_found);
+		//bar(lemonbar, blocks, num_blocks_found);
+		bar(lemonbar.fd, blocks, num_blocks_found);
 		close_blocks(blocks, num_blocks_found);
 		sleep(1);
 	}
-	close_bar(lemonbar);
+	//close_bar(lemonbar);
+	close_bar(&lemonbar);
 	return 0;
 }
