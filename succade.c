@@ -99,7 +99,6 @@ void close_bar(struct bar *b)
 	}
 }
 
-/*
 int open_block(struct block *b)
 {
 	b->fd = popen(b->path, "r");
@@ -111,7 +110,6 @@ int close_block(struct block *b)
 	if (b->fd == NULL) return 0;
 	pclose(b->fd);	
 }
-*/
 
 void open_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
@@ -133,7 +131,6 @@ void close_blocks(struct block *blocks, int num_blocks)
 	for(i=0; i<num_blocks; ++i)
 	{
 		pclose(blocks[i].fd);
-		//free(blocks[i].path);
 	}
 }
 
@@ -156,8 +153,14 @@ void free_blocks(struct block *blocks, int num_blocks)
 	}
 }
 
-void bar(FILE *stream, struct block *blocks, int num_blocks)
+int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 {
+	if (b->fd == NULL)
+	{
+		perror("Bar seems dead");
+		return 0;
+	}
+
 	char lemonbar_str[1024];
 
 	lemonbar_str[0] = '\0';
@@ -166,7 +169,7 @@ void bar(FILE *stream, struct block *blocks, int num_blocks)
 	for(i=0; i<num_blocks; ++i)
 	{
 		char *block_res = malloc(64);
-		run_block(blocks[i].fd, block_res, 64);
+		run_block(&blocks[i], block_res, 64);
 
 		char *fg = malloc(16);
 		snprintf(fg, 16, "%{F%s}", (strlen(blocks[i].fg) ? blocks[i].fg : "-"));
@@ -185,17 +188,18 @@ void bar(FILE *stream, struct block *blocks, int num_blocks)
 
 	printf("%s\n", lemonbar_str);
 	strcat(lemonbar_str, "\n");
-	fputs(lemonbar_str, stream);
+	fputs(lemonbar_str, b->fd);
+	return 1;
 }
 
-int run_block(FILE *blockfd, char *result, int result_length)
+int run_block(const struct block *b, char *result, int result_length)
 {
-	if (blockfd == NULL)
+	if (b->fd == NULL)
 	{
 		perror("Block is dead");
 		return 0;
 	}
-	if (fgets(result, result_length, blockfd) == NULL)
+	if (fgets(result, result_length, b->fd) == NULL)
 	{
 		perror("Unable to fetch input from block");
 		return 0;
@@ -203,7 +207,7 @@ int run_block(FILE *blockfd, char *result, int result_length)
 	return 1;
 }
 
-int is_ini(char *filename)
+int is_ini(const char *filename)
 {
 	char *dot = strrchr(filename, '.');
 	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
@@ -444,7 +448,7 @@ int main(void)
 	while (1)
 	{
 		open_blocks(blocks, num_blocks_found, blocksdir);
-		bar(lemonbar.fd, blocks, num_blocks_found);
+		feed_bar(&lemonbar, blocks, num_blocks_found);
 		close_blocks(blocks, num_blocks_found);
 		sleep(1);
 	}

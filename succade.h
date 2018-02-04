@@ -3,12 +3,12 @@
 
 struct bar;
 struct block;
-int run_block(FILE *blockfd, char *result, int result_length);
+int run_block(const struct block *b, char *result, int result_length);
 //int count_blocks(DIR *dir);
 int configure_block(struct block *b, const char *blocks_dir);
 //int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks);
-void bar(FILE *stream, struct block *blocks, int num_blocks);
-int is_ini(char *filename);
+//int feed_bar(struct bar *b, struct block *blocks, int num_blocks);
+int is_ini(const char *filename);
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value);
 
 #endif
