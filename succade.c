@@ -10,7 +10,7 @@
 
 struct block
 {
-	char name[64];
+	char *name;
 	char *path;
 	FILE *fd;
 	char fg[16];
@@ -136,11 +136,8 @@ void close_blocks(struct block *blocks, int num_blocks)
 
 int free_block(struct block *b)
 {
-	if (b->path == NULL)
-	{
-		return 0;
-	}
-	free(b->path);
+	if (b->name == NULL) free(b->name);
+	if (b->path == NULL) free(b->path);
 	return 1;
 }
 
@@ -325,7 +322,8 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 			if (i < num_blocks)
 			{
 				struct block b;
-				strcpy(b.name, entry->d_name);
+				//strcpy(b.name, entry->d_name);
+				b.name = strdup(entry->d_name);
 				//snprintf(b.path, sizeof(b.path), "%s/%s", block_dir, b.name);
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
 				b.path = malloc(path_len);
