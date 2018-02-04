@@ -11,10 +11,18 @@
 struct block
 {
 	char name[64];
+	char *path;
 	FILE *fd;
 	char fg[16];
 	char bg[16];
 	char align;
+};
+
+struct trigger
+{
+	char *cmd;
+	FILE *fd;
+	struct block *b;
 };
 
 struct bar
@@ -70,17 +78,17 @@ int open_bar(struct bar *b)
 	printf("Bar process: %s\n", barprocess);	
 
 	b->fd = popen(barprocess, "w");
-	
-	if (b->fd != NULL)
-	{
-		// The stream is usually unbuffered, so we would have
-		// to call fflush(stream) after each and every line,
-		// instead we set the stream to be line buffered.
-		setlinebuf(b->fd);
-		return 1;
-	}
 
-	return 0;
+	if (b->fd == NULL)
+	{
+		return 0;
+	}	
+
+	// The stream is usually unbuffered, so we would have
+	// to call fflush(stream) after each and every line,
+	// instead we set the stream to be line buffered.
+	setlinebuf(b->fd);
+	return 1;
 }
 
 void close_bar(struct bar *b)
@@ -90,6 +98,20 @@ void close_bar(struct bar *b)
 		pclose(b->fd);
 	}
 }
+
+/*
+int open_block(struct block *b)
+{
+	b->fd = popen(b->path, "r");
+	return (b->fd == NULL) ? 0 : 1;
+}
+
+int close_block(struct block *b)
+{
+	if (b->fd == NULL) return 0;
+	pclose(b->fd);	
+}
+*/
 
 void open_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
@@ -111,6 +133,26 @@ void close_blocks(struct block *blocks, int num_blocks)
 	for(i=0; i<num_blocks; ++i)
 	{
 		pclose(blocks[i].fd);
+		//free(blocks[i].path);
+	}
+}
+
+int free_block(struct block *b)
+{
+	if (b->path == NULL)
+	{
+		return 0;
+	}
+	free(b->path);
+	return 1;
+}
+
+void free_blocks(struct block *blocks, int num_blocks)
+{
+	int i;
+	for (i=0; i<num_blocks; ++i)
+	{
+		free_block(&blocks[i]);
 	}
 }
 
@@ -250,23 +292,26 @@ int configure_block(struct block *b, const char *blocks_dir)
 	return 1;
 }
 
-int count_blocks(DIR *dir)
+int count_blocks(const char *blockdir)
 {
+	DIR *block_dir = opendir(blockdir);
 	int count = 0;
 	struct dirent *entry;
-	while ((entry = readdir(dir)) != NULL)
+	while ((entry = readdir(block_dir)) != NULL)
 	{
 		if (entry->d_type == DT_REG && !is_ini(entry->d_name))
 		{
 			++count;
 		}
 	}
-	rewinddir(dir);
+	//rewinddir(dir);
+	closedir(block_dir);
 	return count;
 }
 
-int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
+int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 {
+	DIR *block_dir = opendir(blockdir);
 	struct dirent *entry;
 	int i = 0;
 	while ((entry = readdir(block_dir)) != NULL)
@@ -277,6 +322,10 @@ int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
 			{
 				struct block b;
 				strcpy(b.name, entry->d_name);
+				//snprintf(b.path, sizeof(b.path), "%s/%s", block_dir, b.name);
+				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
+				b.path = malloc(path_len);
+				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
 				blocks[i++] = b;
 			}
 			else
@@ -285,7 +334,8 @@ int init_blocks(DIR *block_dir, struct block *blocks, int num_blocks)
 			}
 		}
 	}
-	rewinddir(block_dir);
+	//rewinddir(block_dir);
+	closedir(block_dir);
 	return i;
 }
 
@@ -351,15 +401,18 @@ int main(void)
 		perror("Could not open config dir");
 		return -1;
 	}
+	closedir(dir);
 
-	int num_blocks = count_blocks(dir);
+	//int num_blocks = count_blocks(dir);
+	int num_blocks = count_blocks(blocksdir);
 	printf("%d files in blocks dir\n", num_blocks);
 
 	struct block blocks[num_blocks];
-	int num_blocks_found = init_blocks(dir, blocks, num_blocks);
+	//int num_blocks_found = init_blocks(dir, blocks, num_blocks);
+	int num_blocks_found = init_blocks(blocksdir, blocks, num_blocks);
 	configure_blocks(blocks, num_blocks_found, blocksdir);
 
-	closedir(dir);
+	//closedir(dir);
 
 	printf("Blocks found: ");
 	int i;
@@ -381,9 +434,7 @@ int main(void)
 		perror("Could not load RC file");
 		exit(1);
 	}
-	//FILE *lemonbar = open_bar();
 	open_bar(&lemonbar);
-	//if (lemonbar == NULL)
 	if (lemonbar.fd == NULL)
 	{
 		perror("Could not open bar process");
@@ -393,12 +444,11 @@ int main(void)
 	while (1)
 	{
 		open_blocks(blocks, num_blocks_found, blocksdir);
-		//bar(lemonbar, blocks, num_blocks_found);
 		bar(lemonbar.fd, blocks, num_blocks_found);
 		close_blocks(blocks, num_blocks_found);
 		sleep(1);
 	}
-	//close_bar(lemonbar);
+	free_blocks(blocks, num_blocks_found);
 	close_bar(&lemonbar);
 	return 0;
 }
