@@ -7,6 +7,7 @@
 #include "ini.h"
 
 #define NAME "succade"
+#define BLOCKS_DIR "blocks"
 
 struct block
 {
@@ -39,10 +40,13 @@ struct bar
 	int force;
 };
 
+int equals(const char *str1, const char *str2)
+{
+	return strcmp(str1, str2) == 0;
+}
+
 int open_bar(struct bar *b)
 {
-	// Run lemonbar via popen() in write mode,
-	// this enables us to send data to lemonbar's stdin
 	char barprocess[512];
 
 	char fg[13];
@@ -77,6 +81,8 @@ int open_bar(struct bar *b)
 
 	printf("Bar process: %s\n", barprocess);	
 
+	// Run lemonbar via popen() in write mode,
+	// this enables us to send data to lemonbar's stdin
 	b->fd = popen(barprocess, "w");
 
 	if (b->fd == NULL)
@@ -207,17 +213,6 @@ int run_block(const struct block *b, char *result, int result_length)
 	return 1;
 }
 
-int is_ini(const char *filename)
-{
-	char *dot = strrchr(filename, '.');
-	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
-}
-
-int equals(const char *str1, const char *str2)
-{
-	return strcmp(str1, str2) == 0;
-}
-
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct bar *bar = (struct bar*) b;
@@ -296,6 +291,12 @@ int configure_block(struct block *b, const char *blocks_dir)
 	return 1;
 }
 
+int is_ini(const char *filename)
+{
+	char *dot = strrchr(filename, '.');
+	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
+}
+
 int count_blocks(const char *blockdir)
 {
 	DIR *block_dir = opendir(blockdir);
@@ -308,7 +309,6 @@ int count_blocks(const char *blockdir)
 			++count;
 		}
 	}
-	//rewinddir(dir);
 	closedir(block_dir);
 	return count;
 }
@@ -338,7 +338,6 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 			}
 		}
 	}
-	//rewinddir(block_dir);
 	closedir(block_dir);
 	return i;
 }
@@ -370,22 +369,16 @@ int get_blocks_dir(char *buffer, int buffer_size)
 	char *config_home = getenv("XDG_CONFIG_HOME");
 	if (config_home != NULL)
 	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s", config_home, NAME, "blocks");
+		return snprintf(buffer, buffer_size, "%s/%s/%s", config_home, NAME, BLOCKS_DIR);
 	}
 	else
 	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s/%s", getenv("HOME"), ".config", NAME, "blocks");
+		return snprintf(buffer, buffer_size, "%s/%s/%s/%s", getenv("HOME"), ".config", NAME, BLOCKS_DIR);
 	}
 }
 
 int main(void)
 {
-	char *homedir = getenv("HOME");
-	if (homedir != NULL)
-	{
-		printf("Home: %s\n", homedir);
-	}
-
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
 	{
