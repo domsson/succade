@@ -62,7 +62,7 @@ int is_quoted(const char *str)
 	size_t len = strlen(str); // Length without null terminator
 	if (len < 2) return 0;    // We need at least two quotes (empty string)
 	char first = str[0];
-	char last  = str[len(str) - 1];
+	char last  = str[len - 1];
 	if (first == '\'' && last == '\'') return 1; // Single-quoted string
 	if (first == '"' && last == '"') return 1;   // Double-quoted string
 	return 0;
@@ -76,6 +76,7 @@ int is_quoted(const char *str)
 char *unquote(const char *str)
 {
 	char *trimmed = NULL;
+	size_t len = strlen(str);
 	if (len < 2) // Prevent zero-length allocation
 	{
 		trimmed = malloc(1); // Make space for null terminator
@@ -83,7 +84,6 @@ char *unquote(const char *str)
 	}
 	else
 	{
-		size_t len = strlen(str);
 		trimmed = malloc(len-2+1);        // No quotes, null terminator
 		strncpy(trimmed, &str[1], len-2); // Copy everything in between
 		trimmed[len-2] = '\0';            // Add the null terminator
@@ -93,44 +93,24 @@ char *unquote(const char *str)
 
 int open_bar(struct bar *b)
 {
-	//char fg[13];
-	//snprintf(fg, 13, "-F%s", (strlen(b->fg) ? b->fg : DEFAULT_FG));
-	
-	//char bg[13];
-	//snprintf(bg, 13, "-B%s", (strlen(b->bg) ? b->bg : DEFAULT_BG));
-	
-	char geom[32];
 	char width[8];
 	char height[8];
 
 	snprintf(width, 8, "%d", b->width);
 	snprintf(height, 8, "%d", b->height);
 
-	strcpy(geom, "-g ");
-	if (b->width > 0) strcat(geom, width);
-	strcat(geom, "x");
-	if (b->height > 0) strcat(geom, height);
-
 	char barprocess[512];
-	//snprintf(barprocess, 512, "%s %s %s %s", BAR_PROCESS, geom, fg, bg);
-	snprintf(barprocess, 512, "%s %s %s %s %s %s", BAR_PROCESS, geom,
-				(strlen(b->fg) ? b->fg : DEFAULT_FG), 
-				(strlen(b->bg) ? b->bg : DEFAULT_BG),
-				(b->bottom) ? "-b" : "",
-				(b->force)  ? "-f" : ""
+	snprintf(barprocess, 512, "%s -g %sx%s+%d+%d -F%s -B%s %s %s",
+		BAR_PROCESS,
+		(b->width > 0) ? width : "",
+		(b->height > 0) ? height : "",
+		b->x,
+		b->y,
+		(b->fg && strlen(b->fg)) ? b->fg : DEFAULT_FG, 
+		(b->bg && strlen(b->bg)) ? b->bg : DEFAULT_BG,
+		(b->bottom) ? "-b" : "",
+		(b->force)  ? "-f" : ""
 	);
-
-	/*
-	if (b->bottom)
-	{
-		strcat(barprocess, " -b");
-	}
-
-	if (b->force)
-	{
-		strcat(barprocess, " -f");
-	}
-	*/
 
 	printf("Bar process: %s\n", barprocess);	
 
@@ -235,11 +215,9 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 	}
 
 	char lemonbar_str[1024];
-
 	lemonbar_str[0] = '\0';
  
-	int i;	
-	for(i=0; i<num_blocks; ++i)
+	for(int i=0; i<num_blocks; ++i)
 	{
 		char *block_res = malloc(64);
 		run_block(&blocks[i], block_res, 64);
@@ -262,7 +240,6 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 		free(bg);
 
 		strcat(lemonbar_str, block_str);
-		//strcat(lemonbar_str, block_res);
 		free(block_res);
 		free(block_str);
 	}
