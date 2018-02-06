@@ -8,6 +8,9 @@
 
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
+#define DEFAULT_FG "#333333"
+#define DEFAULT_BG "#EEEEEE"
+#define BAR_PROCESS "lemonbar"
 
 struct block
 {
@@ -43,23 +46,61 @@ struct bar
 	char *suffix;
 };
 
+/*
+ * Returns 1 if both input strings are equal, otherwise 0.
+ */
 int equals(const char *str1, const char *str2)
 {
 	return strcmp(str1, str2) == 0;
 }
 
+/*
+ * Returns 1 if the input string is quoted, otherwise 0.
+ */
+int is_quoted(const char *str)
+{
+	size_t len = strlen(str); // Length without null terminator
+	if (len < 2) return 0;    // We need at least two quotes (empty string)
+	char first = str[0];
+	char last  = str[len(str) - 1];
+	if (first == '\'' && last == '\'') return 1; // Single-quoted string
+	if (first == '"' && last == '"') return 1;   // Double-quoted string
+	return 0;
+}
+
+/*
+ * Returns a pointer to a string that is the same as the input string, 
+ * minus the enclosing quotation chars (either single or double quotes).
+ * The pointer is allocated with malloc(), the caller needs to free it!
+ */
+char *unquote(const char *str)
+{
+	char *trimmed = NULL;
+	if (len < 2) // Prevent zero-length allocation
+	{
+		trimmed = malloc(1); // Make space for null terminator
+		trimmed[0] = '\0';   // Add the null terminator
+	}
+	else
+	{
+		size_t len = strlen(str);
+		trimmed = malloc(len-2+1);        // No quotes, null terminator
+		strncpy(trimmed, &str[1], len-2); // Copy everything in between
+		trimmed[len-2] = '\0';            // Add the null terminator
+	}
+	return trimmed;
+}
+
 int open_bar(struct bar *b)
 {
-	char barprocess[512];
-
-	char fg[13];
-	snprintf(fg, 13, "-F%s", (strlen(b->fg) ? b->fg : "#333333"));
+	//char fg[13];
+	//snprintf(fg, 13, "-F%s", (strlen(b->fg) ? b->fg : DEFAULT_FG));
 	
-	char bg[13];
-	snprintf(bg, 13, "-B%s", (strlen(b->bg) ? b->bg : "#EEEEEE"));
+	//char bg[13];
+	//snprintf(bg, 13, "-B%s", (strlen(b->bg) ? b->bg : DEFAULT_BG));
 	
 	char geom[32];
-        char width[8];
+	char width[8];
 	char height[8];
 
 	snprintf(width, 8, "%d", b->width);
@@ -70,8 +111,16 @@ int open_bar(struct bar *b)
 	strcat(geom, "x");
 	if (b->height > 0) strcat(geom, height);
 
-	snprintf(barprocess, 512, "lemonbar %s %s %s", geom, fg, bg);
+	char barprocess[512];
+	//snprintf(barprocess, 512, "%s %s %s %s", BAR_PROCESS, geom, fg, bg);
+	snprintf(barprocess, 512, "%s %s %s %s %s %s", BAR_PROCESS, geom,
+				(strlen(b->fg) ? b->fg : DEFAULT_FG), 
+				(strlen(b->bg) ? b->bg : DEFAULT_BG),
+				(b->bottom) ? "-b" : "",
+				(b->force)  ? "-f" : ""
+	);
 
+	/*
 	if (b->bottom)
 	{
 		strcat(barprocess, " -b");
@@ -81,6 +130,7 @@ int open_bar(struct bar *b)
 	{
 		strcat(barprocess, " -f");
 	}
+	*/
 
 	printf("Bar process: %s\n", barprocess);	
 
@@ -238,24 +288,6 @@ int run_block(const struct block *b, char *result, int result_length)
 	return 1;
 }
 
-int is_quoted(const char *str)
-{
-	char first = str[0];
-	char last  = str[strlen(str) - 1];
-	if (first == '\'' && last == '\'') return 1;
-	if (first == '"' && last == '"') return 1;
-	return 0;
-}
-
-char *unquote(const char *str)
-{
-	size_t len = strlen(str);
-	char *trimmed = malloc(len-1);
-	strncpy(trimmed, &str[1], len-2);
-	trimmed[len-2] = '\0';
-	return trimmed;
-}
-
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct bar *bar = (struct bar*) b;
@@ -293,7 +325,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	{
 		if (is_quoted(value))
 	       	{
-			char *trimmed = unquote(value);		
+			char *trimmed = unquote(value);
 			bar->prefix = trimmed;
 	       	}
 		//printf("Bar prefix: %s\n", value);
@@ -381,7 +413,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 	int i = 0;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		if(entry->d_type == DT_REG && !is_ini(entry->d_name))
+		if (entry->d_type == DT_REG && !is_ini(entry->d_name))
 		{
 			if (i < num_blocks)
 			{
@@ -472,8 +504,7 @@ int main(void)
 	//closedir(dir);
 
 	printf("Blocks found: ");
-	int i;
-	for (i=0; i<num_blocks_found; ++i)
+	for (int i=0; i<num_blocks_found; ++i)
 	{
 		printf("%s ", blocks[i].name);
 	}
@@ -494,7 +525,7 @@ int main(void)
 	open_bar(&lemonbar);
 	if (lemonbar.fd == NULL)
 	{
-		perror("Could not open bar process");
+		perror("Could not open bar process. Is lemonbar installed?");
 		exit(1);
 	}
 	
