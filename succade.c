@@ -17,6 +17,7 @@ struct block
 	char fg[16];
 	char bg[16];
 	char align;
+	int reload;
 };
 
 struct trigger
@@ -38,6 +39,8 @@ struct bar
 	size_t y;
 	int bottom;
 	int force;
+	char *prefix;
+	char *suffix;
 };
 
 int equals(const char *str1, const char *str2)
@@ -97,6 +100,18 @@ int open_bar(struct bar *b)
 	return 1;
 }
 
+void free_bar(struct bar *b)
+{
+	if (b->prefix != NULL)
+	{
+		free(b->prefix);
+	}
+	if (b->suffix != NULL)
+	{
+		free(b->suffix);
+	}
+}
+
 void close_bar(struct bar *b)
 {
 	if (b->fd != NULL)
@@ -113,44 +128,49 @@ int open_block(struct block *b)
 
 int close_block(struct block *b)
 {
-	if (b->fd == NULL) return 0;
-	pclose(b->fd);	
+	if (b->fd == NULL)
+	{
+		return 0;
+	}
+	pclose(b->fd);
+	b->fd = NULL;	
+	return 1;
 }
 
 void open_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
-	int i;
-	for(i=0; i<num_blocks; ++i)
+	for(int i=0; i<num_blocks; ++i)
 	{
-		// block path length = blocks dir length + '/' + block name length + '\0'
-		size_t block_path_length = strlen(blocks_dir) + 1 + strlen(blocks[i].name) + 1;
-		char *block_path = malloc(block_path_length);
-		snprintf(block_path, block_path_length, "%s/%s", blocks_dir, blocks[i].name);
-		blocks[i].fd = popen(block_path, "r");
-		free(block_path);
+		open_block(&blocks[i]);
 	}
 }
 
 void close_blocks(struct block *blocks, int num_blocks)
 {
-	int i;
-	for(i=0; i<num_blocks; ++i)
+	for(int i=0; i<num_blocks; ++i)
 	{
-		pclose(blocks[i].fd);
+		close_block(&blocks[i]);
 	}
 }
 
 int free_block(struct block *b)
 {
-	if (b->name == NULL) free(b->name);
-	if (b->path == NULL) free(b->path);
+	if (b->name != NULL)
+	{
+		free(b->name);
+		b->name = NULL;
+	}
+	if (b->path != NULL)
+	{
+		free(b->path);
+		b->path = NULL;
+	}
 	return 1;
 }
 
 void free_blocks(struct block *blocks, int num_blocks)
 {
-	int i;
-	for (i=0; i<num_blocks; ++i)
+	for (int i=0; i<num_blocks; ++i)
 	{
 		free_block(&blocks[i]);
 	}
@@ -173,6 +193,13 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 	{
 		char *block_res = malloc(64);
 		run_block(&blocks[i], block_res, 64);
+		block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
+	
+		char *block_str = malloc(96);
+		snprintf(block_str, 96, "%s%s%s",
+				(b->prefix) ? b->prefix : "",
+				block_res,
+				(b->suffix) ? b->suffix : "");
 
 		char *fg = malloc(16);
 		snprintf(fg, 16, "%{F%s}", (strlen(blocks[i].fg) ? blocks[i].fg : "-"));
@@ -184,9 +211,10 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 		strcat(lemonbar_str, bg);
 		free(bg);
 
-		block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
-		strcat(lemonbar_str, block_res);
+		strcat(lemonbar_str, block_str);
+		//strcat(lemonbar_str, block_res);
 		free(block_res);
+		free(block_str);
 	}
 
 	printf("%s\n", lemonbar_str);
@@ -208,6 +236,24 @@ int run_block(const struct block *b, char *result, int result_length)
 		return 0;
 	}
 	return 1;
+}
+
+int is_quoted(const char *str)
+{
+	char first = str[0];
+	char last  = str[strlen(str) - 1];
+	if (first == '\'' && last == '\'') return 1;
+	if (first == '"' && last == '"') return 1;
+	return 0;
+}
+
+char *unquote(const char *str)
+{
+	size_t len = strlen(str);
+	char *trimmed = malloc(len-1);
+	strncpy(trimmed, &str[1], len-2);
+	trimmed[len-2] = '\0';
+	return trimmed;
 }
 
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
@@ -242,6 +288,24 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	{
 		bar->force = (equals(value, "true")) ? 1 : 0;
 		return 1;
+	}
+	if (equals(name, "prefix"))
+	{
+		if (is_quoted(value))
+	       	{
+			char *trimmed = unquote(value);		
+			bar->prefix = trimmed;
+	       	}
+		//printf("Bar prefix: %s\n", value);
+	}
+	if (equals(name, "suffix"))
+	{
+		if (is_quoted(value))
+		{
+			char *trimmed = unquote(value);
+			bar->suffix = trimmed;
+		}
+		//printf("Bar suffix: %s\n", value);
 	}
 	return 0; // unknown section/name, error
 }
@@ -322,9 +386,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 			if (i < num_blocks)
 			{
 				struct block b;
-				//strcpy(b.name, entry->d_name);
 				b.name = strdup(entry->d_name);
-				//snprintf(b.path, sizeof(b.path), "%s/%s", block_dir, b.name);
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
 				b.path = malloc(path_len);
 				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
@@ -445,5 +507,6 @@ int main(void)
 	}
 	free_blocks(blocks, num_blocks_found);
 	close_bar(&lemonbar);
+	free_bar(&lemonbar);
 	return 0;
 }
