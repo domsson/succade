@@ -222,23 +222,16 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 		char *block_res = malloc(64);
 		run_block(&blocks[i], block_res, 64);
 		block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
-	
-		char *block_str = malloc(96);
-		snprintf(block_str, 96, "%s%s%s",
-				(b->prefix) ? b->prefix : "",
-				block_res,
-				(b->suffix) ? b->suffix : "");
 
-		char *fg = malloc(16);
-		snprintf(fg, 16, "%{F%s}", (strlen(blocks[i].fg) ? blocks[i].fg : "-"));
-		strcat(lemonbar_str, fg);
-		free(fg);
-
-		char *bg = malloc(16);
-		snprintf(bg, 16, "%{B%s}", (strlen(blocks[i].bg) ? blocks[i].bg : "-"));
-		strcat(lemonbar_str, bg);
-		free(bg);
-
+		char *block_str = malloc(128);
+		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s",
+			strlen(blocks[i].fg) ? blocks[i].fg : "-",
+			strlen(blocks[i].bg) ? blocks[i].bg : "-",
+			b->prefix ? b->prefix : "",
+			block_res,
+			b->suffix ? b->suffix : ""
+		);
+		
 		strcat(lemonbar_str, block_str);
 		free(block_res);
 		free(block_str);
