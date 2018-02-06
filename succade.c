@@ -295,19 +295,25 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	{
 		if (is_quoted(value))
 	       	{
-			char *trimmed = unquote(value);
-			bar->prefix = trimmed;
+			bar->prefix = unquote(value);
 	       	}
-		//printf("Bar prefix: %s\n", value);
+		else
+		{
+			bar->prefix = strdup(value);
+		}
+		return 1;
 	}
 	if (equals(name, "suffix"))
 	{
 		if (is_quoted(value))
 		{
-			char *trimmed = unquote(value);
-			bar->suffix = trimmed;
+			bar->suffix = unquote(value);
 		}
-		//printf("Bar suffix: %s\n", value);
+		else
+		{
+			bar->suffix = strdup(value);
+		}
+		return 1;
 	}
 	return 0; // unknown section/name, error
 }
