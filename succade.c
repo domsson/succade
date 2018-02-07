@@ -221,19 +221,25 @@ void free_blocks(struct block *blocks, int num_blocks)
 	}
 }
 
-int run_block(struct block *b, char *result, int result_length)
+int run_block(struct block *b, size_t result_length)
 {
 	if (b->fd == NULL)
 	{
 		printf("Block is dead: `%s`", b->name);
 		return 0;
 	}
-	if (fgets(result, result_length, b->fd) == NULL)
+	if (b->result != NULL)
+	{
+		free(b->result);
+		b->result = NULL;
+	}
+	b->result = malloc(result_length);
+	if (fgets(b->result, result_length, b->fd) == NULL)
 	{
 		printf("Unable to fetch input from block: `%s`", b->name);
 		return 0;
 	}
-	result[strcspn(result, "\n")] = 0; // Remove '\n'
+	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
 	b->ran = 1; // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
 	return 1;
@@ -253,20 +259,12 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
         int num_blocks_executed = 0;	
 	for(int i=0; i<num_blocks; ++i)
 	{
-		char *block_res = malloc(64);
 		if (!blocks[i].ran || blocks[i].waited >= blocks[i].reload)
 		{
-			num_blocks_executed += run_block(&blocks[i], block_res, 64);
-			if (blocks[i].result)
-			{
-				free(blocks[i].result);
-			}
-			blocks[i].result = malloc(64);
-			blocks[i].result = strdup(block_res);
+			num_blocks_executed += run_block(&blocks[i], 64);
 		}
 		else
 		{
-			block_res = strdup(blocks[i].result);
 			blocks[i].waited += delta;
 			//printf("%s waited %f secs...\n", blocks[i].name, blocks[i].waited);
 		}
@@ -277,12 +275,11 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 			strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
 			blocks[i].label ? blocks[i].label : "",
-			block_res,
+			blocks[i].result,
 			b->suffix ? b->suffix : ""
 		);
 		
 		strcat(lemonbar_str, block_str);
-		free(block_res);
 		free(block_str);
 	}
 
