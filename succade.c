@@ -22,8 +22,10 @@ struct block
 	char bg[16];
 	char align;
 	char *label;
+	int ran;
 	double reload;
 	double waited;
+	char *result;
 };
 
 struct trigger
@@ -35,7 +37,7 @@ struct trigger
 
 struct bar
 {
-	char name[64];
+	char *name;
 	FILE *fd;
 	char fg[16];
 	char bg[16];
@@ -214,6 +216,26 @@ void free_blocks(struct block *blocks, int num_blocks)
 	}
 }
 
+int run_block(struct block *b, char *result, int result_length)
+{
+	if (b->fd == NULL)
+	{
+		perror("Block is dead");
+		return 0;
+	}
+	if (fgets(result, result_length, b->fd) == NULL)
+	{
+		perror("Unable to fetch input from block");
+		return 0;
+	}
+	result[strcspn(result, "\n")] = 0; // Remove '\n'
+	if (!b->ran)
+	{
+		b->ran = 1;
+	}
+	return 1;
+}
+
 int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 {
 	if (b->fd == NULL)
@@ -229,7 +251,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 	{
 		char *block_res = malloc(64);
 		run_block(&blocks[i], block_res, 64);
-		block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
+		//block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
 
 		char *block_str = malloc(128);
 		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s",
@@ -252,24 +274,13 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 	return 1;
 }
 
-int run_block(const struct block *b, char *result, int result_length)
-{
-	if (b->fd == NULL)
-	{
-		perror("Block is dead");
-		return 0;
-	}
-	if (fgets(result, result_length, b->fd) == NULL)
-	{
-		perror("Unable to fetch input from block");
-		return 0;
-	}
-	return 1;
-}
-
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct bar *bar = (struct bar*) b;
+	if (equals(name, "name"))
+	{
+		bar->name = strdup(value);
+	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
 		strcpy(bar->fg, value);
@@ -425,8 +436,10 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 					.bg = { 0 },
 					.align = 0,
 					.label = NULL,
+					.ran = 0,
 					.reload = 0.0,
-					.waited = 0.0
+					.waited = 0.0,
+					.result = NULL
 				};
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
 				b.path = malloc(path_len);
@@ -496,8 +509,6 @@ double get_time()
 	clockid_t cid = (sysconf(_SC_MONOTONIC_CLOCK) > 0) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
 	struct timespec ts;
 	clock_gettime(cid, &ts);
-	//double ns_s = ts.tv_nsec / 1000000000.0;
-	//double secs = ts.tv_sec + ns_sy;
 	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
@@ -524,16 +535,12 @@ int main(void)
 	}
 	closedir(dir);
 
-	//int num_blocks = count_blocks(dir);
 	int num_blocks = count_blocks(blocksdir);
 	printf("%d files in blocks dir\n", num_blocks);
 
 	struct block blocks[num_blocks];
-	//int num_blocks_found = init_blocks(dir, blocks, num_blocks);
 	int num_blocks_found = init_blocks(blocksdir, blocks, num_blocks);
 	configure_blocks(blocks, num_blocks_found, blocksdir);
-
-	//closedir(dir);
 
 	printf("Blocks found: ");
 	for (int i=0; i<num_blocks_found; ++i)
@@ -545,7 +552,7 @@ int main(void)
 	/* MAIN LOGIC/LOOP */
 
 	struct bar lemonbar = {
-		.name = { 0 },
+		.name = NULL,
 		.fd = NULL,
 		.fg = { 0 },
 		.bg = { 0 },
