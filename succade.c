@@ -205,6 +205,11 @@ int free_block(struct block *b)
 		free(b->label);
 		b->label = NULL;
 	}
+	if (b->result != NULL)
+	{
+		free(b->result);
+		b->result = NULL;
+	}
 	return 1;
 }
 
@@ -220,19 +225,17 @@ int run_block(struct block *b, char *result, int result_length)
 {
 	if (b->fd == NULL)
 	{
-		perror("Block is dead");
+		printf("Block is dead: `%s`", b->name);
 		return 0;
 	}
 	if (fgets(result, result_length, b->fd) == NULL)
 	{
-		perror("Unable to fetch input from block");
+		printf("Unable to fetch input from block: `%s`", b->name);
 		return 0;
 	}
 	result[strcspn(result, "\n")] = 0; // Remove '\n'
-	if (!b->ran)
-	{
-		b->ran = 1;
-	}
+	b->ran = 1; // Mark this block as having run at least once
+	b->waited = 0.0; // This block was last run... now!
 	return 1;
 }
 
@@ -246,15 +249,30 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 
 	char lemonbar_str[1024];
 	lemonbar_str[0] = '\0';
- 
+
+        int num_blocks_executed = 0;	
 	for(int i=0; i<num_blocks; ++i)
 	{
 		char *block_res = malloc(64);
-		run_block(&blocks[i], block_res, 64);
-		//block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
+		if (!blocks[i].ran || blocks[i].waited >= blocks[i].reload)
+		{
+			num_blocks_executed += run_block(&blocks[i], block_res, 64);
+			if (blocks[i].result)
+			{
+				free(blocks[i].result);
+			}
+			blocks[i].result = malloc(64);
+			blocks[i].result = strdup(block_res);
+		}
+		else
+		{
+			block_res = strdup(blocks[i].result);
+			blocks[i].waited += delta;
+			//printf("%s waited %f secs...\n", blocks[i].name, blocks[i].waited);
+		}
 
 		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s",
+		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
 			strlen(blocks[i].fg) ? blocks[i].fg : "-",
 			strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
@@ -268,10 +286,14 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 		free(block_str);
 	}
 
-	printf("%s\n", lemonbar_str);
-	strcat(lemonbar_str, "\n");
-	fputs(lemonbar_str, b->fd);
-	return 1;
+	if (num_blocks_executed)
+	{
+		printf("%s\n", lemonbar_str);
+		strcat(lemonbar_str, "\n");
+		fputs(lemonbar_str, b->fd);
+		return 1;
+	}
+	return 0;
 }
 
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
@@ -401,6 +423,11 @@ int is_ini(const char *filename)
 	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
 }
 
+int is_hidden(const char *filename)
+{
+	return filename[0] == '.';
+}
+
 int count_blocks(const char *blockdir)
 {
 	DIR *block_dir = opendir(blockdir);
@@ -408,7 +435,7 @@ int count_blocks(const char *blockdir)
 	struct dirent *entry;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		if (entry->d_type == DT_REG && !is_ini(entry->d_name))
+		if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
 		{
 			++count;
 		}
@@ -424,7 +451,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 	int i = 0;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		if (entry->d_type == DT_REG && !is_ini(entry->d_name))
+		if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
 		{
 			if (i < num_blocks)
 			{
@@ -592,6 +619,7 @@ int main(void)
 		feed_bar(&lemonbar, blocks, num_blocks_found, delta);
 		close_blocks(blocks, num_blocks_found);
 		sleep(1);
+		//usleep(500000);
 	}
 	free_blocks(blocks, num_blocks_found);
 	close_bar(&lemonbar);
