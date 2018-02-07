@@ -1,0 +1,8 @@
+foreground=#000000
+background=#FFFFFF
+height=24
+dock=bottom
+force=false
+prefix=" [ " 
+suffix=" ] "
+
