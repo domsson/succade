@@ -20,6 +20,7 @@ struct block
 	char fg[16];
 	char bg[16];
 	char align;
+	char *label;
 	int reload;
 };
 
@@ -195,6 +196,11 @@ int free_block(struct block *b)
 		free(b->path);
 		b->path = NULL;
 	}
+	if (b->label != NULL)
+	{
+		free(b->label);
+		b->label = NULL;
+	}
 	return 1;
 }
 
@@ -224,10 +230,11 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
 		block_res[strcspn(block_res, "\n")] = 0; // Remove '\n'
 
 		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s",
+		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s",
 			strlen(blocks[i].fg) ? blocks[i].fg : "-",
 			strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
+			blocks[i].label ? blocks[i].label : "",
 			block_res,
 			b->suffix ? b->suffix : ""
 		);
@@ -335,15 +342,29 @@ int configure_bar(struct bar *b, const char *config_dir)
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct block *block = (struct block*) b;
-	if (strcmp(name, "fg") == 0)
+	if (equals(name, "fg") || equals(name, "foreground"))
 	{
 		strcpy(block->fg, value);
+		return 1;
 	}
-	else if (strcmp(name, "bg") == 0)
+	if (equals(name, "bg") || equals(name, "background"))
 	{
 		strcpy(block->bg, value);
+		return 1;
 	}
-	return 1;
+	if (equals(name, "label"))
+	{
+		if (is_quoted(value))
+		{
+			block->label = unquote(value);
+		}
+		else
+		{
+			block->label = strdup(value);
+		}
+
+	}
+	return 0; // unknown section/name or error
 }
 
 int configure_block(struct block *b, const char *blocks_dir)
