@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <dirent.h>
+#include <time.h>
 #include "succade.h"
 #include "ini.h"
 
@@ -21,7 +22,8 @@ struct block
 	char bg[16];
 	char align;
 	char *label;
-	int reload;
+	double reload;
+	double waited;
 };
 
 struct trigger
@@ -212,7 +214,7 @@ void free_blocks(struct block *blocks, int num_blocks)
 	}
 }
 
-int feed_bar(struct bar *b, struct block *blocks, int num_blocks)
+int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 {
 	if (b->fd == NULL)
 	{
@@ -334,8 +336,6 @@ int configure_bar(struct bar *b, const char *config_dir)
 		printf("Can't parse rc file %s\n", rc);
 		return 0;
 	}
-
-	printf("RC file loaded: fg=%s, bg=%s, height=%i\n", b->fg, b->bg, b->height);
 	return 1;
 }
 
@@ -358,17 +358,27 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 		{
 			block->label = unquote(value);
 		}
-		else
+		else	
 		{
 			block->label = strdup(value);
 		}
-
+		return 1;
+	}
+	if (equals(name, "reload"))
+	{
+		block->reload = atof(value);
+		return 1;
 	}
 	return 0; // unknown section/name or error
 }
 
 int configure_block(struct block *b, const char *blocks_dir)
 {
+	// Apply some default in case they aren't set through the .ini file
+	//b->ran_before = 0;
+	//b->reload = 5.0;
+	//b->waited = 0.0;
+
 	char blockini[256];
 	snprintf(blockini, sizeof(blockini), "%s/%s.%s", blocks_dir, b->name, "ini");
 	if (ini_parse(blockini, block_ini_handler, b) < 0)
@@ -376,8 +386,6 @@ int configure_block(struct block *b, const char *blocks_dir)
 		printf("Can't parse block INI: %s\n", blockini);
 		return 0;
 	}
-
-	printf("Block INI loaded: fg=%s, bg=%s, align=%s\n", b->fg, b->bg, b->align);
 	return 1;
 }
 
@@ -414,7 +422,17 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 		{
 			if (i < num_blocks)
 			{
-				struct block b;
+				struct block b = {
+					.name = NULL,
+					.path = NULL,
+					.fd = NULL,
+					.fg = { 0 },
+					.bg = { 0 },
+					.align = 0,
+					.label = NULL,
+					.reload = 0.0,
+					.waited = 0.0
+				};
 				b.name = strdup(entry->d_name);
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
 				b.path = malloc(path_len);
@@ -464,6 +482,29 @@ int get_blocks_dir(char *buffer, int buffer_size)
 	{
 		return snprintf(buffer, buffer_size, "%s/%s/%s/%s", getenv("HOME"), ".config", NAME, BLOCKS_DIR);
 	}
+}
+
+int smallest_reload(struct block *blocks, size_t num_blocks)
+{
+	int smallest = 5;
+	for (int i=0; i<num_blocks; ++i)
+	{
+		if (blocks[i].reload < smallest)
+		{
+			smallest = blocks[i].reload;
+		}
+	}
+	return smallest;
+}
+
+double get_time()
+{
+	clockid_t cid = (sysconf(_SC_MONOTONIC_CLOCK) > 0) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+	struct timespec ts;
+	clock_gettime(cid, &ts);
+	//double ns_s = ts.tv_nsec / 1000000000.0;
+	//double secs = ts.tv_sec + ns_sy;
+	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
 int main(void)
@@ -525,11 +566,20 @@ int main(void)
 		perror("Could not open bar process. Is lemonbar installed?");
 		exit(1);
 	}
-	
+
+	double now;
+	double before = get_time();
+	double delta;
+
 	while (1)
 	{
+		now = get_time();
+		delta = now - before;
+		before = now;
+		printf("Seconds elapsed: %f\n", delta);
+		
 		open_blocks(blocks, num_blocks_found, blocksdir);
-		feed_bar(&lemonbar, blocks, num_blocks_found);
+		feed_bar(&lemonbar, blocks, num_blocks_found, delta);
 		close_blocks(blocks, num_blocks_found);
 		sleep(1);
 	}
