@@ -374,11 +374,6 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 
 int configure_block(struct block *b, const char *blocks_dir)
 {
-	// Apply some default in case they aren't set through the .ini file
-	//b->ran_before = 0;
-	//b->reload = 5.0;
-	//b->waited = 0.0;
-
 	char blockini[256];
 	snprintf(blockini, sizeof(blockini), "%s/%s.%s", blocks_dir, b->name, "ini");
 	if (ini_parse(blockini, block_ini_handler, b) < 0)
@@ -423,7 +418,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 			if (i < num_blocks)
 			{
 				struct block b = {
-					.name = NULL,
+					.name = strdup(entry->d_name),
 					.path = NULL,
 					.fd = NULL,
 					.fg = { 0 },
@@ -433,7 +428,6 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 					.reload = 0.0,
 					.waited = 0.0
 				};
-				b.name = strdup(entry->d_name);
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
 				b.path = malloc(path_len);
 				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
@@ -550,11 +544,20 @@ int main(void)
 
 	/* MAIN LOGIC/LOOP */
 
-	struct bar lemonbar;
-	lemonbar.width = 0;
-	lemonbar.height = 0;
-	lemonbar.x = 0;
-	lemonbar.y = 0;
+	struct bar lemonbar = {
+		.name = { 0 },
+		.fd = NULL,
+		.fg = { 0 },
+		.bg = { 0 },
+		.width = 0,
+		.height = 0,
+		.x = 0,
+		.y = 0,
+		.bottom = 0,
+		.force = 0,
+		.prefix = NULL,
+		.suffix = NULL
+	};	
 	if (!configure_bar(&lemonbar, configdir))
 	{
 		perror("Could not load RC file");
