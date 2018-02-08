@@ -11,8 +11,6 @@
 
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
-#define DEFAULT_FG "#333333"
-#define DEFAULT_BG "#EEEEEE"
 #define BAR_PROCESS "lemonbar"
 
 struct block
@@ -113,8 +111,8 @@ int open_bar(struct bar *b)
 		(b->height > 0) ? height : "",
 		b->x,
 		b->y,
-		(b->fg && strlen(b->fg)) ? b->fg : DEFAULT_FG, // TODO or "-" like with blocks?
-		(b->bg && strlen(b->bg)) ? b->bg : DEFAULT_BG, // TODO or "-" like with blocks?
+		(b->fg && strlen(b->fg)) ? b->fg : "-", 
+		(b->bg && strlen(b->bg)) ? b->bg : "-", 
 		(b->bottom) ? "-b" : "",
 		(b->force)  ? "-f" : ""
 	);
@@ -330,12 +328,12 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	}
 	if (equals(name, "x"))
 	{
-		bar->x = atoi(x);
+		bar->x = atoi(value);
 		return 1;
 	}
 	if (equals(name, "y"))
 	{
-		bar->y = atoi(y);
+		bar->y = atoi(value);
 		return 1;
 	}
 	if (equals(name, "dock"))
@@ -445,6 +443,8 @@ int is_hidden(const char *filename)
 
 int is_executable(const char *filename)
 {
+	return 1;
+	// TODO this needs the PATH of the file as well...
 	struct stat sb;
 	return (stat(filename, &sb) == 0 && sb.st_mode & S_IXUSR);
 }
@@ -461,7 +461,6 @@ int count_blocks(const char *blockdir)
 	struct dirent *entry;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		//if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
 		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
 			++count;
@@ -478,7 +477,6 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 	int i = 0;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		//if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
 		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
 			if (i < num_blocks)
@@ -622,7 +620,7 @@ int main(void)
 	};	
 	if (!configure_bar(&lemonbar, configdir))
 	{
-		prtintf("Failed to load RC file: %src\n", NAME);
+		printf("Failed to load RC file: %src\n", NAME);
 		exit(1);
 	}
 	open_bar(&lemonbar);
