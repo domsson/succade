@@ -111,8 +111,8 @@ int open_bar(struct bar *b)
 		(b->height > 0) ? height : "",
 		b->x,
 		b->y,
-		(b->fg && strlen(b->fg)) ? b->fg : DEFAULT_FG, 
-		(b->bg && strlen(b->bg)) ? b->bg : DEFAULT_BG,
+		(b->fg && strlen(b->fg)) ? b->fg : DEFAULT_FG, // TODO or "-" like with blocks?
+		(b->bg && strlen(b->bg)) ? b->bg : DEFAULT_BG, // TODO or "-" like with blocks?
 		(b->bottom) ? "-b" : "",
 		(b->force)  ? "-f" : ""
 	);
@@ -259,7 +259,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 	char lemonbar_str[1024];
 	lemonbar_str[0] = '\0';
 
-        int num_blocks_executed = 0;	
+	int num_blocks_executed = 0;	
 	double until_next = 5;
 
 	for(int i=0; i<num_blocks; ++i)
@@ -339,9 +339,9 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "prefix"))
 	{
 		if (is_quoted(value))
-	       	{
+		{
 			bar->prefix = unquote(value);
-	       	}
+		}
 		else
 		{
 			bar->prefix = strdup(value);
@@ -430,6 +430,14 @@ int is_hidden(const char *filename)
 {
 	return filename[0] == '.';
 }
+
+/*
+// TODO
+int is_block_file(const char *filename)
+{
+
+}
+*/
 
 int count_blocks(const char *blockdir)
 {
