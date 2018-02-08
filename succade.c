@@ -172,7 +172,7 @@ int close_block(struct block *b)
 	return 1;
 }
 
-void open_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
+void open_blocks(struct block *blocks, int num_blocks)
 {
 	for(int i=0; i<num_blocks; ++i)
 	{
@@ -612,7 +612,7 @@ int main(void)
 		before = now;
 		printf("Seconds elapsed: %f\n", delta);
 		
-		open_blocks(blocks, num_blocks_found, blocksdir);
+		open_blocks(blocks, num_blocks_found);
 		feed_bar(&lemonbar, blocks, num_blocks_found, delta);
 		close_blocks(blocks, num_blocks_found);
 		sleep(1);
