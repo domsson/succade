@@ -22,7 +22,7 @@ struct block
 	char bg[16];
 	char align;
 	char *label;
-	int ran;
+	int used;
 	double reload;
 	double waited;
 	char *result;
@@ -242,7 +242,7 @@ int run_block(struct block *b, size_t result_length)
 		return 0;
 	}
 	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
-	b->ran = 1; // Mark this block as having run at least once
+	b->used = 1; // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
 	close_block(b);
 	return 1;
@@ -265,7 +265,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 	for(int i=0; i<num_blocks; ++i)
 	{
 		blocks[i].waited += delta;
-		if (!blocks[i].ran || blocks[i].waited >= blocks[i].reload)
+		if (!blocks[i].used || blocks[i].waited >= blocks[i].reload)
 		{
 			num_blocks_executed += run_block(&blocks[i], 64);
 		}
@@ -484,7 +484,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 					.bg = { 0 },
 					.align = 0,
 					.label = NULL,
-					.ran = 0,
+					.used = 0,
 					.reload = 0.0,
 					.waited = 0.0,
 					.result = NULL
