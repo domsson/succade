@@ -346,7 +346,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->force = (equals(value, "true")) ? 1 : 0;
 		return 1;
 	}
-	if (equals(name, "prefix"))
+	if (equals(name, "prefix") || equals(name, "block-prefix"))
 	{
 		if (is_quoted(value))
 		{
@@ -358,7 +358,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		}
 		return 1;
 	}
-	if (equals(name, "suffix"))
+	if (equals(name, "suffix") || equals(name, "block-suffix"))
 	{
 		if (is_quoted(value))
 		{
