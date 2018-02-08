@@ -605,20 +605,20 @@ int main(void)
 	};	
 	if (!configure_bar(&lemonbar, configdir))
 	{
-		perror("Could not load RC file");
+		prtintf("Could not load RC file: %src", NAME);
 		exit(1);
 	}
 	open_bar(&lemonbar);
 	if (lemonbar.fd == NULL)
 	{
-		perror("Could not open bar process. Is lemonbar installed?");
+		printf("Could not open bar process. Is %s installed?", BAR_PROCESS);
 		exit(1);
 	}
 
 	double now;
 	double before = get_time();
 	double delta;
-	double next;
+	double wait;
 
 	while (1)
 	{
@@ -628,11 +628,11 @@ int main(void)
 	//	printf("Seconds elapsed: %f\n", delta);
 		
 		//open_blocks(blocks, num_blocks_found);
-		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &next);
-	//	printf("Next in %f seconds\n", next);
+		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &wait);
+	//	printf("Next in %f seconds\n", wait);
 		//close_blocks(blocks, num_blocks_found);
 		//sleep(1);
-		usleep(next * 1000000.0);
+		usleep(wait * 1000000.0);
 	}
 	free_blocks(blocks, num_blocks_found);
 	close_bar(&lemonbar);
