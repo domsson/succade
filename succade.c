@@ -326,6 +326,16 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->width = atoi(value);
 		return 1;
 	}
+	if (equals(name, "x"))
+	{
+		bar->x = atoi(x);
+		return 1;
+	}
+	if (equals(name, "y"))
+	{
+		bar->y = atoi(y);
+		return 1;
+	}
 	if (equals(name, "dock"))
 	{
 		bar->bottom = (equals(value, "bottom")) ? 1 : 0;
@@ -605,13 +615,13 @@ int main(void)
 	};	
 	if (!configure_bar(&lemonbar, configdir))
 	{
-		prtintf("Could not load RC file: %src", NAME);
+		prtintf("Failed to load RC file: %src\n", NAME);
 		exit(1);
 	}
 	open_bar(&lemonbar);
 	if (lemonbar.fd == NULL)
 	{
-		printf("Could not open bar process. Is %s installed?", BAR_PROCESS);
+		printf("Failed to open bar: %s\n", BAR_PROCESS);
 		exit(1);
 	}
 
