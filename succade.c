@@ -291,7 +291,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 
 	if (num_blocks_executed)
 	{
-		printf("%s\n", lemonbar_str);
+	//	printf("%s\n", lemonbar_str);
 		strcat(lemonbar_str, "\n");
 		fputs(lemonbar_str, b->fd);
 		return 1;
@@ -617,11 +617,11 @@ int main(void)
 		now = get_time();
 		delta = now - before;
 		before = now;
-		printf("Seconds elapsed: %f\n", delta);
+	//	printf("Seconds elapsed: %f\n", delta);
 		
 		//open_blocks(blocks, num_blocks_found);
 		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &next);
-		printf("Next in %f seconds\n", next);
+	//	printf("Next in %f seconds\n", next);
 		//close_blocks(blocks, num_blocks_found);
 		//sleep(1);
 		usleep(next * 1000000.0);
