@@ -223,6 +223,7 @@ void free_blocks(struct block *blocks, int num_blocks)
 
 int run_block(struct block *b, size_t result_length)
 {
+	open_block(b);
 	if (b->fd == NULL)
 	{
 		printf("Block is dead: `%s`", b->name);
@@ -237,15 +238,17 @@ int run_block(struct block *b, size_t result_length)
 	if (fgets(b->result, result_length, b->fd) == NULL)
 	{
 		printf("Unable to fetch input from block: `%s`", b->name);
+		close_block(b);
 		return 0;
 	}
 	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
 	b->ran = 1; // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
+	close_block(b);
 	return 1;
 }
 
-int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
+int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, double *next)
 {
 	if (b->fd == NULL)
 	{
@@ -257,16 +260,18 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 	lemonbar_str[0] = '\0';
 
         int num_blocks_executed = 0;	
+	double until_next = 5;
+
 	for(int i=0; i<num_blocks; ++i)
 	{
+		blocks[i].waited += delta;
 		if (!blocks[i].ran || blocks[i].waited >= blocks[i].reload)
 		{
 			num_blocks_executed += run_block(&blocks[i], 64);
 		}
-		else
+		if ((blocks[i].reload - blocks[i].waited) < until_next)
 		{
-			blocks[i].waited += delta;
-			//printf("%s waited %f secs...\n", blocks[i].name, blocks[i].waited);
+			until_next = blocks[i].reload - blocks[i].waited;
 		}
 
 		char *block_str = malloc(128);
@@ -282,6 +287,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta)
 		strcat(lemonbar_str, block_str);
 		free(block_str);
 	}
+	*next = until_next;
 
 	if (num_blocks_executed)
 	{
@@ -604,6 +610,7 @@ int main(void)
 	double now;
 	double before = get_time();
 	double delta;
+	double next;
 
 	while (1)
 	{
@@ -612,11 +619,12 @@ int main(void)
 		before = now;
 		printf("Seconds elapsed: %f\n", delta);
 		
-		open_blocks(blocks, num_blocks_found);
-		feed_bar(&lemonbar, blocks, num_blocks_found, delta);
-		close_blocks(blocks, num_blocks_found);
-		sleep(1);
-		//usleep(500000);
+		//open_blocks(blocks, num_blocks_found);
+		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &next);
+		printf("Next in %f seconds\n", next);
+		//close_blocks(blocks, num_blocks_found);
+		//sleep(1);
+		usleep(next * 1000000.0);
 	}
 	free_blocks(blocks, num_blocks_found);
 	close_bar(&lemonbar);
