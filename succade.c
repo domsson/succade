@@ -4,6 +4,8 @@
 #include <string.h>
 #include <dirent.h>
 #include <time.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "succade.h"
 #include "ini.h"
 
@@ -441,13 +443,16 @@ int is_hidden(const char *filename)
 	return filename[0] == '.';
 }
 
-/*
-// TODO
-int is_block_file(const char *filename)
+int is_executable(const char *filename)
 {
-
+	struct stat sb;
+	return (stat(filename, &sb) == 0 && sb.st_mode & S_IXUSR);
 }
-*/
+
+int probably_a_block(const char *filename)
+{
+	return !is_ini(filename) && !is_hidden(filename) && is_executable(filename);
+}
 
 int count_blocks(const char *blockdir)
 {
@@ -456,7 +461,8 @@ int count_blocks(const char *blockdir)
 	struct dirent *entry;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
+		//if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
+		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
 			++count;
 		}
@@ -472,7 +478,8 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 	int i = 0;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
+		//if (entry->d_type == DT_REG && !is_ini(entry->d_name) && !is_hidden(entry->d_name))
+		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
 			if (i < num_blocks)
 			{
