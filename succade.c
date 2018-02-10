@@ -27,6 +27,7 @@ struct block
 	int used;
 	double reload;
 	double waited;
+	char *input;
 	char *result;
 };
 
@@ -157,13 +158,14 @@ void close_bar(struct bar *b)
 	}
 }
 
-int open_block(struct block *b, const char *args)
+int open_block(struct block *b)
 {
-	if (args)
+	if (b->input)
 	{
-		size_t cmd_len = strlen(b->path) + strlen(args) + 1;
+		printf("lol\n");
+		size_t cmd_len = strlen(b->path) + strlen(b->input) + 1;
 		char *cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s %s", b->path, args ? args : "");
+		snprintf(cmd, cmd_len, "%s '%s'", b->path, b->input);
 		b->fd = popen(cmd, "r");
 		free(cmd);
 		return (b->fd == NULL) ? 0 : 1;
@@ -190,7 +192,7 @@ void open_blocks(struct block *blocks, int num_blocks)
 {
 	for(int i=0; i<num_blocks; ++i)
 	{
-		open_block(&blocks[i], NULL);
+		open_block(&blocks[i]);
 	}
 }
 
@@ -204,16 +206,20 @@ void close_blocks(struct block *blocks, int num_blocks)
 
 int open_trigger(struct trigger *t)
 {
+	printf("Opening trigger: %s\n", t->cmd);
 	t->fd = popen(t->cmd, "r");
 	if (t->fd == NULL)
 	{
+		printf("Failed to open trigger: %s\n", t->cmd);
 		return 0;
 	}
+	setlinebuf(t->fd);
 	int fn = fileno(t->fd);
 	int flags;
 	flags = fcntl(fn, F_GETFL, 0);
 	flags |= O_NONBLOCK;
 	fcntl(fn, F_SETFL, flags);
+	return 1;
 }
 
 int close_trigger(struct trigger *t)
@@ -265,6 +271,11 @@ int free_block(struct block *b)
 		free(b->trigger);
 		b->trigger = NULL;
 	}
+	if (b->input != NULL)
+	{
+		free(b->input);
+		b->input = NULL;
+	}
 	if (b->result != NULL)
 	{
 		free(b->result);
@@ -294,9 +305,17 @@ void free_blocks(struct block *blocks, int num_blocks)
 	}
 }
 
-int run_block(struct block *b, size_t result_length, const char *args)
+void free_triggers(struct trigger *triggers, int num_triggers)
 {
-	open_block(b, args);
+	for (int i=0; i<num_triggers; ++i)
+	{
+		free_trigger(&triggers[i]);
+	}
+}
+
+int run_block(struct block *b, size_t result_length)
+{
+	open_block(b);
 	if (b->fd == NULL)
 	{
 		printf("Block is dead: `%s`", b->name);
@@ -338,11 +357,11 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 	for(int i=0; i<num_blocks; ++i)
 	{
 		blocks[i].waited += delta;
-		if (!blocks[i].used || blocks[i].waited >= blocks[i].reload)
+		if (!blocks[i].used || blocks[i].input || blocks[i].waited >= blocks[i].reload)
 		{
-			num_blocks_executed += run_block(&blocks[i], 64, NULL);
+			num_blocks_executed += run_block(&blocks[i], 64);
 		}
-		if ((blocks[i].reload - blocks[i].waited) < until_next)
+		if (blocks[i].input == NULL && (blocks[i].reload - blocks[i].waited) < until_next)
 		{
 			until_next = blocks[i].reload - blocks[i].waited;
 		}
@@ -364,7 +383,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 
 	if (num_blocks_executed)
 	{
-	//	printf("%s\n", lemonbar_str);
+		printf("%s\n", lemonbar_str);
 		strcat(lemonbar_str, "\n");
 		fputs(lemonbar_str, b->fd);
 		return 1;
@@ -487,7 +506,7 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	{
 		if (is_quoted(value)) // String means trigger!
 		{
-			block->trigger = strdup(value);
+			block->trigger = unquote(value);
 		}
 		else
 		{
@@ -550,9 +569,9 @@ int count_blocks(const char *blockdir)
 	return count;
 }
 
-int create_triggers(struct trigger *triggers, struct block *blocks, int num_blocks)
+int create_triggers(struct trigger **triggers, struct block *blocks, int num_blocks)
 {
-	triggers = malloc(num_blocks * sizeof(struct trigger));
+	*triggers = malloc(num_blocks * sizeof(struct trigger));
 	int num_triggers_created = 0;
 	for (int i=0; i<num_blocks; ++i)
 	{
@@ -565,9 +584,9 @@ int create_triggers(struct trigger *triggers, struct block *blocks, int num_bloc
 			.fd = NULL,
 			.b = &blocks[i]
 		};
-		triggers[num_triggers_created++] = t;
+		*triggers[num_triggers_created++] = t;
 	}
-	triggers = realloc(triggers, num_triggers_created * sizeof(struct trigger));
+	*triggers = realloc(*triggers, num_triggers_created * sizeof(struct trigger));
 	return num_triggers_created;
 }
 
@@ -592,8 +611,9 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 					.label = NULL,
 					.used = 0,
 					.trigger = NULL,
-					.reload = 0.0,
+					.reload = 5.0,
 					.waited = 0.0,
+					.input = NULL,
 					.result = NULL
 				};
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
@@ -646,19 +666,6 @@ int get_blocks_dir(char *buffer, int buffer_size)
 	}
 }
 
-int smallest_reload(struct block *blocks, size_t num_blocks)
-{
-	int smallest = 5;
-	for (int i=0; i<num_blocks; ++i)
-	{
-		if (blocks[i].reload < smallest)
-		{
-			smallest = blocks[i].reload;
-		}
-	}
-	return smallest;
-}
-
 double get_time()
 {
 	clockid_t cid = (sysconf(_SC_MONOTONIC_CLOCK) > 0) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
@@ -667,7 +674,7 @@ double get_time()
 	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
-int process_trigger(const struct trigger *t)
+int run_trigger(struct trigger *t)
 {
 	if (t->fd == NULL)
 	{
@@ -676,7 +683,13 @@ int process_trigger(const struct trigger *t)
 	char res[256];
 	if (fgets(res, 256, t->fd))
 	{
-		run_block(t->b, 64, res);
+		struct block *b = t->b;
+		if (b->input != NULL)
+		{
+			free(b->input);
+			b->input = NULL;
+		}
+		b->input = strdup(res);
 		return 1;
 	}
 	return 0;
@@ -712,14 +725,9 @@ int main(void)
 	int num_blocks_found = init_blocks(blocksdir, blocks, num_blocks);
 	configure_blocks(blocks, num_blocks_found, blocksdir);
 
-	/*
-	int num_triggers = count_triggers(blocks, num_blocks);
-	struct trigger triggers[num_triggers];
-	create_triggers(triggers, blocks, num_blocks);
-	*/
-
 	struct trigger *triggers;
-	int num_triggers = create_triggers(triggers, blocks, num_blocks);
+	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
+//	printf("trigger 0: %s", triggers[0].cmd);
 
 	printf("Blocks found: ");
 	for (int i=0; i<num_blocks_found; ++i)
@@ -729,6 +737,7 @@ int main(void)
 	printf("\n");
 
 	printf("Number of triggers: %d\n", num_triggers);
+	open_triggers(triggers, num_triggers);
 
 	/* MAIN LOGIC/LOOP */
 
@@ -769,7 +778,10 @@ int main(void)
 		delta = now - before;
 		before = now;
 	//	printf("Seconds elapsed: %f\n", delta);
-		
+		for (int i=0; i<num_triggers; ++i)
+		{
+			//run_trigger(&triggers[i]);
+		}		
 		//open_blocks(blocks, num_blocks_found);
 		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &wait);
 	//	printf("Next in %f seconds\n", wait);
@@ -778,6 +790,8 @@ int main(void)
 		usleep(wait * 1000000.0);
 	}
 	free_blocks(blocks, num_blocks_found);
+	close_triggers(triggers, num_triggers);
+	free_triggers(triggers, num_triggers);
 	close_bar(&lemonbar);
 	free_bar(&lemonbar);
 	return 0;
