@@ -10,6 +10,7 @@
 #include "succade.h"
 #include "ini.h"
 
+#define DEBUG 1
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
@@ -162,8 +163,7 @@ int open_block(struct block *b)
 {
 	if (b->input)
 	{
-		printf("lol\n");
-		size_t cmd_len = strlen(b->path) + strlen(b->input) + 1;
+		size_t cmd_len = strlen(b->path) + strlen(b->input) + 4;
 		char *cmd = malloc(cmd_len);
 		snprintf(cmd, cmd_len, "%s '%s'", b->path, b->input);
 		b->fd = popen(cmd, "r");
@@ -383,7 +383,10 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 
 	if (num_blocks_executed)
 	{
-		printf("%s\n", lemonbar_str);
+		if (DEBUG)
+		{
+			printf("%s\n", lemonbar_str);
+		}
 		strcat(lemonbar_str, "\n");
 		fputs(lemonbar_str, b->fd);
 		return 1;
@@ -780,7 +783,7 @@ int main(void)
 	//	printf("Seconds elapsed: %f\n", delta);
 		for (int i=0; i<num_triggers; ++i)
 		{
-			//run_trigger(&triggers[i]);
+			run_trigger(&triggers[i]);
 		}		
 		//open_blocks(blocks, num_blocks_found);
 		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &wait);
@@ -788,6 +791,7 @@ int main(void)
 		//close_blocks(blocks, num_blocks_found);
 		//sleep(1);
 		usleep(wait * 1000000.0);
+		//usleep(1000000.0 * 0.1);
 	}
 	free_blocks(blocks, num_blocks_found);
 	close_triggers(triggers, num_triggers);
