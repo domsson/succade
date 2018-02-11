@@ -593,6 +593,58 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 	return num_triggers_created;
 }
 
+struct block *create_blocks(const char *blockdir)
+{
+	int num_blocks = 0;
+	DIR *block_dir = opendir(blockdir);
+	struct dirent *entry;
+	while ((entry = readdir(block_dir)) != NULL)
+	{
+		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
+		{
+			++num_blocks;
+		}
+	}
+	rewinddir(block_dir);
+	
+	struct block *blocks = malloc(num_blocks * sizeof(struct block));
+	int i = 0;
+	while ((entry = readdir(block_dir)) != NULL)
+	{
+		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
+		{
+			if (i < num_blocks)
+			{
+				struct block b = {
+					.name = strdup(entry->d_name),
+					.path = NULL,
+					.fd = NULL,
+					.fg = { 0 },
+					.bg = { 0 },
+					.align = 0,
+					.label = NULL,
+					.used = 0,
+					.trigger = NULL,
+					.reload = 5.0,
+					.waited = 0.0,
+					.input = NULL,
+					.result = NULL
+				};
+				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
+				b.path = malloc(path_len);
+				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
+				blocks[i++] = b;
+			}
+			else
+			{
+				perror("Can't create block, not enough space");
+			}
+		}
+	}
+	closedir(block_dir);
+	return blocks;
+}
+
 int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 {
 	DIR *block_dir = opendir(blockdir);
@@ -785,10 +837,8 @@ int main(void)
 		{
 			run_trigger(&triggers[i]);
 		}		
-		//open_blocks(blocks, num_blocks_found);
 		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &wait);
 	//	printf("Next in %f seconds\n", wait);
-		//close_blocks(blocks, num_blocks_found);
 		//sleep(1);
 		usleep(wait * 1000000.0);
 		//usleep(1000000.0 * 0.1);
