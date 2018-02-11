@@ -585,6 +585,11 @@ int create_blocks(struct block **blocks, const char *blockdir)
 {
 	int num_blocks = 0;
 	DIR *block_dir = opendir(blockdir);
+	if (block_dir == NULL)
+	{
+		*blocks = NULL;
+		return 0;
+	}
 	struct dirent *entry;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
@@ -641,8 +646,7 @@ int create_blocks(struct block **blocks, const char *blockdir)
 
 int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
-	int i;
-	for (i=0; i<num_blocks; ++i)
+	for (int i=0; i<num_blocks; ++i)
 	{
 		configure_block(&blocks[i], blocks_dir);
 	}
@@ -676,7 +680,12 @@ int get_blocks_dir(char *buffer, int buffer_size)
 
 double get_time()
 {
-	clockid_t cid = (sysconf(_SC_MONOTONIC_CLOCK) > 0) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
+	clockid_t cid = CLOCK_MONOTONIC;
+	// TODO the next line is cool, as CLOCK_MONOTONIC is not
+	// present on all systems, where CLOCK_REALTIME is, however
+	// I don't want to call sysconf() with every single iteration
+	// of the main loop, so let's do this ONCE and remember...
+	//clockid_t cid = (sysconf(_SC_MONOTONIC_CLOCK) > 0) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
 	struct timespec ts;
 	clock_gettime(cid, &ts);
 	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
@@ -716,15 +725,6 @@ int main(void)
 	{
 		printf("Blocks: %s\n", blocksdir);
 	}
-
-	DIR *dir;
-	dir = opendir(blocksdir);
-	if (dir == NULL)
-	{
-		perror("Could not open config dir");
-		return -1;
-	}
-	closedir(dir);
 
 	struct block *blocks;
 	int num_blocks = create_blocks(&blocks, blocksdir);
@@ -794,8 +794,10 @@ int main(void)
 		//usleep(1000000.0 * 0.1);
 	}
 	free_blocks(blocks, num_blocks);
+	free(blocks);
 	close_triggers(triggers, num_triggers);
 	free_triggers(triggers, num_triggers);
+	free(triggers);
 	close_bar(&lemonbar);
 	free_bar(&lemonbar);
 	return 0;
