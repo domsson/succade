@@ -7,7 +7,6 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "succade.h"
 #include "ini.h"
 
 #define DEBUG 1
@@ -556,24 +555,13 @@ int probably_a_block(const char *filename)
 	return !is_ini(filename) && !is_hidden(filename) && is_executable(filename);
 }
 
-int count_blocks(const char *blockdir)
-{
-	DIR *block_dir = opendir(blockdir);
-	int count = 0;
-	struct dirent *entry;
-	while ((entry = readdir(block_dir)) != NULL)
-	{
-		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
-		{
-			++count;
-		}
-	}
-	closedir(block_dir);
-	return count;
-}
-
 int create_triggers(struct trigger **triggers, struct block *blocks, int num_blocks)
 {
+	if (num_blocks == 0)
+	{
+		*triggers = NULL;
+		return 0;
+	}
 	*triggers = malloc(num_blocks * sizeof(struct trigger));
 	int num_triggers_created = 0;
 	for (int i=0; i<num_blocks; ++i)
@@ -593,7 +581,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 	return num_triggers_created;
 }
 
-struct block *create_blocks(const char *blockdir)
+int create_blocks(struct block **blocks, const char *blockdir)
 {
 	int num_blocks = 0;
 	DIR *block_dir = opendir(blockdir);
@@ -602,53 +590,18 @@ struct block *create_blocks(const char *blockdir)
 	{
 		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
-			++num_blocks;
+			++(num_blocks);
 		}
 	}
 	rewinddir(block_dir);
-	
-	struct block *blocks = malloc(num_blocks * sizeof(struct block));
-	int i = 0;
-	while ((entry = readdir(block_dir)) != NULL)
-	{
-		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
-		{
-			if (i < num_blocks)
-			{
-				struct block b = {
-					.name = strdup(entry->d_name),
-					.path = NULL,
-					.fd = NULL,
-					.fg = { 0 },
-					.bg = { 0 },
-					.align = 0,
-					.label = NULL,
-					.used = 0,
-					.trigger = NULL,
-					.reload = 5.0,
-					.waited = 0.0,
-					.input = NULL,
-					.result = NULL
-				};
-				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
-				b.path = malloc(path_len);
-				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
-				blocks[i++] = b;
-			}
-			else
-			{
-				perror("Can't create block, not enough space");
-			}
-		}
-	}
-	closedir(block_dir);
-	return blocks;
-}
 
-int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
-{
-	DIR *block_dir = opendir(blockdir);
-	struct dirent *entry;
+	if (num_blocks == 0)
+	{
+		*blocks = NULL;
+		return 0;
+	}
+
+	*blocks = malloc(num_blocks * sizeof(struct block));
 	int i = 0;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
@@ -674,7 +627,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
 				b.path = malloc(path_len);
 				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
-				blocks[i++] = b;
+				(*blocks)[i++] = b;
 			}
 			else
 			{
@@ -683,7 +636,7 @@ int init_blocks(const char *blockdir, struct block *blocks, int num_blocks)
 		}
 	}
 	closedir(block_dir);
-	return i;
+	return num_blocks;
 }
 
 int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
@@ -773,19 +726,16 @@ int main(void)
 	}
 	closedir(dir);
 
-	int num_blocks = count_blocks(blocksdir);
-	printf("%d files in blocks dir\n", num_blocks);
-
-	struct block blocks[num_blocks];
-	int num_blocks_found = init_blocks(blocksdir, blocks, num_blocks);
-	configure_blocks(blocks, num_blocks_found, blocksdir);
+	struct block *blocks;
+	int num_blocks = create_blocks(&blocks, blocksdir);
+	configure_blocks(blocks, num_blocks, blocksdir);
 
 	struct trigger *triggers;
 	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
 //	printf("trigger 0: %s", triggers[0].cmd);
 
 	printf("Blocks found: ");
-	for (int i=0; i<num_blocks_found; ++i)
+	for (int i=0; i<num_blocks; ++i)
 	{
 		printf("%s ", blocks[i].name);
 	}
@@ -837,13 +787,13 @@ int main(void)
 		{
 			run_trigger(&triggers[i]);
 		}		
-		feed_bar(&lemonbar, blocks, num_blocks_found, delta, &wait);
+		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
 	//	printf("Next in %f seconds\n", wait);
 		//sleep(1);
 		usleep(wait * 1000000.0);
 		//usleep(1000000.0 * 0.1);
 	}
-	free_blocks(blocks, num_blocks_found);
+	free_blocks(blocks, num_blocks);
 	close_triggers(triggers, num_triggers);
 	free_triggers(triggers, num_triggers);
 	close_bar(&lemonbar);
