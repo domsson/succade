@@ -21,10 +21,10 @@ struct block
 	FILE *fd;
 	char *fg;
 	char *bg;
-	int offset;
+	size_t offset : 16;
 	char *label;
 	char *trigger;
-	int used;
+	int used : 1;
 	double reload;
 	double waited;
 	char *input;
@@ -44,14 +44,14 @@ struct bar
 	FILE *fd;
 	char *fg;
 	char *bg;
-	size_t width;
-	size_t height;
-	size_t x;
-	size_t y;
-	int bottom;
-	int force;
 	char *prefix;
 	char *suffix;
+	size_t width : 16;
+	size_t height : 16;
+	size_t x : 16;
+	size_t y : 16;
+	int bottom : 1;
+	int force : 1;
 };
 
 /*
@@ -714,6 +714,12 @@ int run_trigger(struct trigger *t)
 
 int main(void)
 {
+	if (DEBUG)
+	{
+		printf("sizeof bar: %d\n", sizeof(struct bar));
+		printf("sizeof block: %d\n", sizeof(struct block));
+	}
+
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
 	{
