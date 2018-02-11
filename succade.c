@@ -366,7 +366,8 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 		}
 
 		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
+		snprintf(block_str, 128, "%%{%c}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
+			blocks[i].align,
 			strlen(blocks[i].fg) ? blocks[i].fg : "-",
 			strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
@@ -583,13 +584,14 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 
 int create_blocks(struct block **blocks, const char *blockdir)
 {
-	int num_blocks = 0;
 	DIR *block_dir = opendir(blockdir);
 	if (block_dir == NULL)
 	{
 		*blocks = NULL;
 		return 0;
 	}
+
+	int num_blocks = 0;
 	struct dirent *entry;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
@@ -598,7 +600,6 @@ int create_blocks(struct block **blocks, const char *blockdir)
 			++(num_blocks);
 		}
 	}
-	rewinddir(block_dir);
 
 	if (num_blocks == 0)
 	{
@@ -606,42 +607,36 @@ int create_blocks(struct block **blocks, const char *blockdir)
 		return 0;
 	}
 
+	rewinddir(block_dir);
+	int num_blocks_created = 0;
 	*blocks = malloc(num_blocks * sizeof(struct block));
-	int i = 0;
-	while ((entry = readdir(block_dir)) != NULL)
+	while (num_blocks_created < num_blocks && (entry = readdir(block_dir)) != NULL)
 	{
 		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
-			if (i < num_blocks)
-			{
-				struct block b = {
-					.name = strdup(entry->d_name),
-					.path = NULL,
-					.fd = NULL,
-					.fg = { 0 },
-					.bg = { 0 },
-					.align = 0,
-					.label = NULL,
-					.used = 0,
-					.trigger = NULL,
-					.reload = 5.0,
-					.waited = 0.0,
-					.input = NULL,
-					.result = NULL
-				};
-				size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
-				b.path = malloc(path_len);
-				snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
-				(*blocks)[i++] = b;
-			}
-			else
-			{
-				perror("Can't create block, not enough space");
-			}
+			struct block b = {
+				.name = strdup(entry->d_name),
+				.path = NULL,
+				.fd = NULL,
+				.fg = { 0 },
+				.bg = { 0 },
+				.align = 'c',
+				.label = NULL,
+				.used = 0,
+				.trigger = NULL,
+				.reload = 5.0,
+				.waited = 0.0,
+				.input = NULL,
+				.result = NULL
+			};
+			size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
+			b.path = malloc(path_len);
+			snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
+			(*blocks)[num_blocks_created++] = b;
 		}
 	}
 	closedir(block_dir);
-	return num_blocks;
+	return num_blocks_created;
 }
 
 int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
