@@ -21,7 +21,6 @@ struct block
 	FILE *fd;
 	char fg[16];
 	char bg[16];
-	char align;
 	char *label;
 	char *trigger;
 	int used;
@@ -366,8 +365,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 		}
 
 		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{%c}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
-			blocks[i].align,
+		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
 			strlen(blocks[i].fg) ? blocks[i].fg : "-",
 			strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
@@ -620,7 +618,6 @@ int create_blocks(struct block **blocks, const char *blockdir)
 				.fd = NULL,
 				.fg = { 0 },
 				.bg = { 0 },
-				.align = 'c',
 				.label = NULL,
 				.used = 0,
 				.trigger = NULL,
