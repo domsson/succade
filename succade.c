@@ -21,6 +21,7 @@ struct block
 	FILE *fd;
 	char *fg;
 	char *bg;
+	int offset;
 	char *label;
 	char *trigger;
 	int used;
@@ -387,7 +388,8 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 		}
 
 		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
+		snprintf(block_str, 128, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
+			blocks[i].offset,
 			blocks[i].fg && strlen(blocks[i].fg) ? blocks[i].fg : "-",
 			blocks[i].bg && strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
@@ -498,6 +500,10 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	{
 		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
+	}
+	if (equals(name, "offset"))
+	{
+		block->offset = atoi(value);
 	}
 	if (equals(name, "label"))
 	{
@@ -619,6 +625,7 @@ int create_blocks(struct block **blocks, const char *blockdir)
 				.fd = NULL,
 				.fg = NULL,
 				.bg = NULL,
+				.offset = 0,
 				.label = NULL,
 				.used = 0,
 				.trigger = NULL,
