@@ -140,26 +140,17 @@ int open_bar(struct bar *b)
 
 void free_bar(struct bar *b)
 {
-	if (b->fg != NULL)
-	{
-		free(b->fg);
-		b->fg = NULL;
-	}
-	if (b->bg != NULL)
-	{
-		free(b->bg);
-		b->bg = NULL;
-	}
-	if (b->prefix != NULL)
-	{
-		free(b->prefix);
-		b->prefix = NULL;
-	}
-	if (b->suffix != NULL)
-	{
-		free(b->suffix);
-		b->suffix = NULL;
-	}
+	free(b->fg);
+	b->fg = NULL;
+
+	free(b->bg);
+	b->bg = NULL;
+
+	free(b->prefix);
+	b->prefix = NULL;
+
+	free(b->suffix);
+	b->suffix = NULL;
 }
 
 void close_bar(struct bar *b)
@@ -262,60 +253,37 @@ void close_triggers(struct trigger *triggers, int num_triggers)
 
 int free_block(struct block *b)
 {
-	if (b->name != NULL)
-	{
-		free(b->name);
-		b->name = NULL;
-	}
-	if (b->path != NULL)
-	{
-		free(b->path);
-		b->path = NULL;
-	}
-	if (b->fg != NULL)
-	{
-		free(b->fg);
-		b->fg = NULL;
-	}
-	if (b->bg != NULL)
-	{
-		free(b->bg);
-		b->bg = NULL;
-	}
-	if (b->label != NULL)
-	{
-		free(b->label);
-		b->label = NULL;
-	}
-	if (b->trigger != NULL)
-	{
-		free(b->trigger);
-		b->trigger = NULL;
-	}
-	if (b->input != NULL)
-	{
-		free(b->input);
-		b->input = NULL;
-	}
-	if (b->result != NULL)
-	{
-		free(b->result);
-		b->result = NULL;
-	}
-	return 1;
+	free(b->name);
+	b->name = NULL;
+
+	free(b->path);
+	b->path = NULL;
+
+	free(b->fg);
+	b->fg = NULL;
+
+	free(b->bg);
+	b->bg = NULL;
+
+	free(b->label);
+	b->label = NULL;
+
+	free(b->trigger);
+	b->trigger = NULL;
+
+	free(b->input);
+	b->input = NULL;
+
+	free(b->result);
+	b->result = NULL;
 }
 
 int free_trigger(struct trigger *t)
 {
-	if (t->cmd != NULL)
-	{
 		free(t->cmd);
 		t->cmd = NULL;
-	}
-	if (t->b != NULL)
-	{
+
 		t->b = NULL;
-	}
 }
 
 void free_blocks(struct block *blocks, int num_blocks)
