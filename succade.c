@@ -647,6 +647,27 @@ int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_di
 	}
 }
 
+// NEW and UNTESTED
+char *config_dir()
+{
+	char *home = getenv("HOME");
+	char *config_home = getenv("XDF_CONFIG_HOME");
+	char *config_dir = NULL;
+	if (config_home == NULL)
+	{
+		size_t config_dir_len = strlen(home) + strlen(".config") + strlen(NAME) + 3;
+		config_dir = malloc(config_dir_len);
+		snprintf(config_dir, config_dir_len, "%s/%s/%s", getenv("HOME"), ".config", NAME);
+	}
+	else
+	{
+		size_t config_dir_len = strlen(config_home) + strlen(NAME) + 2;
+		config_dir = malloc(config_dir_len);
+		snprintf(config_dir, config_dir_len, "%s/%s", config_home, NAME);
+	}
+	return config_dir;
+}
+
 int get_config_dir(char *buffer, int buffer_size)
 {
 	char *config_home = getenv("XDF_CONFIG_HOME");
@@ -754,7 +775,7 @@ int main(void)
 		.force = 0,
 		.prefix = NULL,
 		.suffix = NULL
-	};	
+	};
 	if (!configure_bar(&lemonbar, configdir))
 	{
 		printf("Failed to load RC file: %src\n", NAME);
