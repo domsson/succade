@@ -383,6 +383,40 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 	return 0;
 }
 
+// untested & unused
+char *blockstr(const struct block *b, size_t len)
+{
+	char *block_str = malloc(len);
+	snprintf(block_str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
+		b.offset,
+		b.fg && strlen(b.fg) ? b.fg : "-",
+		b.bg && strlen(b.bg) ? b.bg : "-",
+		b->prefix ? b->prefix : "",
+		blocks[i].label ? blocks[i].label : "",
+		blocks[i].result,
+		b->suffix ? b->suffix : ""
+	);
+	return block_str;
+}
+
+// untested & unused
+char *barstr(const struct block *blocks, size_t num_blocks)
+{
+	size_t blockstr_len = 256;
+	char *bar_str = malloc(blockstr_len * num_blocks);
+	bar_str[0] = '\0';
+
+	for (int i=0; i<num_blocks; ++i)
+	{
+		char *block_str = blockstr(&blocks[i], blockstr_len);
+		strcat(bar_str, block_str);
+		free(block_str);
+	}
+	strcat(bar_str, "\n");
+	bar_str = realloc(bar_str, strlen(bar_str) + 1);
+	return bar_str;
+}
+
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct bar *bar = (struct bar*) b;
@@ -630,7 +664,7 @@ char *config_dir()
 	{
 		size_t config_dir_len = strlen(home) + strlen(".config") + strlen(NAME) + 3;
 		config_dir = malloc(config_dir_len);
-		snprintf(config_dir, config_dir_len, "%s/%s/%s", getenv("HOME"), ".config", NAME);
+		snprintf(config_dir, config_dir_len, "%s/%s/%s", home, ".config", NAME);
 	}
 	else
 	{
@@ -727,7 +761,6 @@ int main(void)
 
 	struct trigger *triggers;
 	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
-//	printf("trigger 0: %s", triggers[0].cmd);
 
 	printf("Blocks found: ");
 	for (int i=0; i<num_blocks; ++i)
