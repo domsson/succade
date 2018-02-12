@@ -19,12 +19,12 @@ struct block
 	char *name;
 	char *path;
 	FILE *fd;
-	char fg[16];
-	char bg[16];
-	char align;
+	char *fg;
+	char *bg;
+	size_t offset : 16;
 	char *label;
 	char *trigger;
-	int used;
+	int used : 1;
 	double reload;
 	double waited;
 	char *input;
@@ -42,16 +42,16 @@ struct bar
 {
 	char *name;
 	FILE *fd;
-	char fg[16];
-	char bg[16];
-	size_t width;
-	size_t height;
-	size_t x;
-	size_t y;
-	int bottom;
-	int force;
+	char *fg;
+	char *bg;
 	char *prefix;
 	char *suffix;
+	size_t width : 16;
+	size_t height : 16;
+	size_t x : 16;
+	size_t y : 16;
+	int bottom : 1;
+	int force : 1;
 };
 
 /*
@@ -140,14 +140,17 @@ int open_bar(struct bar *b)
 
 void free_bar(struct bar *b)
 {
-	if (b->prefix != NULL)
-	{
-		free(b->prefix);
-	}
-	if (b->suffix != NULL)
-	{
-		free(b->suffix);
-	}
+	free(b->fg);
+	b->fg = NULL;
+
+	free(b->bg);
+	b->bg = NULL;
+
+	free(b->prefix);
+	b->prefix = NULL;
+
+	free(b->suffix);
+	b->suffix = NULL;
 }
 
 void close_bar(struct bar *b)
@@ -167,13 +170,12 @@ int open_block(struct block *b)
 		snprintf(cmd, cmd_len, "%s '%s'", b->path, b->input);
 		b->fd = popen(cmd, "r");
 		free(cmd);
-		return (b->fd == NULL) ? 0 : 1;
 	}
 	else
 	{
 		b->fd = popen(b->path, "r");
-		return (b->fd == NULL) ? 0 : 1;
 	}
+	return (b->fd == NULL) ? 0 : 1;
 }
 
 int close_block(struct block *b)
@@ -250,50 +252,37 @@ void close_triggers(struct trigger *triggers, int num_triggers)
 
 int free_block(struct block *b)
 {
-	if (b->name != NULL)
-	{
-		free(b->name);
-		b->name = NULL;
-	}
-	if (b->path != NULL)
-	{
-		free(b->path);
-		b->path = NULL;
-	}
-	if (b->label != NULL)
-	{
-		free(b->label);
-		b->label = NULL;
-	}
-	if (b->trigger != NULL)
-	{
-		free(b->trigger);
-		b->trigger = NULL;
-	}
-	if (b->input != NULL)
-	{
-		free(b->input);
-		b->input = NULL;
-	}
-	if (b->result != NULL)
-	{
-		free(b->result);
-		b->result = NULL;
-	}
-	return 1;
+	free(b->name);
+	b->name = NULL;
+
+	free(b->path);
+	b->path = NULL;
+
+	free(b->fg);
+	b->fg = NULL;
+
+	free(b->bg);
+	b->bg = NULL;
+
+	free(b->label);
+	b->label = NULL;
+
+	free(b->trigger);
+	b->trigger = NULL;
+
+	free(b->input);
+	b->input = NULL;
+
+	free(b->result);
+	b->result = NULL;
 }
 
 int free_trigger(struct trigger *t)
 {
-	if (t->cmd != NULL)
-	{
 		free(t->cmd);
 		t->cmd = NULL;
-	}
-	if (t->b != NULL)
-	{
+
 		t->b = NULL;
-	}
 }
 
 void free_blocks(struct block *blocks, int num_blocks)
@@ -366,10 +355,10 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 		}
 
 		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{%c}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
-			blocks[i].align,
-			strlen(blocks[i].fg) ? blocks[i].fg : "-",
-			strlen(blocks[i].bg) ? blocks[i].bg : "-",
+		snprintf(block_str, 128, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
+			blocks[i].offset,
+			blocks[i].fg && strlen(blocks[i].fg) ? blocks[i].fg : "-",
+			blocks[i].bg && strlen(blocks[i].bg) ? blocks[i].bg : "-",
 			b->prefix ? b->prefix : "",
 			blocks[i].label ? blocks[i].label : "",
 			blocks[i].result,
@@ -400,15 +389,16 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "name"))
 	{
 		bar->name = strdup(value);
+		return 1;
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
-		strcpy(bar->fg, value);
+		bar->fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "bg") || equals(name, "background"))
 	{
-		strcpy(bar->bg, value);
+		bar->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
@@ -443,26 +433,12 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	}
 	if (equals(name, "prefix") || equals(name, "block-prefix"))
 	{
-		if (is_quoted(value))
-		{
-			bar->prefix = unquote(value);
-		}
-		else
-		{
-			bar->prefix = strdup(value);
-		}
+		bar->prefix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "suffix") || equals(name, "block-suffix"))
 	{
-		if (is_quoted(value))
-		{
-			bar->suffix = unquote(value);
-		}
-		else
-		{
-			bar->suffix = strdup(value);
-		}
+		bar->suffix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	return 0; // unknown section/name, error
@@ -485,24 +461,21 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	struct block *block = (struct block*) b;
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
-		strcpy(block->fg, value);
+		block->fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "bg") || equals(name, "background"))
 	{
-		strcpy(block->bg, value);
+		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
+	}
+	if (equals(name, "offset"))
+	{
+		block->offset = atoi(value);
 	}
 	if (equals(name, "label"))
 	{
-		if (is_quoted(value))
-		{
-			block->label = unquote(value);
-		}
-		else	
-		{
-			block->label = strdup(value);
-		}
+		block->label = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "reload"))
@@ -618,9 +591,9 @@ int create_blocks(struct block **blocks, const char *blockdir)
 				.name = strdup(entry->d_name),
 				.path = NULL,
 				.fd = NULL,
-				.fg = { 0 },
-				.bg = { 0 },
-				.align = 'c',
+				.fg = NULL,
+				.bg = NULL,
+				.offset = 0,
 				.label = NULL,
 				.used = 0,
 				.trigger = NULL,
@@ -730,6 +703,12 @@ int run_trigger(struct trigger *t)
 
 int main(void)
 {
+	if (DEBUG)
+	{
+		printf("sizeof bar: %d\n", sizeof(struct bar));
+		printf("sizeof block: %d\n", sizeof(struct block));
+	}
+
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
 	{
@@ -765,8 +744,8 @@ int main(void)
 	struct bar lemonbar = {
 		.name = NULL,
 		.fd = NULL,
-		.fg = { 0 },
-		.bg = { 0 },
+		.fg = NULL,
+		.bg = NULL,
 		.width = 0,
 		.height = 0,
 		.x = 0,
