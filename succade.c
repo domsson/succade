@@ -170,13 +170,12 @@ int open_block(struct block *b)
 		snprintf(cmd, cmd_len, "%s '%s'", b->path, b->input);
 		b->fd = popen(cmd, "r");
 		free(cmd);
-		return (b->fd == NULL) ? 0 : 1;
 	}
 	else
 	{
 		b->fd = popen(b->path, "r");
-		return (b->fd == NULL) ? 0 : 1;
 	}
+	return (b->fd == NULL) ? 0 : 1;
 }
 
 int close_block(struct block *b)
@@ -390,6 +389,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "name"))
 	{
 		bar->name = strdup(value);
+		return 1;
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
