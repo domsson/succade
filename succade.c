@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/epoll.h>
 #include "ini.h"
 
 #define DEBUG 1
@@ -384,23 +385,23 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 }
 
 // untested & unused
-char *blockstr(const struct block *b, size_t len)
+char *blockstr(const struct bar *bar, const struct block *b, size_t len)
 {
 	char *block_str = malloc(len);
 	snprintf(block_str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
-		b.offset,
-		b.fg && strlen(b.fg) ? b.fg : "-",
-		b.bg && strlen(b.bg) ? b.bg : "-",
-		b->prefix ? b->prefix : "",
-		blocks[i].label ? blocks[i].label : "",
-		blocks[i].result,
-		b->suffix ? b->suffix : ""
+		b->offset,
+		b->fg && strlen(b->fg) ? b->fg : "-",
+		b->bg && strlen(b->bg) ? b->bg : "-",
+		bar->prefix ? bar->prefix : "",
+		b->label ? b->label : "",
+		b->result,
+		bar->suffix ? bar->suffix : ""
 	);
 	return block_str;
 }
 
 // untested & unused
-char *barstr(const struct block *blocks, size_t num_blocks)
+char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
 {
 	size_t blockstr_len = 256;
 	char *bar_str = malloc(blockstr_len * num_blocks);
@@ -408,7 +409,7 @@ char *barstr(const struct block *blocks, size_t num_blocks)
 
 	for (int i=0; i<num_blocks; ++i)
 	{
-		char *block_str = blockstr(&blocks[i], blockstr_len);
+		char *block_str = blockstr(bar, &blocks[i], blockstr_len);
 		strcat(bar_str, block_str);
 		free(block_str);
 	}
@@ -800,6 +801,24 @@ int main(void)
 		exit(1);
 	}
 
+	int epfd = epoll_create(1);
+	if (epfd < 0)
+	{
+		printf("Could not create epoll file descriptor\n");
+		exit(1);
+	}
+	
+	
+
+	for (int i=0; i<num_triggers; ++i)
+	{
+		struct epoll_event eev = { 0 };
+		eev.data.ptr = &triggers[i];
+		eev.events = EPOLLIN | EPOLLET;
+		epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
+		//int epctl = epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
+	}
+
 	double now;
 	double before = get_time();
 	double delta;
@@ -807,19 +826,27 @@ int main(void)
 
 	while (1)
 	{
+
 		now = get_time();
 		delta = now - before;
 		before = now;
 	//	printf("Seconds elapsed: %f\n", delta);
-		for (int i=0; i<num_triggers; ++i)
+		
+		struct epoll_event tev[num_triggers];
+		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
+		printf("num events: %d\n", num_events);
+	
+		for (int i=0; i<num_events;++i)
 		{
-			run_trigger(&triggers[i]);
-		}		
+			if (tev[i].events & EPOLLIN)
+			{
+				run_trigger((struct trigger*) tev[i].data.ptr);
+			}
+		}	
+
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
 	//	printf("Next in %f seconds\n", wait);
-		//sleep(1);
-		usleep(wait * 1000000.0);
-		//usleep(1000000.0 * 0.1);
+		//usleep(wait * 1000000.0); // microseconds (1 us = 1000 ms)
 	}
 	free_blocks(blocks, num_blocks);
 	free(blocks);
