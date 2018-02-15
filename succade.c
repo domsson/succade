@@ -10,7 +10,7 @@
 #include <sys/epoll.h>
 #include "ini.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
@@ -37,6 +37,7 @@ struct trigger
 	char *cmd;
 	FILE *fd;
 	struct block *b;
+	int ready : 1;
 };
 
 struct bar
@@ -582,7 +583,8 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 		struct trigger t = {
 			.cmd = strdup(blocks[i].trigger),
 			.fd = NULL,
-			.b = &blocks[i]
+			.b = &blocks[i],
+			.ready = 0
 		};
 		*triggers[num_triggers_created++] = t;
 	}
@@ -722,6 +724,24 @@ int run_trigger(struct trigger *t)
 		return 0;
 	}
 	char res[256];
+	
+	int num_lines = 0;
+	while (fgets(res, 256, t->fd) != NULL)
+	{
+		++num_lines;
+	}
+	if (num_lines)
+	{
+		struct block *b = t->b;
+		if (b->input != NULL)
+		{
+			free(b->input);
+			b->input = NULL;
+		}
+		b->input = strdup(res);
+	}
+		
+	/*
 	if (fgets(res, 256, t->fd))
 	{
 		struct block *b = t->b;
@@ -734,6 +754,8 @@ int run_trigger(struct trigger *t)
 		return 1;
 	}
 	return 0;
+	*/
+	return num_lines;
 }
 
 int main(void)
@@ -807,8 +829,6 @@ int main(void)
 		printf("Could not create epoll file descriptor\n");
 		exit(1);
 	}
-	
-	
 
 	for (int i=0; i<num_triggers; ++i)
 	{
@@ -826,7 +846,6 @@ int main(void)
 
 	while (1)
 	{
-
 		now = get_time();
 		delta = now - before;
 		before = now;
@@ -834,20 +853,30 @@ int main(void)
 		
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
-		printf("num events: %d\n", num_events);
+		if (DEBUG) printf("num events: %d\n", num_events);
 	
 		for (int i=0; i<num_events;++i)
 		{
 			if (tev[i].events & EPOLLIN)
 			{
-				run_trigger((struct trigger*) tev[i].data.ptr);
+				((struct trigger*) tev[i].data.ptr)->ready = 1;
+				//run_trigger((struct trigger*) tev[i].data.ptr);
 			}
 		}	
+
+		for (int i=0; i<num_triggers; ++i)
+		{
+			if (triggers[i].ready)
+			{
+				run_trigger(&triggers[i]);
+			}
+		}
 
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
 	//	printf("Next in %f seconds\n", wait);
 		//usleep(wait * 1000000.0); // microseconds (1 us = 1000 ms)
 	}
+	close(epfd);
 	free_blocks(blocks, num_blocks);
 	free(blocks);
 	close_triggers(triggers, num_triggers);
