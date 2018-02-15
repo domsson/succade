@@ -830,14 +830,16 @@ int main(void)
 		exit(1);
 	}
 
+	int epctl_result = 0;
 	for (int i=0; i<num_triggers; ++i)
 	{
 		struct epoll_event eev = { 0 };
 		eev.data.ptr = &triggers[i];
 		eev.events = EPOLLIN | EPOLLET;
 		epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
-		//int epctl = epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
+		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
 	}
+	printf("Registered events for %d out of %d triggers\n", -1*epctl_result, num_triggers);
 
 	double now;
 	double before = get_time();
@@ -849,21 +851,21 @@ int main(void)
 		now = get_time();
 		delta = now - before;
 		before = now;
-	//	printf("Seconds elapsed: %f\n", delta);
 		
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
 		if (DEBUG) printf("num events: %d\n", num_events);
-	
-		for (int i=0; i<num_events;++i)
+
+		// Mark triggers that fired as ready to be read
+		for (int i=0; i<num_events; ++i)
 		{
 			if (tev[i].events & EPOLLIN)
 			{
 				((struct trigger*) tev[i].data.ptr)->ready = 1;
-				//run_trigger((struct trigger*) tev[i].data.ptr);
 			}
 		}	
 
+		// Fetch input from all marked triggers
 		for (int i=0; i<num_triggers; ++i)
 		{
 			if (triggers[i].ready)
@@ -873,7 +875,6 @@ int main(void)
 		}
 
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
-	//	printf("Next in %f seconds\n", wait);
 		//usleep(wait * 1000000.0); // microseconds (1 us = 1000 ms)
 	}
 	close(epfd);
