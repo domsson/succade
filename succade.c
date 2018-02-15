@@ -10,7 +10,7 @@
 #include <sys/epoll.h>
 #include "ini.h"
 
-#define DEBUG 0
+#define DEBUG 1
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
@@ -337,23 +337,27 @@ int run_block(struct block *b, size_t result_length)
  * fed to Lemombar, including prefix, label and suffix.
  * The string is malloc'd and the caller should free it later.
  */
-char *blockstr(const struct bar *bar, const struct block *b, size_t len)
+char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
 	char *str = malloc(len);
 	snprintf(str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%*s%s%{F-}%{B-}",
-		b->offset,
-		b->fg && strlen(b->fg) ? b->fg : "-",
-		b->bg && strlen(b->bg) ? b->bg : "-",
+		block->offset,
+		block->fg && strlen(block->fg) ? block->fg : "-",
+		block->bg && strlen(block->bg) ? block->bg : "-",
 		bar->prefix ? bar->prefix : "",
-		b->label ? b->label : "",
-		b->padding,
-		b->result,
+		block->label ? block->label : "",
+		block->padding,
+		block->result,
 		bar->suffix ? bar->suffix : ""
 	);
 	return str;
 }
 
-// untested & unused
+/*
+ * Collects the result strings of all given blocks and creates
+ * a single string from it that can then be fed to Lemonbar.
+ * The string is malloc'd and the caller should free it later.
+ */
 char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
 {
 	size_t blockstr_len = 256;
@@ -371,16 +375,13 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	return bar_str;
 }
 
-int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, double *next)
+int feed_bar(struct bar *bar, struct block *blocks, int num_blocks, double delta, double *next)
 {
-	if (b->fd == NULL)
+	if (bar->fd == NULL)
 	{
 		perror("Bar seems dead");
 		return 0;
 	}
-
-	char lemonbar_str[1024];
-	lemonbar_str[0] = '\0';
 
 	int num_blocks_executed = 0;	
 	double until_next = 5;
@@ -396,36 +397,17 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 		{
 			until_next = blocks[i].reload - blocks[i].waited;
 		}
-
-		/*
-		char *block_str = malloc(128);
-		snprintf(block_str, 128, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
-			blocks[i].offset,
-			blocks[i].fg && strlen(blocks[i].fg) ? blocks[i].fg : "-",
-			blocks[i].bg && strlen(blocks[i].bg) ? blocks[i].bg : "-",
-			b->prefix ? b->prefix : "",
-			blocks[i].label ? blocks[i].label : "",
-			blocks[i].result,
-			b->suffix ? b->suffix : ""
-		);
-		*/
-		char *block_str = blockstr(b, &blocks[i], 128);
-		strcat(lemonbar_str, block_str);
-		free(block_str);
 	}
 	*next = until_next;
 
 	if (num_blocks_executed)
 	{
-		if (DEBUG)
-		{
-			printf("%s\n", lemonbar_str);
-		}
-		strcat(lemonbar_str, "\n");
-		fputs(lemonbar_str, b->fd);
-		return 1;
+		char *lemonbar_str = barstr(bar, blocks, num_blocks);
+		if (DEBUG) { printf("%s", lemonbar_str); }
+		fputs(lemonbar_str, bar->fd);
+		free(lemonbar_str);
 	}
-	return 0;
+	return num_blocks_executed;
 }
 
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
