@@ -22,6 +22,7 @@ struct block
 	FILE *fd;
 	char *fg;
 	char *bg;
+	size_t padding : 8;
 	size_t offset : 16;
 	char *label;
 	char *trigger;
@@ -330,6 +331,46 @@ int run_block(struct block *b, size_t result_length)
 	return 1;
 }
 
+/*
+ * Given a block, it returns a pointer to a string that is the 
+ * formatted result of this block's script output, ready to be
+ * fed to Lemombar, including prefix, label and suffix.
+ * The string is malloc'd and the caller should free it later.
+ */
+char *blockstr(const struct bar *bar, const struct block *b, size_t len)
+{
+	char *str = malloc(len);
+	snprintf(str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%*s%s%{F-}%{B-}",
+		b->offset,
+		b->fg && strlen(b->fg) ? b->fg : "-",
+		b->bg && strlen(b->bg) ? b->bg : "-",
+		bar->prefix ? bar->prefix : "",
+		b->label ? b->label : "",
+		b->padding,
+		b->result,
+		bar->suffix ? bar->suffix : ""
+	);
+	return str;
+}
+
+// untested & unused
+char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
+{
+	size_t blockstr_len = 256;
+	char *bar_str = malloc(blockstr_len * num_blocks);
+	bar_str[0] = '\0';
+
+	for (int i=0; i<num_blocks; ++i)
+	{
+		char *block_str = blockstr(bar, &blocks[i], blockstr_len);
+		strcat(bar_str, block_str);
+		free(block_str);
+	}
+	strcat(bar_str, "\n");
+	bar_str = realloc(bar_str, strlen(bar_str) + 1);
+	return bar_str;
+}
+
 int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, double *next)
 {
 	if (b->fd == NULL)
@@ -356,6 +397,7 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 			until_next = blocks[i].reload - blocks[i].waited;
 		}
 
+		/*
 		char *block_str = malloc(128);
 		snprintf(block_str, 128, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
 			blocks[i].offset,
@@ -366,7 +408,8 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 			blocks[i].result,
 			b->suffix ? b->suffix : ""
 		);
-		
+		*/
+		char *block_str = blockstr(b, &blocks[i], 128);
 		strcat(lemonbar_str, block_str);
 		free(block_str);
 	}
@@ -383,40 +426,6 @@ int feed_bar(struct bar *b, struct block *blocks, int num_blocks, double delta, 
 		return 1;
 	}
 	return 0;
-}
-
-// untested & unused
-char *blockstr(const struct bar *bar, const struct block *b, size_t len)
-{
-	char *block_str = malloc(len);
-	snprintf(block_str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%s%s%{F-}%{B-}",
-		b->offset,
-		b->fg && strlen(b->fg) ? b->fg : "-",
-		b->bg && strlen(b->bg) ? b->bg : "-",
-		bar->prefix ? bar->prefix : "",
-		b->label ? b->label : "",
-		b->result,
-		bar->suffix ? bar->suffix : ""
-	);
-	return block_str;
-}
-
-// untested & unused
-char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
-{
-	size_t blockstr_len = 256;
-	char *bar_str = malloc(blockstr_len * num_blocks);
-	bar_str[0] = '\0';
-
-	for (int i=0; i<num_blocks; ++i)
-	{
-		char *block_str = blockstr(bar, &blocks[i], blockstr_len);
-		strcat(bar_str, block_str);
-		free(block_str);
-	}
-	strcat(bar_str, "\n");
-	bar_str = realloc(bar_str, strlen(bar_str) + 1);
-	return bar_str;
 }
 
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
@@ -504,6 +513,10 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	{
 		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
+	}
+	if (equals(name, "pad") || equals(name, "padding"))
+	{
+		block->padding = atoi(value);
 	}
 	if (equals(name, "offset"))
 	{
@@ -630,6 +643,7 @@ int create_blocks(struct block **blocks, const char *blockdir)
 				.fd = NULL,
 				.fg = NULL,
 				.bg = NULL,
+				.padding = 0,
 				.offset = 0,
 				.label = NULL,
 				.used = 0,
@@ -740,21 +754,6 @@ int run_trigger(struct trigger *t)
 		}
 		b->input = strdup(res);
 	}
-		
-	/*
-	if (fgets(res, 256, t->fd))
-	{
-		struct block *b = t->b;
-		if (b->input != NULL)
-		{
-			free(b->input);
-			b->input = NULL;
-		}
-		b->input = strdup(res);
-		return 1;
-	}
-	return 0;
-	*/
 	return num_lines;
 }
 
