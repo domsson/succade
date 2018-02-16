@@ -242,12 +242,14 @@ int close_trigger(struct trigger *t)
 	return 1;
 }
 
-void open_triggers(struct trigger *triggers, int num_triggers)
+int open_triggers(struct trigger *triggers, int num_triggers)
 {
+	int num_triggers_opened = 0;
 	for (int i=0; i<num_triggers; ++i)
 	{
-		open_trigger(&triggers[i]);
+		num_triggers_opened += open_trigger(&triggers[i]);
 	}
+	return num_triggers_opened;
 }
 
 void close_triggers(struct trigger *triggers, int num_triggers)
@@ -358,6 +360,22 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	return str;
 }
 
+char get_align(const int align)
+{
+	if (align == -1)
+	{
+		return 'l';
+	}
+	if (align == 0)
+	{
+		return 'c';
+	}
+	if (align == 1)
+	{
+		return 'r';
+	}
+}
+
 /*
  * Collects the result strings of all given blocks and creates
  * a single string from it that can then be fed to Lemonbar.
@@ -369,9 +387,20 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	char *bar_str = malloc(blockstr_len * num_blocks);
 	bar_str[0] = '\0';
 
+	char align[5];
+	int last_align = blocks[0].align;
+	snprintf(align, 5, "%%{%c}", get_align(last_align));
+	strcat(bar_str, align);
+
 	for (int i=0; i<num_blocks; ++i)
 	{
 		char *block_str = blockstr(bar, &blocks[i], blockstr_len);
+		if (blocks[i].align != last_align)
+		{
+			last_align = blocks[i].align;
+			snprintf(align, 5, "%%{%c}", get_align(last_align));
+			strcat(bar_str, align);
+		}	
 		strcat(bar_str, block_str);
 		free(block_str);
 	}
@@ -415,16 +444,16 @@ int feed_bar(struct bar *bar, struct block *blocks, int num_blocks, double delta
 	return num_blocks_executed;
 }
 
-int parse_format(const char *format, struct block *blocks)
+int parse_format(const char *format, struct block **blocks, const char *blockdir)
 {
 	//struct block *blocks = malloc(20 * sizeof(struct block));
+	*blocks = malloc(20 * sizeof(struct block));
 	size_t format_len = strlen(format);
 	char cur_block_name[64];
 	     cur_block_name[0] = '\0';
 	size_t cur_block_len = 0;
 	int cur_align = -1;
-	int cur_block = 0;
-
+	int num_blocks = 0;
 	for(int i=0; i<format_len; ++i)
 	{
 		switch (format[i])
@@ -439,9 +468,25 @@ int parse_format(const char *format, struct block *blocks)
 				{
 					struct block b = {
 						.name = strdup(cur_block_name),
-						.align = cur_align
+						.path = NULL,
+						.fd = NULL,
+						.fg = NULL,
+						.bg = NULL,
+						.padding = 0,
+						.offset = 0,
+						.align = cur_align,
+						.label = NULL,
+						.used = 0,
+						.trigger = NULL,
+						.reload = 5.0,
+						.waited = 0.0,
+						.input = NULL,
+						.result = NULL
 					};
-					blocks[cur_block++] = b;
+					size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
+					b.path = malloc(path_len);
+					snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
+					(*blocks)[num_blocks++] = b;
 					cur_block_name[0] = '\0';
 					cur_block_len = 0;
 
@@ -452,6 +497,7 @@ int parse_format(const char *format, struct block *blocks)
 				cur_block_name[cur_block_len]   = '\0';
 		}
 	}
+	return num_blocks;
 }
 
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
@@ -655,6 +701,23 @@ int count_blocks(const char *blockdir)
 	return num_blocks;
 }
 
+int create_blocks(struct block **blocks, const struct block *blocks_req, int num_blocks_req)
+{
+	*blocks = malloc(num_blocks_req * sizeof(struct block));
+
+	size_t num_blocks_created = 0;
+	for (int i=0; i<num_blocks_req; ++i)
+	{
+		if (access(blocks_req[i].path, F_OK|R_OK|X_OK) != -1)
+		{
+			(*blocks)[num_blocks_created++] = blocks_req[i];
+		}
+	}
+	*blocks = realloc(*blocks, num_blocks_created * sizeof(struct block));
+	return num_blocks_created;
+}
+
+/*
 int create_blocks(struct block **blocks, const char *blockdir)
 {
 	DIR *block_dir = opendir(blockdir);
@@ -713,6 +776,7 @@ int create_blocks(struct block **blocks, const char *blockdir)
 	closedir(block_dir);
 	return num_blocks_created;
 }
+*/
 
 int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
@@ -812,8 +876,8 @@ int main(void)
 {
 	if (DEBUG)
 	{
-		printf("sizeof bar: %d\n", sizeof(struct bar));
-		printf("sizeof block: %d\n", sizeof(struct block));
+		printf("sizeof(struct bar):   %d bytes\n", sizeof(struct bar));
+		printf("sizeof(struct block): %d bytes\n", sizeof(struct block));
 	}
 
 	char configdir[256];
@@ -862,25 +926,42 @@ int main(void)
 	 * BLOCKS
 	 */
 
-	struct block *blocks;
-	int num_blocks = create_blocks(&blocks, blocksdir);
-	configure_blocks(blocks, num_blocks, blocksdir);
+	struct block *blocks_requested; 
+	int num_blocks_requested = parse_format(lemonbar.format, &blocks_requested, blocksdir);
 
-	struct trigger *triggers;
-	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
+	printf("Blocks requested: ");
+	for (int i=0; i<num_blocks_requested; ++i)
+	{
+		printf("%s ", blocks_requested[i].name);
+	}
+	printf("(%d total)\n", num_blocks_requested);
+
+	struct block *blocks;
+	int num_blocks = create_blocks(&blocks, blocks_requested, num_blocks_requested);
+	configure_blocks(blocks, num_blocks, blocksdir);
+	free(blocks_requested);
 
 	printf("Blocks found: ");
 	for (int i=0; i<num_blocks; ++i)
 	{
 		printf("%s ", blocks[i].name);
 	}
-	printf("\n");
+	printf("(%d total)\n", num_blocks);
 
-	printf("Number of triggers: %d\n", num_triggers);
-	open_triggers(triggers, num_triggers);
+	/*
+	 * TRIGGERS
+	 */
+
+	struct trigger *triggers;
+	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
+
+	printf("Number of triggers defined: %d\n", num_triggers);
+	int num_triggers_opened = open_triggers(triggers, num_triggers);
+
+	printf("Number of triggeres opened: %d\n", num_triggers_opened);
 
 	/* 
-	 * TRIGGERS / EVENTS
+	 * EVENTS
 	 */
 
 	int epfd = epoll_create(1);
@@ -918,7 +999,7 @@ int main(void)
 		
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
-		if (DEBUG) printf("num events: %d\n", num_events);
+		//if (DEBUG) printf("num events: %d\n", num_events);
 
 		// Mark triggers that fired as ready to be read
 		for (int i=0; i<num_events; ++i)
