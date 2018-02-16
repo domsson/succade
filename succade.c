@@ -24,6 +24,7 @@ struct block
 	char *bg;
 	size_t padding : 8;
 	size_t offset : 16;
+	int align;
 	char *label;
 	char *trigger;
 	int used : 1;
@@ -55,6 +56,7 @@ struct bar
 	size_t y : 16;
 	int bottom : 1;
 	int force : 1;
+	char *format;
 };
 
 /*
@@ -154,6 +156,9 @@ void free_bar(struct bar *b)
 
 	free(b->suffix);
 	b->suffix = NULL;
+
+	free(b->format);
+	b->format = NULL;
 }
 
 void close_bar(struct bar *b)
@@ -410,6 +415,45 @@ int feed_bar(struct bar *bar, struct block *blocks, int num_blocks, double delta
 	return num_blocks_executed;
 }
 
+int parse_format(const char *format, struct block *blocks)
+{
+	//struct block *blocks = malloc(20 * sizeof(struct block));
+	size_t format_len = strlen(format);
+	char cur_block_name[64];
+	     cur_block_name[0] = '\0';
+	size_t cur_block_len = 0;
+	int cur_align = -1;
+	int cur_block = 0;
+
+	for(int i=0; i<format_len; ++i)
+	{
+		switch (format[i])
+		{
+			case '|':
+				if (cur_align < 1)
+				{
+					++cur_align;
+				}
+			case ' ':
+				if (cur_block_len)
+				{
+					struct block b = {
+						.name = strdup(cur_block_name),
+						.align = cur_align
+					};
+					blocks[cur_block++] = b;
+					cur_block_name[0] = '\0';
+					cur_block_len = 0;
+
+				}
+				break;
+			default:
+				cur_block_name[cur_block_len++] = format[i];
+				cur_block_name[cur_block_len]   = '\0';
+		}
+	}
+}
+
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct bar *bar = (struct bar*) b;
@@ -467,6 +511,10 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	{
 		bar->suffix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
+	}
+	if (equals(name, "format"))
+	{
+		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
 	}
 	return 0; // unknown section/name, error
 }
@@ -587,6 +635,26 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 	return num_triggers_created;
 }
 
+int count_blocks(const char *blockdir)
+{
+	DIR *block_dir = opendir(blockdir);
+	if (block_dir == NULL)
+	{
+		return -1;
+	}
+
+	int num_blocks = 0;
+	struct dirent *entry;
+	while ((entry = readdir(block_dir)) != NULL)
+	{
+		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
+		{
+			++num_blocks;
+		}
+	}
+	return num_blocks;
+}
+
 int create_blocks(struct block **blocks, const char *blockdir)
 {
 	DIR *block_dir = opendir(blockdir);
@@ -602,7 +670,7 @@ int create_blocks(struct block **blocks, const char *blockdir)
 	{
 		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
 		{
-			++(num_blocks);
+			++num_blocks;
 		}
 	}
 
@@ -627,6 +695,7 @@ int create_blocks(struct block **blocks, const char *blockdir)
 				.bg = NULL,
 				.padding = 0,
 				.offset = 0,
+				.align = 0,
 				.label = NULL,
 				.used = 0,
 				.trigger = NULL,
@@ -759,6 +828,41 @@ int main(void)
 		printf("Blocks: %s\n", blocksdir);
 	}
 
+	/*
+	 * BAR
+	 */
+
+	struct bar lemonbar = {
+		.name = NULL,
+		.fd = NULL,
+		.fg = NULL,
+		.bg = NULL,
+		.width = 0,
+		.height = 0,
+		.x = 0,
+		.y = 0,
+		.bottom = 0,
+		.force = 0,
+		.prefix = NULL,
+		.suffix = NULL,
+		.format = NULL
+	};
+	if (!configure_bar(&lemonbar, configdir))
+	{
+		printf("Failed to load RC file: %src\n", NAME);
+		exit(1);
+	}
+	open_bar(&lemonbar);
+	if (lemonbar.fd == NULL)
+	{
+		printf("Failed to open bar: %s\n", BAR_PROCESS);
+		exit(1);
+	}
+	
+	/*
+	 * BLOCKS
+	 */
+
 	struct block *blocks;
 	int num_blocks = create_blocks(&blocks, blocksdir);
 	configure_blocks(blocks, num_blocks, blocksdir);
@@ -776,33 +880,9 @@ int main(void)
 	printf("Number of triggers: %d\n", num_triggers);
 	open_triggers(triggers, num_triggers);
 
-	/* MAIN LOGIC/LOOP */
-
-	struct bar lemonbar = {
-		.name = NULL,
-		.fd = NULL,
-		.fg = NULL,
-		.bg = NULL,
-		.width = 0,
-		.height = 0,
-		.x = 0,
-		.y = 0,
-		.bottom = 0,
-		.force = 0,
-		.prefix = NULL,
-		.suffix = NULL
-	};
-	if (!configure_bar(&lemonbar, configdir))
-	{
-		printf("Failed to load RC file: %src\n", NAME);
-		exit(1);
-	}
-	open_bar(&lemonbar);
-	if (lemonbar.fd == NULL)
-	{
-		printf("Failed to open bar: %s\n", BAR_PROCESS);
-		exit(1);
-	}
+	/* 
+	 * TRIGGERS / EVENTS
+	 */
 
 	int epfd = epoll_create(1);
 	if (epfd < 0)
@@ -821,6 +901,10 @@ int main(void)
 		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
 	}
 	printf("Registered events for %d out of %d triggers\n", -1*epctl_result, num_triggers);
+
+	/*
+	 * MAIN LOOP
+	 */
 
 	double now;
 	double before = get_time();
