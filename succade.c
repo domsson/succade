@@ -341,7 +341,7 @@ int run_block(struct block *b, size_t result_length)
 /*
  * Given a block, it returns a pointer to a string that is the 
  * formatted result of this block's script output, ready to be
- * fed to Lemombar, including prefix, label and suffix.
+ * fed to Lemonbar, including prefix, label and suffix.
  * The string is malloc'd and the caller should free it later.
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
@@ -409,7 +409,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	return bar_str;
 }
 
-int feed_bar(struct bar *bar, struct block *blocks, int num_blocks, double delta, double *next)
+int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double delta, double *next)
 {
 	if (bar->fd == NULL)
 	{
@@ -444,11 +444,37 @@ int feed_bar(struct bar *bar, struct block *blocks, int num_blocks, double delta
 	return num_blocks_executed;
 }
 
+/*
+ * Turns '/some/directory/string', 'some-filename' and '.ext' into
+ * '/some/directory/string/some-filename.ext', in other words, 
+ * concatenates the dir, filename and fileext arguments and adds a
+ * slash and dot in between them. The fileext argument is optional. 
+ * Returns a pointer to the concatenated string, which has been
+ * allocated with malloc, hence the caller needs to free it.
+ */
+char *filepath(const char *dir, const char *filename, const char *fileext)
+{
+	if (fileext != NULL)
+	{
+		size_t path_len = strlen(dir) + strlen(filename) + strlen(fileext) + 3;
+		char *path = malloc(path_len);
+		snprintf(path, path_len, "%s/%s.%s", dir, filename, fileext);
+		return path;
+	}
+	else
+	{
+		size_t path_len = strlen(dir) + strlen(filename) + 2;
+		char *path = malloc(path_len);
+		snprintf(path, path_len, "%s/%s", dir, filename);
+		return path;
+	}
+}
+
 int parse_format(const char *format, struct block **blocks, const char *blockdir)
 {
-	//struct block *blocks = malloc(20 * sizeof(struct block));
-	*blocks = malloc(20 * sizeof(struct block));
-	size_t format_len = strlen(format);
+	size_t size = 7;
+	*blocks = malloc(size * sizeof(struct block));
+	size_t format_len = strlen(format) + 1;
 	char cur_block_name[64];
 	     cur_block_name[0] = '\0';
 	size_t cur_block_len = 0;
@@ -464,11 +490,17 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 					++cur_align;
 				}
 			case ' ':
+			case '\0':
 				if (cur_block_len)
 				{
+					if (num_blocks == size)
+					{
+						size += 2;
+						*blocks = realloc(*blocks, size * sizeof(struct block));
+					}
 					struct block b = {
 						.name = strdup(cur_block_name),
-						.path = NULL,
+						.path = filepath(blockdir, cur_block_name, NULL),
 						.fd = NULL,
 						.fg = NULL,
 						.bg = NULL,
@@ -483,13 +515,9 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 						.input = NULL,
 						.result = NULL
 					};
-					size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
-					b.path = malloc(path_len);
-					snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
 					(*blocks)[num_blocks++] = b;
 					cur_block_name[0] = '\0';
 					cur_block_len = 0;
-
 				}
 				break;
 			default:
@@ -497,6 +525,7 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 				cur_block_name[cur_block_len]   = '\0';
 		}
 	}
+	*blocks = realloc(*blocks, sizeof(struct block) * num_blocks);
 	return num_blocks;
 }
 
@@ -620,13 +649,14 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 
 int configure_block(struct block *b, const char *blocks_dir)
 {
-	char blockini[256];
-	snprintf(blockini, sizeof(blockini), "%s/%s.%s", blocks_dir, b->name, "ini");
+	char *blockini = filepath(blocks_dir, b->name, "ini");
 	if (ini_parse(blockini, block_ini_handler, b) < 0)
 	{
 		printf("Can't parse block INI: %s\n", blockini);
+		free(blockini);
 		return 0;
 	}
+	free(blockini);
 	return 1;
 }
 
