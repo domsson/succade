@@ -852,8 +852,7 @@ int main(void)
 		printf("Failed to load RC file: %src\n", NAME);
 		exit(1);
 	}
-	open_bar(&lemonbar);
-	if (lemonbar.fd == NULL)
+	if (!open_bar(&lemonbar))
 	{
 		printf("Failed to open bar: %s\n", BAR_PROCESS);
 		exit(1);
