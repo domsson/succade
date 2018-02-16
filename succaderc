@@ -1,5 +1,6 @@
-foreground=#000000
-background=#FFFFFF
+format="desktop | | temp battery date time"
+foreground="#000000"
+background="#77FFFFFF"
 height=24
 dock=bottom
 force=false

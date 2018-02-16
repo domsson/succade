@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Dependencies: bspc
+
+IFS=":" read -ra STATUS <<< "$1"
+DESKTOP="?"
+
+# bspc output example: WMLVDS1:o1:F2:f3:f4:f6:LT:TT:G
+for i in "${STATUS[@]}"; do # We split on ':' and iterate over all substrings
+	case "${i:0:1}" in # We check the first char
+	O) # Visible, occupied
+		DESKTOP="${i:1}" # Remainder = name of virtual desktop
+		;;
+	F) # Visible, not occupied
+		DESKTOP="${i:1}" # Remainder = name of virtual desktop
+		break
+		;;
+	esac
+done
+
+echo "$DESKTOP"
