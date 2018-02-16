@@ -9,8 +9,10 @@ This is currently a work in progress and I'm sure there are nasty bugs still to 
 # What's missing?
 
 - Clickable areas
-- Some formatting features like underline
-- Support for multiple bars and monitors
+- Fonts
+- Underlines
+- Support for multiple bars
+- Support for multiple monitors
 
 # Dependencies
 
