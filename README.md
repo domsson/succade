@@ -36,17 +36,25 @@ Triggers are commands that succade will run and monitor for output. When there i
 - `lemonbar`, obviously
 - `inih`, but that's included in this repository
 
-# How to build
-
-Rund the `build` script.
-
 # How to install
 
-- Clone this git
-- Create the dir `~/.config/succade` and `~/.config/succade/blocks`
-- Copy or create `succaderc` to `~/.config/succade/succaderc`
-- Create or copy blocks in `~/.config/succade/blocks` (make sure blocks are executable)
-- Make sure `succade` is somewhere in your path, for example `~/.local/bin`
+- Clone this repository:  
+  `git clone https://github.com/domsson/succade.git`
+- Change into the succade directory:  
+  `cd succade`
+- Make the build script executable, then run it:  
+  `chmod +x ./build`  
+  `./build`
+- Create the config directories:  
+  `mkdir ~/.config/succade`  
+  `mkdir ~/.config/succade/blocks`
+- Copy the example config and example blocks:
+  `cp succaderc ~/.config/succade`  
+  `cp blocks/* ~/.config/succade/blocks`
+- Make sure the blocks are executable (`chmod +x ~/.config/succade/blocks/name-of-block`)
+- Make `succade` executable and put it somwhere that's included in your path:  
+  `chmod +x succade`  
+  `cp succade ~/.local/bin`
 
 # How to configure
 
