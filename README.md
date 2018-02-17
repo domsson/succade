@@ -60,3 +60,7 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 Take a look at the example configuration in this repository. The bar and some general configuration happens in `succaderc`, plus every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available and the names of those already in place are subject to change. However, I'm trying to keep a high compatibility to Captain. Check our the example files here, as well as the Captain wiki and play around. Eventually, as things are finally decided upon, there will be extensive documentation here.
 
+# Licence
+
+- succade is free software, dedicated to the public domain. Do with it whatever you want, but don't hold me responsible for anything either.
+- [inih](https://github.com/benhoyt/inih) is licensed under the new BSD license, see file headers.
