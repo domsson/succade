@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# Dependencies: network-manager
+
+wifi=$(nmcli -t r wifi)
+output=""
+
+if [[ "$wifi" = "enabled" ]]; then
+	status=$(nmcli n connectivity)
+	if [[ "$status" = "none" ]]; then
+		output="enabled"
+	else
+		output="$status"
+	fi
+else
+	output="disabled"
+fi
+
+echo "$output"

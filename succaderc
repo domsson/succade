@@ -1,4 +1,4 @@
-format="desktop | | temp battery date time"
+format="desktop | | wifi volume temp battery datetime"
 foreground="#000000"
 background="#77FFFFFF"
 height=24

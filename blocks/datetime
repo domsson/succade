@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+date="$(date -I)"
+time="$(date +'%H:%M')"
+
+echo "$date | $time"
