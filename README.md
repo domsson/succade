@@ -1,6 +1,6 @@
 # succade
 
-succade helps you to feed your [Lemonbar](https://github.com/LemonBoy/bar). It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, loads blocks (scripts) and pipes their output to Lemonbar.
+Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, then repeatedly runs blocks and pipes their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with simple [ini files](https://en.wikipedia.org/wiki/INI_file).
 
 ![Example bar](https://i.imgur.com/IQ26ypO.png)
 
@@ -42,8 +42,13 @@ Rund the `build` script.
 
 # How to install
 
+- Clone this git
 - Create the dir `~/.config/succade` and `~/.config/succade/blocks`
 - Copy or create `succaderc` to `~/.config/succade/succaderc`
-- Create or copy blocks in `~/.config/succade/blocks`
+- Create or copy blocks in `~/.config/succade/blocks` (make sure blocks are executable)
 - Make sure `succade` is somewhere in your path, for example `~/.local/bin`
+
+# How to configure
+
+Take a look at the example configuration in this repository. The bar and some general configuration happens in `succaderc`, plus every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available and the names of those already in place are subject to change. However, I'm trying to keep a high compatibility to Captain. Check our the example files here, as well as the Captain wiki and play around. Eventually, as things are finally decided upon, there will be extensive documentation here.
 
