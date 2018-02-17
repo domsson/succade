@@ -10,7 +10,7 @@
 #include <sys/epoll.h>
 #include "ini.h"
 
-#define DEBUG 1
+#define DEBUG 0
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
@@ -125,7 +125,7 @@ int open_bar(struct bar *b)
 		(b->force)  ? "-f" : ""
 	);
 
-	printf("Bar process: %s\n", barprocess);	
+	printf("Bar process:\n\t%s\n", barprocess);	
 
 	// Run lemonbar via popen() in write mode,
 	// this enables us to send data to lemonbar's stdin
@@ -215,7 +215,10 @@ void close_blocks(struct block *blocks, int num_blocks)
 
 int open_trigger(struct trigger *t)
 {
-	printf("Opening trigger: %s\n", t->cmd);
+	if (t->cmd == NULL)
+	{
+		return 0;
+	}
 	t->fd = popen(t->cmd, "r");
 	if (t->fd == NULL)
 	{
@@ -590,6 +593,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "format"))
 	{
 		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
 	}
 	return 0; // unknown section/name, error
 }
@@ -622,10 +626,12 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	if (equals(name, "pad") || equals(name, "padding"))
 	{
 		block->padding = atoi(value);
+		return 1;
 	}
 	if (equals(name, "offset"))
 	{
 		block->offset = atoi(value);
+		return 1;
 	}
 	if (equals(name, "label"))
 	{
@@ -650,6 +656,11 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 int configure_block(struct block *b, const char *blocks_dir)
 {
 	char *blockini = filepath(blocks_dir, b->name, "ini");
+	if (access(blockini, R_OK) == -1)
+	{
+		//printf("No block config found for: %s\n", b->name);
+		return 0;
+	}
 	if (ini_parse(blockini, block_ini_handler, b) < 0)
 	{
 		printf("Can't parse block INI: %s\n", blockini);
@@ -705,7 +716,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 			.b = &blocks[i],
 			.ready = 0
 		};
-		*triggers[num_triggers_created++] = t;
+		(*triggers)[num_triggers_created++] = t;
 	}
 	*triggers = realloc(*triggers, num_triggers_created * sizeof(struct trigger));
 	return num_triggers_created;
@@ -904,22 +915,16 @@ int run_trigger(struct trigger *t)
 
 int main(void)
 {
-	if (DEBUG)
-	{
-		printf("sizeof(struct bar):   %d bytes\n", sizeof(struct bar));
-		printf("sizeof(struct block): %d bytes\n", sizeof(struct block));
-	}
-
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
 	{
-		printf("Config: %s\n", configdir);
+		printf("Config directory:\n\t%s\n", configdir);
 	}
 
 	char blocksdir[256];
 	if (get_blocks_dir(blocksdir, sizeof(blocksdir)))
 	{
-		printf("Blocks: %s\n", blocksdir);
+		printf("Blocks directory:\n\t%s\n", blocksdir);
 	}
 
 	/*
@@ -959,24 +964,24 @@ int main(void)
 	struct block *blocks_requested; 
 	int num_blocks_requested = parse_format(lemonbar.format, &blocks_requested, blocksdir);
 
-	printf("Blocks requested: ");
+	printf("Blocks requested: (%d total)\n\t", num_blocks_requested);
 	for (int i=0; i<num_blocks_requested; ++i)
 	{
 		printf("%s ", blocks_requested[i].name);
 	}
-	printf("(%d total)\n", num_blocks_requested);
+	printf("\n");
 
 	struct block *blocks;
 	int num_blocks = create_blocks(&blocks, blocks_requested, num_blocks_requested);
 	configure_blocks(blocks, num_blocks, blocksdir);
 	free(blocks_requested);
 
-	printf("Blocks found: ");
+	printf("Blocks found: (%d total)\n\t", num_blocks);
 	for (int i=0; i<num_blocks; ++i)
 	{
 		printf("%s ", blocks[i].name);
 	}
-	printf("(%d total)\n", num_blocks);
+	printf("\n");
 
 	/*
 	 * TRIGGERS
@@ -985,10 +990,21 @@ int main(void)
 	struct trigger *triggers;
 	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
 
-	printf("Number of triggers defined: %d\n", num_triggers);
+	printf("Triggers found: (%d total)\n\t", num_triggers);
+	for (int i=0; i<num_triggers; ++i)
+	{
+		printf("'%s' ", triggers[i].cmd);
+	}
+	printf("\n");
+
 	int num_triggers_opened = open_triggers(triggers, num_triggers);
 
-	printf("Number of triggeres opened: %d\n", num_triggers_opened);
+	printf("Triggeres opened: (%d total)\n\t", num_triggers_opened);
+	for (int i=0; i<num_triggers; ++i)
+	{
+		printf("'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
+	}
+	printf("\n");
 
 	/* 
 	 * EVENTS
@@ -1004,13 +1020,21 @@ int main(void)
 	int epctl_result = 0;
 	for (int i=0; i<num_triggers; ++i)
 	{
+		if (triggers[i].fd == NULL)
+		{
+			continue;
+		}
 		struct epoll_event eev = { 0 };
 		eev.data.ptr = &triggers[i];
 		eev.events = EPOLLIN | EPOLLET;
-		epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
 		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
 	}
-	printf("Registered events for %d out of %d triggers\n", -1*epctl_result, num_triggers);
+	if (epctl_result)
+	{
+		printf("%d trigger events could not be registered\n",
+			-1*epctl_result,
+			num_triggers_opened);
+	}
 
 	/*
 	 * MAIN LOOP
