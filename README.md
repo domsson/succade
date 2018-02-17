@@ -48,7 +48,7 @@ Triggers are commands that succade will run and monitor for output. When there i
 - Create the config directories:  
   `mkdir ~/.config/succade`  
   `mkdir ~/.config/succade/blocks`
-- Copy the example config and example blocks:
+- Copy the example config and example blocks:  
   `cp succaderc ~/.config/succade`  
   `cp blocks/* ~/.config/succade/blocks`
 - Make sure the blocks are executable (`chmod +x ~/.config/succade/blocks/name-of-block`)
