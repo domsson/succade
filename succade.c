@@ -341,6 +341,42 @@ int run_block(struct block *b, size_t result_length)
 	return 1;
 }
 
+char *escape(const char *str, size_t *diff)
+{
+	int n = 0; // number of % chars
+	char c = 0; // current char
+	int i = 0;
+	while ((c = str[i]) != '\0')
+	{
+		if (c == '%')
+		{
+			++n;
+		}
+		++i;
+	}
+	if (diff)
+	{
+		*diff = n;
+	}
+
+	char *escstr = malloc(i+n+1);
+	int k=0;
+	for (int j=0; j<i; ++j)
+	{
+		if (str[j] == '%')
+		{
+			escstr[k++] = '%';
+			escstr[k++] = '%';
+		}
+		else
+		{
+			escstr[k++] = str[j];
+		}
+	}
+	escstr[k] = '\0';
+	return escstr;
+}
+
 /*
  * Given a block, it returns a pointer to a string that is the 
  * formatted result of this block's script output, ready to be
@@ -349,17 +385,22 @@ int run_block(struct block *b, size_t result_length)
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
-	char *str = malloc(len);
+	size_t diff;
+	char *result = escape(block->result, &diff);
+
+	char *str = malloc(len + diff);
 	snprintf(str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%*s%s%{F-}%{B-}",
 		block->offset,
 		block->fg && strlen(block->fg) ? block->fg : "-",
 		block->bg && strlen(block->bg) ? block->bg : "-",
 		bar->prefix ? bar->prefix : "",
 		block->label ? block->label : "",
-		block->padding,
-		block->result,
+		block->padding + diff,
+		//block->result,
+		result,
 		bar->suffix ? bar->suffix : ""
 	);
+	free(result);
 	return str;
 }
 
@@ -757,67 +798,6 @@ int create_blocks(struct block **blocks, const struct block *blocks_req, int num
 	*blocks = realloc(*blocks, num_blocks_created * sizeof(struct block));
 	return num_blocks_created;
 }
-
-/*
-int create_blocks(struct block **blocks, const char *blockdir)
-{
-	DIR *block_dir = opendir(blockdir);
-	if (block_dir == NULL)
-	{
-		*blocks = NULL;
-		return 0;
-	}
-
-	int num_blocks = 0;
-	struct dirent *entry;
-	while ((entry = readdir(block_dir)) != NULL)
-	{
-		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
-		{
-			++num_blocks;
-		}
-	}
-
-	if (num_blocks == 0)
-	{
-		*blocks = NULL;
-		return 0;
-	}
-
-	rewinddir(block_dir);
-	int num_blocks_created = 0;
-	*blocks = malloc(num_blocks * sizeof(struct block));
-	while (num_blocks_created < num_blocks && (entry = readdir(block_dir)) != NULL)
-	{
-		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
-		{
-			struct block b = {
-				.name = strdup(entry->d_name),
-				.path = NULL,
-				.fd = NULL,
-				.fg = NULL,
-				.bg = NULL,
-				.padding = 0,
-				.offset = 0,
-				.align = 0,
-				.label = NULL,
-				.used = 0,
-				.trigger = NULL,
-				.reload = 5.0,
-				.waited = 0.0,
-				.input = NULL,
-				.result = NULL
-			};
-			size_t path_len = strlen(blockdir) + strlen(b.name) + 2;
-			b.path = malloc(path_len);
-			snprintf(b.path, path_len, "%s/%s", blockdir, b.name);
-			(*blocks)[num_blocks_created++] = b;
-		}
-	}
-	closedir(block_dir);
-	return num_blocks_created;
-}
-*/
 
 int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
