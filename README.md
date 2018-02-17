@@ -2,6 +2,8 @@
 
 succade helps you to feed your [Lemonbar](https://github.com/LemonBoy/bar). It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, loads blocks (scripts) and pipes their output to Lemonbar.
 
+![Example bar](https://i.imgur.com/IQ26ypO.png)
+
 # Status
 
 This is currently a work in progress and I'm sure there are nasty bugs still to be found - this is my first time writing C. However, succade seems to work quite well for me already. You might want to give it a try!
