@@ -56,6 +56,8 @@ struct bar
 	FILE *fd;
 	char *fg;
 	char *bg;
+	char *lc;
+	size_t line_width;
 	char *prefix;
 	char *suffix;
 	size_t width : 16;
@@ -121,14 +123,16 @@ int open_bar(struct bar *b)
 	snprintf(height, 8, "%d", b->height);
 
 	char barprocess[512];
-	snprintf(barprocess, 512, "%s -g %sx%s+%d+%d -F%s -B%s %s %s",
+	snprintf(barprocess, 512, "%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s",
 		BAR_PROCESS,
 		(b->width > 0) ? width : "",
 		(b->height > 0) ? height : "",
 		b->x,
 		b->y,
 		(b->fg && strlen(b->fg)) ? b->fg : "-", 
-		(b->bg && strlen(b->bg)) ? b->bg : "-", 
+		(b->bg && strlen(b->bg)) ? b->bg : "-",
+		(b->lc && strlen(b->lc)) ? b->lc : "-",	
+		b->line_width,
 		(b->bottom) ? "-b" : "",
 		(b->force)  ? "-f" : ""
 	);
@@ -158,6 +162,9 @@ void free_bar(struct bar *b)
 
 	free(b->bg);
 	b->bg = NULL;
+
+	free(b->lc);
+	b->lc = NULL;
 
 	free(b->prefix);
 	b->prefix = NULL;
@@ -415,14 +422,16 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	char *result = escape(block->result, &diff);
 
 	char *str = malloc(len + diff);
-	snprintf(str, len, "%%{O%d}%%{F%s}%%{B%s}%s%s%*s%s%{F-}%{B-}",
+	snprintf(str, len, "%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}%s%s%*s%s%{F-}%{B-}%{U-}",
 		block->offset,
 		block->fg && strlen(block->fg) ? block->fg : "-",
 		block->bg && strlen(block->bg) ? block->bg : "-",
+		block->lc && strlen(block->lc) ? block->lc : "-",
+		block->ol ? '+' : '-',
+		block->ul ? '+' : '-',
 		bar->prefix ? bar->prefix : "",
 		block->label ? block->label : "",
 		block->padding + diff,
-		//block->result,
 		result,
 		bar->suffix ? bar->suffix : ""
 	);
@@ -546,6 +555,8 @@ void init_bar(struct bar *b)
 	b->fd = NULL;
 	b->fg = NULL;
 	b->bg = NULL;
+	b->lc = NULL;
+	b->line_width = 1;
 	b->width = 0;
 	b->height = 0;
 	b->x = 0;
@@ -655,6 +666,16 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "bg") || equals(name, "background"))
 	{
 		bar->bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "line"))
+	{
+		bar->lc = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "line-width"))
+	{
+		bar->line_width = atoi(value);
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
@@ -1105,9 +1126,7 @@ int main(void)
 	}
 	if (epctl_result)
 	{
-		printf("%d trigger events could not be registered\n",
-			-1*epctl_result,
-			num_triggers_opened);
+		printf("%d trigger events could not be registered\n", -1 * epctl_result);
 	}
 
 	/*
