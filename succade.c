@@ -17,29 +17,37 @@
 
 struct block
 {
-	char *name;
-	char *path;
-	FILE *fd;
-	char *fg;
-	char *bg;
-	size_t padding : 8;
-	size_t offset : 16;
-	int align;
-	char *label;
-	char *trigger;
-	int used : 1;
-	double reload;
-	double waited;
-	char *input;
-	char *result;
+	char *name;          // (file) name of the block
+	char *path;          // path, including filename
+	FILE *fd;            // file descriptor
+	char *fg;            // foreground color
+	char *bg;            // background color
+	char *lc;            // overline/underline color
+	int ol : 1;          // draw overline?
+	int ul : 1;          // draw underline?
+	size_t padding : 8;  // min-width of result in chars
+	size_t offset : 16;  // offset to next block in px
+	int align;           // -1, 0, 1 (left, center, right)
+	char *label;         // prefixes the result string
+	char *trigger;       // run block based on this cmd
+	char *m_left;        // cmd to run on left mouse click
+	char *m_middle;      // cmd to run on middle mouse click
+	char *m_right;       // cmd to run on right mouse click
+	char *s_up;          // cmd to run on scroll up
+	char *s_down;        // cmd to run on scroll down
+	int used : 1;        // has been run at least once?
+	double reload;       // interval between runs 
+	double waited;       // time the block hasn't been run
+	char *input;         // trigger output to hand to block
+	char *result;        // output of last block run
 };
 
 struct trigger
 {
-	char *cmd;
-	FILE *fd;
-	struct block *b;
-	int ready : 1;
+	char *cmd;           // command to run
+	FILE *fd;            // file descriptor
+	struct block *b;     // associated block
+	int ready : 1;       // fd is ready to be read from
 };
 
 struct bar
@@ -277,11 +285,29 @@ int free_block(struct block *b)
 	free(b->bg);
 	b->bg = NULL;
 
+	free(b->lc);
+	b->lc = NULL;
+
 	free(b->label);
 	b->label = NULL;
 
 	free(b->trigger);
 	b->trigger = NULL;
+
+	free(b->m_left);
+	b->m_left = NULL;
+
+	free(b->m_middle);
+	b->m_middle = NULL;
+
+	free(b->m_right);
+	b->m_right = NULL;
+
+	free(b->s_up);
+	b->s_up = NULL;
+
+	free(b->s_down);
+	b->s_down = NULL;
 
 	free(b->input);
 	b->input = NULL;
@@ -514,9 +540,61 @@ char *filepath(const char *dir, const char *filename, const char *fileext)
 	}
 }
 
+void init_bar(struct bar *b)
+{
+	b->name = NULL;
+	b->fd = NULL;
+	b->fg = NULL;
+	b->bg = NULL;
+	b->width = 0;
+	b->height = 0;
+	b->x = 0;
+	b->y = 0;
+	b->bottom = 0;
+	b->force = 0;
+	b->prefix = NULL;
+	b->suffix = NULL;
+	b->format = NULL;
+}
+
+/*
+ * Init the given block to a well defined state using sensible defaults.
+ */
+void init_block(struct block *b)
+{
+	b->name = NULL;
+	b->path = NULL;
+	b->fd = NULL;
+	b->fg = NULL;
+	b->bg = NULL;
+	b->lc = NULL;
+	b->ul = 0;
+	b->ol = 0;
+	b->padding = 0;
+	b->offset = 0;
+	b->align = 0;
+	b->label = NULL;
+	b->used = 0;
+	b->trigger = NULL;
+	b->m_left = NULL;
+	b->m_middle = NULL;
+	b->m_right = NULL;
+	b->s_up = NULL;
+	b->s_down = NULL;
+	b->reload = 5.0;
+	b->waited = 0.0;
+	b->input = NULL;
+	b->result = NULL;
+}
+
+/*
+ * Parse the given format string and create blocks accordingly.
+ * Those blocks only have their name, path and align properties set.
+ * Returns the number of blocks created.
+ */
 int parse_format(const char *format, struct block **blocks, const char *blockdir)
 {
-	size_t size = 7;
+	size_t size = 8;
 	*blocks = malloc(size * sizeof(struct block));
 	size_t format_len = strlen(format) + 1;
 	char cur_block_name[64];
@@ -542,23 +620,11 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 						size += 2;
 						*blocks = realloc(*blocks, size * sizeof(struct block));
 					}
-					struct block b = {
-						.name = strdup(cur_block_name),
-						.path = filepath(blockdir, cur_block_name, NULL),
-						.fd = NULL,
-						.fg = NULL,
-						.bg = NULL,
-						.padding = 0,
-						.offset = 0,
-						.align = cur_align,
-						.label = NULL,
-						.used = 0,
-						.trigger = NULL,
-						.reload = 5.0,
-						.waited = 0.0,
-						.input = NULL,
-						.result = NULL
-					};
+					struct block b;
+					init_block(&b);
+					b.name = strdup(cur_block_name);
+					b.path = filepath(blockdir, cur_block_name, NULL);
+					b.align = cur_align;
 					(*blocks)[num_blocks++] = b;
 					cur_block_name[0] = '\0';
 					cur_block_len = 0;
@@ -664,6 +730,21 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
+	if (equals(name, "lc") || equals(name, "line"))
+	{
+		block->lc = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "ol") || equals(name, "overline"))
+	{
+		block->ol = equals(value, "true") ? 1 : 0;
+		return 1;
+	}
+	if (equals(name, "ul") || equals(name, "underline"))
+	{
+		block->ul = equals(value, "true") ? 1 : 0;
+		return 1;
+	}
 	if (equals(name, "pad") || equals(name, "padding"))
 	{
 		block->padding = atoi(value);
@@ -689,6 +770,31 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 		{
 			block->reload = atof(value);
 		}
+		return 1;
+	}
+	if (equals(name, "mouse-left"))
+	{
+		block->m_left = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "mouse-middle"))
+	{
+		block->m_middle = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "mouse-right"))
+	{
+		block->m_right = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "scroll-up"))
+	{
+		block->s_up = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "scroll-down"))
+	{
+		block->s_down = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	return 0; // unknown section/name or error
@@ -911,21 +1017,9 @@ int main(void)
 	 * BAR
 	 */
 
-	struct bar lemonbar = {
-		.name = NULL,
-		.fd = NULL,
-		.fg = NULL,
-		.bg = NULL,
-		.width = 0,
-		.height = 0,
-		.x = 0,
-		.y = 0,
-		.bottom = 0,
-		.force = 0,
-		.prefix = NULL,
-		.suffix = NULL,
-		.format = NULL
-	};
+	struct bar lemonbar;
+	init_bar(&lemonbar);
+
 	if (!configure_bar(&lemonbar, configdir))
 	{
 		printf("Failed to load RC file: %src\n", NAME);
