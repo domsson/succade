@@ -1,6 +1,6 @@
 # succade
 
-Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, then repeatedly runs blocks and pipes their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with simple [ini files](https://en.wikipedia.org/wiki/INI_file).
+Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, then repeatedly runs blocks, piping their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with simple [ini files](https://en.wikipedia.org/wiki/INI_file).
 
 ![Example bar](https://i.imgur.com/IQ26ypO.png)
 
@@ -25,7 +25,6 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 - Support for clickable areas
 - Support for fonts
-- Support for underlines
 - Support for multiple bars
 - Support for multiple monitors
 - Lots of testing to find and fix bugs
