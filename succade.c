@@ -15,59 +15,143 @@
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
 
-struct block
-{
-	char *name;          // (file) name of the block
-	char *path;          // path, including filename
-	FILE *fd;            // file descriptor
-	char *fg;            // foreground color
-	char *bg;            // background color
-	char *lc;            // overline/underline color
-	int ol : 1;          // draw overline?
-	int ul : 1;          // draw underline?
-	size_t padding : 8;  // min-width of result in chars
-	size_t offset : 16;  // offset to next block in px
-	int align;           // -1, 0, 1 (left, center, right)
-	char *label;         // prefixes the result string
-	char *trigger;       // run block based on this cmd
-	char *m_left;        // cmd to run on left mouse click
-	char *m_middle;      // cmd to run on middle mouse click
-	char *m_right;       // cmd to run on right mouse click
-	char *s_up;          // cmd to run on scroll up
-	char *s_down;        // cmd to run on scroll down
-	int used : 1;        // has been run at least once?
-	double reload;       // interval between runs 
-	double waited;       // time the block hasn't been run
-	char *input;         // trigger output to hand to block
-	char *result;        // output of last block run
-};
-
-struct trigger
-{
-	char *cmd;           // command to run
-	FILE *fd;            // file descriptor
-	struct block *b;     // associated block
-	int ready : 1;       // fd is ready to be read from
-};
-
 struct bar
 {
-	char *name;
-	FILE *fd;
-	char *fg;
-	char *bg;
-	char *lc;
-	size_t line_width;
-	char *prefix;
-	char *suffix;
+	char *name;             // Name of the bar/process
+	FILE *fd;               // File descriptor as returned by popen()
+	char *fg;               // Foreground color
+	char *bg;               // Background color
+	char *lc;               // Overline/underline color
+	char *prefix;           // Prepend this to every block's result
+	char *suffix;           // Append this to every block's result
+	size_t line_width : 8;  // Overline/underline width in px
 	size_t width : 16;
 	size_t height : 16;
 	size_t x : 16;
 	size_t y : 16;
-	int bottom : 1;
-	int force : 1;
-	char *format;
+	int bottom : 1;         // Position bar at bottom of screen?
+	int force : 1;          // Force docking?
+	char *format;           // List and position of blocks
 };
+
+struct block
+{
+	char *name;             // Name of the block and its file/process
+	char *path;             // Full path, including file name
+	FILE *fd;               // File descriptor as returned by popen()
+	char *fg;               // Foreground color
+	char *bg;               // Background color
+	char *lc;               // Overline/underline color
+	int ol : 1;             // Draw overline?
+	int ul : 1;             // Draw underline?
+	size_t padding : 8;     // Minimum width of result in chars
+	size_t offset : 16;     // Offset to next block in px
+	int align;              // -1, 0, 1 (left, center, right)
+	char *label;            // Prefixes the result string
+	char *trigger;          // Run block based on this cmd
+	char *m_left;           // Command to run on left mouse click
+	char *m_middle;         // Command to run on middle mouse click
+	char *m_right;          // Command to run on right mouse click
+	char *s_up;             // Command to run on scroll up
+	char *s_down;           // Command to run on scroll down
+	int used : 1;           // Has this block been run at least once?
+	double reload;          // Interval between runs 
+	double waited;          // Time the block hasn't been run
+	char *input;            // Recent output of the associated trigger
+	char *result;           // Output of the most recent block run
+};
+
+struct trigger
+{
+	char *cmd;              // Command to run
+	FILE *fd;               // File descriptor as returned by popen()
+	struct block *b;        // Associated block
+	int ready : 1;          // fd has new data available for reading
+};
+
+/*
+ * Init the given bar struct to a well defined state using sensible defaults.
+ */
+void init_bar(struct bar *b)
+{
+	b->name = NULL;
+	b->fd = NULL;
+	b->fg = NULL;
+	b->bg = NULL;
+	b->lc = NULL;
+	b->line_width = 1;
+	b->width = 0;
+	b->height = 0;
+	b->x = 0;
+	b->y = 0;
+	b->bottom = 0;
+	b->force = 0;
+	b->prefix = NULL;
+	b->suffix = NULL;
+	b->format = NULL;
+}
+
+/*
+ * Init the given block struct to a well defined state using sensible defaults.
+ */
+void init_block(struct block *b)
+{
+	b->name = NULL;
+	b->path = NULL;
+	b->fd = NULL;
+	b->fg = NULL;
+	b->bg = NULL;
+	b->lc = NULL;
+	b->ul = 0;
+	b->ol = 0;
+	b->padding = 0;
+	b->offset = 0;
+	b->align = 0;
+	b->label = NULL;
+	b->used = 0;
+	b->trigger = NULL;
+	b->m_left = NULL;
+	b->m_middle = NULL;
+	b->m_right = NULL;
+	b->s_up = NULL;
+	b->s_down = NULL;
+	b->reload = 5.0;
+	b->waited = 0.0;
+	b->input = NULL;
+	b->result = NULL;
+}
+
+void free_bar(struct bar *b)
+{
+	free(b->fg);
+	free(b->bg);
+	free(b->lc);
+	free(b->prefix);
+	free(b->suffix);
+	free(b->format);
+
+	init_bar(b); // Sets all pointers to NULL, just in case
+}
+
+void free_block(struct block *b)
+{
+	free(b->name);
+	free(b->path);
+	free(b->fg);
+	free(b->bg);
+	free(b->lc);
+	free(b->label);
+	free(b->trigger);
+	free(b->m_left);
+	free(b->m_middle);
+	free(b->m_right);
+	free(b->s_up);
+	free(b->s_down);
+	free(b->input);
+	free(b->result);
+
+	init_block(b); // Sets all pointers to NULL, just in case
+}
 
 /*
  * Returns 1 if both input strings are equal, otherwise 0.
@@ -140,42 +224,15 @@ int open_bar(struct bar *b)
 
 	printf("Bar process:\n\t%s\n", barprocess);	
 
-	// Run lemonbar via popen() in write mode,
-	// this enables us to send data to lemonbar's stdin
-	b->fd = popen(barprocess, "w");
-
+	b->fd = popen(barprocess, "w"); // Open in write mode
 	if (b->fd == NULL)
 	{
 		return 0;
-	}	
-
-	// The stream is usually unbuffered, so we would have
-	// to call fflush(stream) after each and every line,
-	// instead we set the stream to be line buffered.
-	setlinebuf(b->fd);
+	}
+	setlinebuf(b->fd);	// Make sure the stream is line buffered
 	return 1;
 }
 
-void free_bar(struct bar *b)
-{
-	free(b->fg);
-	b->fg = NULL;
-
-	free(b->bg);
-	b->bg = NULL;
-
-	free(b->lc);
-	b->lc = NULL;
-
-	free(b->prefix);
-	b->prefix = NULL;
-
-	free(b->suffix);
-	b->suffix = NULL;
-
-	free(b->format);
-	b->format = NULL;
-}
 
 void close_bar(struct bar *b)
 {
@@ -277,51 +334,6 @@ void close_triggers(struct trigger *triggers, int num_triggers)
 	{
 		close_trigger(&triggers[i]);
 	}
-}
-
-int free_block(struct block *b)
-{
-	free(b->name);
-	b->name = NULL;
-
-	free(b->path);
-	b->path = NULL;
-
-	free(b->fg);
-	b->fg = NULL;
-
-	free(b->bg);
-	b->bg = NULL;
-
-	free(b->lc);
-	b->lc = NULL;
-
-	free(b->label);
-	b->label = NULL;
-
-	free(b->trigger);
-	b->trigger = NULL;
-
-	free(b->m_left);
-	b->m_left = NULL;
-
-	free(b->m_middle);
-	b->m_middle = NULL;
-
-	free(b->m_right);
-	b->m_right = NULL;
-
-	free(b->s_up);
-	b->s_up = NULL;
-
-	free(b->s_down);
-	b->s_down = NULL;
-
-	free(b->input);
-	b->input = NULL;
-
-	free(b->result);
-	b->result = NULL;
 }
 
 int free_trigger(struct trigger *t)
@@ -547,58 +559,6 @@ char *filepath(const char *dir, const char *filename, const char *fileext)
 }
 
 /*
- * Init the given bar struct to a well defined state using sensible defaults.
- */
-void init_bar(struct bar *b)
-{
-	b->name = NULL;
-	b->fd = NULL;
-	b->fg = NULL;
-	b->bg = NULL;
-	b->lc = NULL;
-	b->line_width = 1;
-	b->width = 0;
-	b->height = 0;
-	b->x = 0;
-	b->y = 0;
-	b->bottom = 0;
-	b->force = 0;
-	b->prefix = NULL;
-	b->suffix = NULL;
-	b->format = NULL;
-}
-
-/*
- * Init the given block struct to a well defined state using sensible defaults.
- */
-void init_block(struct block *b)
-{
-	b->name = NULL;
-	b->path = NULL;
-	b->fd = NULL;
-	b->fg = NULL;
-	b->bg = NULL;
-	b->lc = NULL;
-	b->ul = 0;
-	b->ol = 0;
-	b->padding = 0;
-	b->offset = 0;
-	b->align = 0;
-	b->label = NULL;
-	b->used = 0;
-	b->trigger = NULL;
-	b->m_left = NULL;
-	b->m_middle = NULL;
-	b->m_right = NULL;
-	b->s_up = NULL;
-	b->s_down = NULL;
-	b->reload = 5.0;
-	b->waited = 0.0;
-	b->input = NULL;
-	b->result = NULL;
-}
-
-/*
  * Parse the given format string and create blocks accordingly.
  * Those blocks only have their name, path and align properties set.
  * Returns the number of blocks created.
@@ -617,33 +577,33 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 	{
 		switch (format[i])
 		{
-			case '|':
-				if (cur_align < 1)
+		case '|':
+			if (cur_align < 1)
+			{
+				++cur_align;
+			}
+		case ' ':
+		case '\0':
+			if (cur_block_len)
+			{
+				if (num_blocks == size)
 				{
-					++cur_align;
+					size += 2;
+					*blocks = realloc(*blocks, size * sizeof(struct block));
 				}
-			case ' ':
-			case '\0':
-				if (cur_block_len)
-				{
-					if (num_blocks == size)
-					{
-						size += 2;
-						*blocks = realloc(*blocks, size * sizeof(struct block));
-					}
-					struct block b;
-					init_block(&b);
-					b.name = strdup(cur_block_name);
-					b.path = filepath(blockdir, cur_block_name, NULL);
-					b.align = cur_align;
-					(*blocks)[num_blocks++] = b;
-					cur_block_name[0] = '\0';
-					cur_block_len = 0;
-				}
-				break;
-			default:
-				cur_block_name[cur_block_len++] = format[i];
-				cur_block_name[cur_block_len]   = '\0';
+				struct block b;
+				init_block(&b);
+				b.name = strdup(cur_block_name);
+				b.path = filepath(blockdir, cur_block_name, NULL);
+				b.align = cur_align;
+				(*blocks)[num_blocks++] = b;
+				cur_block_name[0] = '\0';
+				cur_block_len = 0;
+			}
+			break;
+		default:
+			cur_block_name[cur_block_len++] = format[i];
+			cur_block_name[cur_block_len]   = '\0';
 		}
 	}
 	*blocks = realloc(*blocks, sizeof(struct block) * num_blocks);
@@ -821,6 +781,11 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	return 0; // unknown section/name or error
 }
 
+/*
+ * Load the configuration file (ini) for the given block, if it exists,
+ * and have the ini reader (inih) call block_ini_handler() accordingly.
+ * Returns 1 on success, 0 if the config file does'n exist or couldn't be read.
+ */
 int configure_block(struct block *b, const char *blocks_dir)
 {
 	char *blockini = filepath(blocks_dir, b->name, "ini");
@@ -839,12 +804,29 @@ int configure_block(struct block *b, const char *blocks_dir)
 	return 1;
 }
 
+/*
+ * Convenience function: simply runs configure_block() for all blocks.
+ */
+int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
+{
+	for (int i=0; i<num_blocks; ++i)
+	{
+		configure_block(&blocks[i], blocks_dir);
+	}
+}
+
+/*
+ * Returns 1 if the given file name ends in ".ini", 0 otherwise.
+ */
 int is_ini(const char *filename)
 {
 	char *dot = strrchr(filename, '.');
 	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
 }
 
+/*
+ * Returns 1 if the given file name starts with ".", 0 otherwise.
+ */
 int is_hidden(const char *filename)
 {
 	return filename[0] == '.';
@@ -926,33 +908,26 @@ int create_blocks(struct block **blocks, const struct block *blocks_req, int num
 	return num_blocks_created;
 }
 
-int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
-{
-	for (int i=0; i<num_blocks; ++i)
-	{
-		configure_block(&blocks[i], blocks_dir);
-	}
-}
-
 // NEW and UNTESTED
 char *config_dir()
 {
 	char *home = getenv("HOME");
-	char *config_home = getenv("XDF_CONFIG_HOME");
-	char *config_dir = NULL;
-	if (config_home == NULL)
+	char *cfg_home = getenv("XDF_CONFIG_HOME");
+	char *cfg_dir = NULL;
+	size_t cfg_dir_len;
+	if (cfg_home == NULL)
 	{
-		size_t config_dir_len = strlen(home) + strlen(".config") + strlen(NAME) + 3;
-		config_dir = malloc(config_dir_len);
-		snprintf(config_dir, config_dir_len, "%s/%s/%s", home, ".config", NAME);
+		cfg_dir_len = strlen(home) + strlen(".config") + strlen(NAME) + 3;
+		cfg_dir = malloc(cfg_dir_len);
+		snprintf(cfg_dir, cfg_dir_len, "%s/%s/%s", home, ".config", NAME);
 	}
 	else
 	{
-		size_t config_dir_len = strlen(config_home) + strlen(NAME) + 2;
-		config_dir = malloc(config_dir_len);
-		snprintf(config_dir, config_dir_len, "%s/%s", config_home, NAME);
+		cfg_dir_len = strlen(cfg_home) + strlen(NAME) + 2;
+		cfg_dir = malloc(cfg_dir_len);
+		snprintf(cfg_dir, cfg_dir_len, "%s/%s", cfg_home, NAME);
 	}
-	return config_dir;
+	return cfg_dir;
 }
 
 int get_config_dir(char *buffer, int buffer_size)
@@ -960,11 +935,18 @@ int get_config_dir(char *buffer, int buffer_size)
 	char *config_home = getenv("XDF_CONFIG_HOME");
 	if (config_home != NULL)
 	{
-		return snprintf(buffer, buffer_size, "%s/%s", config_home, NAME);
+		return snprintf(buffer, buffer_size, "%s/%s",
+			config_home,
+			NAME
+		);
 	}
 	else
 	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s", getenv("HOME"), ".config", NAME);
+		return snprintf(buffer, buffer_size, "%s/%s/%s",
+			getenv("HOME"),
+			".config",
+			NAME
+		);
 	}
 }
 
@@ -973,11 +955,20 @@ int get_blocks_dir(char *buffer, int buffer_size)
 	char *config_home = getenv("XDG_CONFIG_HOME");
 	if (config_home != NULL)
 	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s", config_home, NAME, BLOCKS_DIR);
+		return snprintf(buffer, buffer_size, "%s/%s/%s",
+			config_home,
+			NAME,
+			BLOCKS_DIR
+		);
 	}
 	else
 	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s/%s", getenv("HOME"), ".config", NAME, BLOCKS_DIR);
+		return snprintf(buffer, buffer_size, "%s/%s/%s/%s",
+			getenv("HOME"),
+			".config",
+			NAME,
+			BLOCKS_DIR
+		);
 	}
 }
 
@@ -994,6 +985,11 @@ double get_time()
 	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
+/*
+ * Read all pending lines from the given trigger and store only the last line 
+ * in the corresponding block's input field. Previous lines will be discarded.
+ * Returns the number of lines read from the trigger's file descriptor.
+ */
 int run_trigger(struct trigger *t)
 {
 	if (t->fd == NULL)
@@ -1146,7 +1142,6 @@ int main(void)
 		
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
-		//if (DEBUG) printf("num events: %d\n", num_events);
 
 		// Mark triggers that fired as ready to be read
 		for (int i=0; i<num_events; ++i)
@@ -1167,8 +1162,8 @@ int main(void)
 		}
 
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
-		//usleep(wait * 1000000.0); // microseconds (1 us = 1000 ms)
 	}
+
 	close(epfd);
 	free_blocks(blocks, num_blocks);
 	free(blocks);
