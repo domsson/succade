@@ -233,15 +233,6 @@ int open_bar(struct bar *b)
 	return 1;
 }
 
-
-void close_bar(struct bar *b)
-{
-	if (b->fd != NULL)
-	{
-		pclose(b->fd);
-	}
-}
-
 int open_block(struct block *b)
 {
 	if (b->input)
@@ -259,6 +250,25 @@ int open_block(struct block *b)
 	return (b->fd == NULL) ? 0 : 1;
 }
 
+/*
+ * Convenience function: simply runs open_block() for all blocks.
+ */
+void open_blocks(struct block *blocks, int num_blocks)
+{
+	for(int i=0; i<num_blocks; ++i)
+	{
+		open_block(&blocks[i]);
+	}
+}
+
+void close_bar(struct bar *b)
+{
+	if (b->fd != NULL)
+	{
+		pclose(b->fd);
+	}
+}
+
 int close_block(struct block *b)
 {
 	if (b->fd == NULL)
@@ -268,14 +278,6 @@ int close_block(struct block *b)
 	pclose(b->fd);
 	b->fd = NULL;	
 	return 1;
-}
-
-void open_blocks(struct block *blocks, int num_blocks)
-{
-	for(int i=0; i<num_blocks; ++i)
-	{
-		open_block(&blocks[i]);
-	}
 }
 
 void close_blocks(struct block *blocks, int num_blocks)
