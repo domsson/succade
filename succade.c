@@ -94,7 +94,7 @@ int is_quoted(const char *str)
 /*
  * Returns a pointer to a string that is the same as the input string, 
  * minus the enclosing quotation chars (either single or double quotes).
- * The pointer is allocated with malloc(), the caller needs to free it!
+ * The pointer is allocated with malloc(), the caller needs to free it.
  */
 char *unquote(const char *str)
 {
@@ -123,7 +123,8 @@ int open_bar(struct bar *b)
 	snprintf(height, 8, "%d", b->height);
 
 	char barprocess[512];
-	snprintf(barprocess, 512, "%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s",
+	snprintf(barprocess, 512,
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s",
 		BAR_PROCESS,
 		(b->width > 0) ? width : "",
 		(b->height > 0) ? height : "",
@@ -325,10 +326,10 @@ int free_block(struct block *b)
 
 int free_trigger(struct trigger *t)
 {
-		free(t->cmd);
-		t->cmd = NULL;
+	free(t->cmd);
+	t->cmd = NULL;
 
-		t->b = NULL;
+	t->b = NULL;
 }
 
 void free_blocks(struct block *blocks, int num_blocks)
@@ -411,10 +412,9 @@ char *escape(const char *str, size_t *diff)
 }
 
 /*
- * Given a block, it returns a pointer to a string that is the 
- * formatted result of this block's script output, ready to be
- * fed to Lemonbar, including prefix, label and suffix.
- * The string is malloc'd and the caller should free it later.
+ * Given a block, it returns a pointer to a string that is the formatted result 
+ * of this block's script output, ready to be fed to Lemonbar, including prefix,
+ * label and suffix. The string is malloc'd and should be free'd by the caller.
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
@@ -422,7 +422,8 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	char *result = escape(block->result, &diff);
 
 	char *str = malloc(len + diff);
-	snprintf(str, len, "%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}%s%s%*s%s%{F-}%{B-}%{U-}",
+	snprintf(str, len,
+		"%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}%s%s%*s%s%%{F-}%%{B-}%%{U-}",
 		block->offset,
 		block->fg && strlen(block->fg) ? block->fg : "-",
 		block->bg && strlen(block->bg) ? block->bg : "-",
@@ -456,9 +457,8 @@ char get_align(const int align)
 }
 
 /*
- * Collects the result strings of all given blocks and creates
- * a single string from it that can then be fed to Lemonbar.
- * The string is malloc'd and the caller should free it later.
+ * Combines the results of all given blocks into a single string that can be fed
+ * to Lemonbar. Returns a pointer to the string, allocated with malloc().
  */
 char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
 {
@@ -524,12 +524,9 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 }
 
 /*
- * Turns '/some/directory/string', 'some-filename' and '.ext' into
- * '/some/directory/string/some-filename.ext', in other words, 
- * concatenates the dir, filename and fileext arguments and adds a
- * slash and dot in between them. The fileext argument is optional. 
- * Returns a pointer to the concatenated string, which has been
- * allocated with malloc, hence the caller needs to free it.
+ * Concatenates the given directory, file name and file extension strings
+ * to a complete path. The fileext argument is optional, it can be set to NULL.
+ * Returns a pointer to the concatenated string, allocated via malloc().
  */
 char *filepath(const char *dir, const char *filename, const char *fileext)
 {
@@ -549,6 +546,9 @@ char *filepath(const char *dir, const char *filename, const char *fileext)
 	}
 }
 
+/*
+ * Init the given bar struct to a well defined state using sensible defaults.
+ */
 void init_bar(struct bar *b)
 {
 	b->name = NULL;
@@ -569,7 +569,7 @@ void init_bar(struct bar *b)
 }
 
 /*
- * Init the given block to a well defined state using sensible defaults.
+ * Init the given block struct to a well defined state using sensible defaults.
  */
 void init_block(struct block *b)
 {
