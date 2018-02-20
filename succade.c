@@ -17,6 +17,8 @@
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
 
+extern char **environ;      // Required to pass the env to child cmds
+
 struct bar
 {
 	char *name;             // Name of the bar/process
@@ -1040,8 +1042,6 @@ pid_t run_cmd(const char *cmd)
 			*(p.we_wordv + i)
 		);
 	}
-	// TODO is this correct? Or should it be declared elsewhere?
-	extern char **environ;
 
 	pid_t pid;
 	int res = posix_spawnp(&pid, p.we_wordv[0], NULL, NULL, p.we_wordv, environ);
