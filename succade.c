@@ -202,6 +202,50 @@ char *unquote(const char *str)
 	return trimmed;
 }
 
+pid_t popen2(const char *cmd, FILE *pipes[2])
+{
+	if (!cmd || !strlen(cmd))
+	{
+		return 0;
+	}
+
+	int pipe_write[2];
+	int pipe_read[2];
+
+	// [0] = read end, [1] = write end
+	if (pipe(pipe_write) < 0) printf("can't open stdin pipe\n");
+	if (pipe(pipe_read) < 0) printf("can't open stdout pipe\n");
+
+	pid_t pid = fork();
+	if (pid == -1)
+	{
+		printf("can't fork\n");
+	}
+	else if (pid == 0) // child
+	{
+		if (dup2(pipe_write[0], STDIN_FILENO) == -1) printf("dup2 stdin failed\n");
+		if (dup2(pipe_read[1], STDOUT_FILENO) == -1) printf("dup2 stdout failed\n");
+		if (dup2(pipe_read[1], STDERR_FILENO) == -1) printf("dup2 stderr failed\n");
+
+		close(pipe_write[1]);
+		close(pipe_read[0]);
+
+		wordexp_t p;
+		wordexp(cmd, &p, 0);
+		
+		execvp(p.we_wordv[0], p.we_wordv);
+		_exit(1);
+	}
+	else // parent
+	{
+		close(pipe_write[0]);
+		close(pipe_read[1]);
+		pipes[0] = fdopen(pipe_read[0], "r");
+		pipes[1] = fdopen(pipe_write[1], "w");
+		return pid;
+	}
+}
+
 int open_bar(struct bar *b)
 {
 	char width[8];
@@ -1058,7 +1102,13 @@ pid_t run_cmd(const char *cmd)
 
 int main(void)
 {
+	/*
+	FILE *fdchild[2];
+	int cpid = popen2("bspc subscribe", fdchild);
+	printf("child pid = %d\n", cpid);
+	char buf[256];
 	//run_cmd("xterm");
+	*/
 
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
@@ -1181,7 +1231,14 @@ int main(void)
 		now = get_time();
 		delta = now - before;
 		before = now;
-		
+
+		/*
+		if (fgets(buf, 256, fdchild[0]) != NULL)
+		{
+			printf("OUTPUT: %s\n", buf);
+		}
+		*/
+
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
 
@@ -1205,6 +1262,11 @@ int main(void)
 
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
 	}
+
+	/*	
+	fclose(fdchild[0]);
+	fclose(fdchild[1]);
+	*/
 
 	close(epfd);
 	free_blocks(blocks, num_blocks);
