@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
+#include <spawn.h>
+#include <wordexp.h>
 #include "ini.h"
 
 #define DEBUG 0
@@ -1018,8 +1020,46 @@ int run_trigger(struct trigger *t)
 	return num_lines;
 }
 
+/*
+ * Run the given command, which we want to do when the user triggers 
+ * an action of a clickable area that has a command associated with it.
+ */
+pid_t run_cmd(const char *cmd)
+{
+	if (!cmd || !strlen(cmd))
+	{
+		return 0;
+	}
+	wordexp_t p;
+	int r = wordexp(cmd, &p, 0);
+	
+	for (int i=0; i<p.we_wordc; ++i)
+	{
+		printf("arg%d = %s\n",
+			i,
+			*(p.we_wordv + i)
+		);
+	}
+	// TODO is this correct? Or should it be declared elsewhere?
+	extern char **environ;
+
+	pid_t pid;
+	int res = posix_spawnp(&pid, p.we_wordv[0], NULL, NULL, p.we_wordv, environ);
+	wordfree(&p);
+
+	return (res == 0 ? pid : 0);
+	
+	// The following works, but I'd like to avoid its overhead
+	/*
+	FILE *fd = popen(cmd, "r");
+	pclose(fd);
+	*/
+}
+
 int main(void)
 {
+	//run_cmd("xterm");
+
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
 	{
