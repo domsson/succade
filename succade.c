@@ -23,7 +23,8 @@ extern char **environ;      // Required to pass the env to child cmds
 struct bar
 {
 	char *name;             // Name of the bar/process
-	FILE *fd;               // File descriptor as returned by popen()
+	FILE *fd_in;            // File descriptor for writing to bar
+	FILE *fd_out;           // File descriptor for reading from bar
 	char *fg;               // Foreground color
 	char *bg;               // Background color
 	char *lc;               // Overline/underline color
@@ -80,7 +81,8 @@ struct trigger
 void init_bar(struct bar *b)
 {
 	b->name = NULL;
-	b->fd = NULL;
+	b->fd_in = NULL;
+	b->fd_out = NULL;
 	b->fg = NULL;
 	b->bg = NULL;
 	b->lc = NULL;
@@ -273,12 +275,22 @@ int open_bar(struct bar *b)
 
 	printf("Bar process:\n\t%s\n", barprocess);	
 
+	/*
 	b->fd = popen(barprocess, "w"); // Open in write mode
 	if (b->fd == NULL)
 	{
 		return 0;
 	}
 	setlinebuf(b->fd);	// Make sure the stream is line buffered
+	*/
+
+	FILE *fd[2];
+	int pid = popen2(barprocess, fd);
+	setlinebuf(fd[0]);
+	setlinebuf(fd[1]);
+	b->fd_in = fd[1];
+	b->fd_out = fd[0];
+
 	return 1;
 }
 
@@ -312,9 +324,13 @@ void open_blocks(struct block *blocks, int num_blocks)
 
 void close_bar(struct bar *b)
 {
-	if (b->fd != NULL)
+	if (b->fd_in != NULL)
 	{
-		pclose(b->fd);
+		fclose(b->fd_in);
+	}
+	if (b->fd_out != NULL)
+	{
+		fclose(b->fd_out);
 	}
 }
 
@@ -481,6 +497,8 @@ char *escape(const char *str, size_t *diff)
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
+	
+
 	size_t diff;
 	char *result = escape(block->result, &diff);
 
@@ -553,7 +571,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 
 int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double delta, double *next)
 {
-	if (bar->fd == NULL)
+	if (bar->fd_in == NULL)
 	{
 		perror("Bar seems dead");
 		return 0;
@@ -580,7 +598,8 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 	{
 		char *lemonbar_str = barstr(bar, blocks, num_blocks);
 		if (DEBUG) { printf("%s", lemonbar_str); }
-		fputs(lemonbar_str, bar->fd);
+		//fputs(lemonbar_str, bar->fd);
+		fputs(lemonbar_str, bar->fd_in);
 		free(lemonbar_str);
 	}
 	return num_blocks_executed;
@@ -1078,7 +1097,11 @@ pid_t run_cmd(const char *cmd)
 		return 0;
 	}
 	wordexp_t p;
-	int r = wordexp(cmd, &p, 0);
+	if (wordexp(cmd, &p, 0) != 0)
+	{
+		printf("Could not parse the command:\n\t'%s'\n", cmd);
+		return 0;
+	}
 	
 	/*
 	for (int i=0; i<p.we_wordc; ++i)
@@ -1104,14 +1127,6 @@ int main(void)
 	{
 		printf("Failed to ignore children's signals\n");
 	}
-
-	/*
-	FILE *fdchild[2];
-	int cpid = popen2("bspc subscribe", fdchild);
-	printf("child pid = %d\n", cpid);
-	char buf[256];
-	*/
-	//run_cmd("xterm");
 	
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
@@ -1265,11 +1280,6 @@ int main(void)
 
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
 	}
-
-	/*	
-	fclose(fdchild[0]);
-	fclose(fdchild[1]);
-	*/
 
 	close(epfd);
 	free_blocks(blocks, num_blocks);
