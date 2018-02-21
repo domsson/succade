@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <dirent.h>
+#include <signal.h>
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -1079,6 +1080,7 @@ pid_t run_cmd(const char *cmd)
 	wordexp_t p;
 	int r = wordexp(cmd, &p, 0);
 	
+	/*
 	for (int i=0; i<p.we_wordc; ++i)
 	{
 		printf("arg%d = %s\n",
@@ -1086,30 +1088,31 @@ pid_t run_cmd(const char *cmd)
 			*(p.we_wordv + i)
 		);
 	}
+	*/
 
 	pid_t pid;
 	int res = posix_spawnp(&pid, p.we_wordv[0], NULL, NULL, p.we_wordv, environ);
 	wordfree(&p);
 
 	return (res == 0 ? pid : 0);
-	
-	// The following works, but I'd like to avoid its overhead
-	/*
-	FILE *fd = popen(cmd, "r");
-	pclose(fd);
-	*/
 }
 
 int main(void)
 {
+	// Prevent zombie children during runtime
+	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
+	{
+		printf("Failed to ignore children's signals\n");
+	}
+
 	/*
 	FILE *fdchild[2];
 	int cpid = popen2("bspc subscribe", fdchild);
 	printf("child pid = %d\n", cpid);
 	char buf[256];
-	//run_cmd("xterm");
 	*/
-
+	//run_cmd("xterm");
+	
 	char configdir[256];
 	if (get_config_dir(configdir, sizeof(configdir)))
 	{
