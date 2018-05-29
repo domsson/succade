@@ -13,7 +13,7 @@
 #include <wordexp.h>
 #include "ini.h"
 
-#define DEBUG 0
+#define DEBUG 0 
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
@@ -72,6 +72,7 @@ struct trigger
 	char *cmd;              // Command to run
 	FILE *fd;               // File descriptor as returned by popen()
 	struct block *b;        // Associated block
+	struct bar *bar;	// Associated bar (special use case...)
 	int ready : 1;          // fd has new data available for reading
 };
 
@@ -409,6 +410,7 @@ int free_trigger(struct trigger *t)
 	t->cmd = NULL;
 
 	t->b = NULL;
+	t->bar = NULL;
 }
 
 void free_blocks(struct block *blocks, int num_blocks)
@@ -497,14 +499,40 @@ char *escape(const char *str, size_t *diff)
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
-	
+	char action_start[512];
+	action_start[0] = 0;
+	char action_end[256];
+	action_end[0] = 0;
+
+	if (block->m_left)
+	{
+		strcat(action_start, "%{A:");
+		strcat(action_start, block->name);
+		strcat(action_start, "_lmb:}");
+		strcat(action_end, "%{A}");
+	}
+	if (block->m_middle)
+	{
+		strcat(action_start, "%{A:");
+		strcat(action_start, block->name);
+		strcat(action_start, "_mmb:}");
+		strcat(action_end, "%{A}");
+	}
+	if (block->m_right)
+	{
+		strcat(action_start, "%{A:");
+		strcat(action_start, block->name);
+		strcat(action_start, "_rmb:}");
+		strcat(action_end, "%{A}");
+	}
 
 	size_t diff;
 	char *result = escape(block->result, &diff);
 
 	char *str = malloc(len + diff);
 	snprintf(str, len,
-		"%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}%s%s%*s%s%%{F-}%%{B-}%%{U-}",
+		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}%s%s%*s%s%%{F-}%%{B-}%%{U-}%s",
+		action_start,
 		block->offset,
 		block->fg && strlen(block->fg) ? block->fg : "-",
 		block->bg && strlen(block->bg) ? block->bg : "-",
@@ -515,7 +543,8 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 		block->label ? block->label : "",
 		block->padding + diff,
 		result,
-		bar->suffix ? bar->suffix : ""
+		bar->suffix ? bar->suffix : "",
+		action_end
 	);
 	free(result);
 	return str;
@@ -934,6 +963,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 			.cmd = strdup(blocks[i].trigger),
 			.fd = NULL,
 			.b = &blocks[i],
+			.bar = NULL,
 			.ready = 0
 		};
 		(*triggers)[num_triggers_created++] = t;
@@ -1120,6 +1150,13 @@ pid_t run_cmd(const char *cmd)
 	return (res == 0 ? pid : 0);
 }
 
+void process_action(const char *action, struct block *blocks, int num_blocks)
+{
+	for (int i=0; i<num_blocks; ++i)
+	{
+	}
+}
+
 int main(void)
 {
 	// Prevent zombie children during runtime
@@ -1157,7 +1194,7 @@ int main(void)
 		printf("Failed to open bar: %s\n", BAR_PROCESS);
 		exit(1);
 	}
-	
+
 	/*
 	 * BLOCKS
 	 */
@@ -1184,6 +1221,18 @@ int main(void)
 	}
 	printf("\n");
 
+	/*
+	 * BAR TRIGGER
+	 */
+	
+	struct trigger bartrig = {
+		.cmd = NULL,
+		.fd = lemonbar.fd_out,
+		.b = NULL,
+		.bar = &lemonbar,
+		.ready = 0
+	};
+	
 	/*
 	 * TRIGGERS
 	 */
@@ -1230,6 +1279,12 @@ int main(void)
 		eev.events = EPOLLIN | EPOLLET;
 		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
 	}
+
+	struct epoll_event eev = { 0 };
+	eev.data.ptr = &bartrig;
+	eev.events = EPOLLIN | EPOLLET;
+	epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(bartrig.fd), &eev);
+
 	if (epctl_result)
 	{
 		printf("%d trigger events could not be registered\n", -1 * epctl_result);
@@ -1276,6 +1331,16 @@ int main(void)
 			{
 				run_trigger(&triggers[i]);
 			}
+		}
+
+		// TODO process bartrig, if it is ready
+		if (bartrig.ready)
+		{
+			char act[128];
+			fgets(act, 128, lemonbar.fd_out);
+			printf("action_registered: %s\n", act);
+			process_action(act, blocks, num_blocks); 
+			bartrig.ready = 0;
 		}
 
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
