@@ -456,6 +456,15 @@ int run_block(struct block *b, size_t result_length)
 	return 1;
 }
 
+/*
+ * Escapes % characters in the given string by prepending
+ * another % in front of them, effectively doubling all %.
+ * The result is returned as a malloc'd string, so it is 
+ * upon the caller to free the result at some point.
+ * If `diff` is not NULL, escape() will set it to the 
+ * number of % chars found in `str`, effectively giving
+ * the difference in size between `str` and the result.
+ */
 char *escape(const char *str, size_t *diff)
 {
 	int n = 0; // number of % chars
