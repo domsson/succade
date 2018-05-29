@@ -534,6 +534,20 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
+	if (block->s_up)
+	{
+		strcat(action_start, "%{A4:");
+		strcat(action_start, block->name);
+		strcat(action_start, "_sup:}");
+		strcat(action_end, "%{A}");
+	}
+	if (block->s_down)
+	{
+		strcat(action_start, "%{A5:");
+		strcat(action_start, block->name);
+		strcat(action_start, "_sdn:}");
+		strcat(action_end, "%{A}");
+	}
 
 	size_t diff;
 	char *result = escape(block->result, &diff);
