@@ -506,21 +506,21 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 
 	if (block->m_left)
 	{
-		strcat(action_start, "%{A:");
+		strcat(action_start, "%{A1:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
 	if (block->m_middle)
 	{
-		strcat(action_start, "%{A:");
+		strcat(action_start, "%{A2:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
 	if (block->m_right)
 	{
-		strcat(action_start, "%{A:");
+		strcat(action_start, "%{A3:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
