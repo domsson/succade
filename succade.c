@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <time.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
@@ -17,6 +18,10 @@
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
+
+#define FONT_SLOT_BLOCK = 1
+#define FONT_SLOT_LABEL = 2
+#define FONT_SLOT_AFFIX = 3
 
 extern char **environ;      // Required to pass the env to child cmds
 
@@ -38,6 +43,9 @@ struct bar
 	int bottom : 1;         // Position bar at bottom of screen?
 	int force : 1;          // Force docking?
 	char *format;           // List and position of blocks
+	char *font;		// The default font to use
+	char *label_font;	// If given, use this font for the label
+	char *affix_font;	// If given, use this font for prefix/suffix
 };
 
 struct block
@@ -55,11 +63,11 @@ struct block
 	int align;              // -1, 0, 1 (left, center, right)
 	char *label;            // Prefixes the result string
 	char *trigger;          // Run block based on this cmd
-	char *m_left;           // Command to run on left mouse click
-	char *m_middle;         // Command to run on middle mouse click
-	char *m_right;          // Command to run on right mouse click
-	char *s_up;             // Command to run on scroll up
-	char *s_down;           // Command to run on scroll down
+	char *cmd_lmb;           // Command to run on left mouse click
+	char *cmd_mmb;         // Command to run on middle mouse click
+	char *cmd_rmb;          // Command to run on right mouse click
+	char *cmd_sup;             // Command to run on scroll up
+	char *cmd_sdn;           // Command to run on scroll down
 	int used : 1;           // Has this block been run at least once?
 	double reload;          // Interval between runs 
 	double waited;          // Time the block hasn't been run
@@ -97,6 +105,9 @@ void init_bar(struct bar *b)
 	b->prefix = NULL;
 	b->suffix = NULL;
 	b->format = NULL;
+	b->font = NULL;
+	b->label_font = NULL;
+	b->affix_font = NULL;
 }
 
 /*
@@ -118,11 +129,11 @@ void init_block(struct block *b)
 	b->label = NULL;
 	b->used = 0;
 	b->trigger = NULL;
-	b->m_left = NULL;
-	b->m_middle = NULL;
-	b->m_right = NULL;
-	b->s_up = NULL;
-	b->s_down = NULL;
+	b->cmd_lmb = NULL;
+	b->cmd_mmb = NULL;
+	b->cmd_rmb = NULL;
+	b->cmd_sup = NULL;
+	b->cmd_sdn = NULL;
 	b->reload = 5.0;
 	b->waited = 0.0;
 	b->input = NULL;
@@ -137,6 +148,9 @@ void free_bar(struct bar *b)
 	free(b->prefix);
 	free(b->suffix);
 	free(b->format);
+	free(b->font);
+	free(b->label_font);
+	free(b->affix_font);
 
 	init_bar(b); // Sets all pointers to NULL, just in case
 }
@@ -150,11 +164,11 @@ void free_block(struct block *b)
 	free(b->lc);
 	free(b->label);
 	free(b->trigger);
-	free(b->m_left);
-	free(b->m_middle);
-	free(b->m_right);
-	free(b->s_up);
-	free(b->s_down);
+	free(b->cmd_lmb);
+	free(b->cmd_mmb);
+	free(b->cmd_rmb);
+	free(b->cmd_sup);
+	free(b->cmd_sdn);
 	free(b->input);
 	free(b->result);
 
@@ -206,30 +220,55 @@ char *unquote(const char *str)
 	return trimmed;
 }
 
+/*
+ * TODO: Make sure this function handles errors properly (return value?)
+ * and then comment this thing properly. Also, give it a different name.
+ */
 pid_t popen2(const char *cmd, FILE *pipes[2])
 {
 	if (!cmd || !strlen(cmd))
 	{
-		return 0;
+		return -1;
 	}
 
 	int pipe_write[2];
 	int pipe_read[2];
 
 	// [0] = read end, [1] = write end
-	if (pipe(pipe_write) < 0) printf("can't open stdin pipe\n");
-	if (pipe(pipe_read) < 0) printf("can't open stdout pipe\n");
+	if (pipe(pipe_write) < 0)
+       	{
+		printf("can't open stdin pipe\n");
+		return -1;
+	}
+	if (pipe(pipe_read) < 0)
+	{
+		printf("can't open stdout pipe\n");
+		return -1;
+	}
 
 	pid_t pid = fork();
 	if (pid == -1)
 	{
 		printf("can't fork\n");
+		return -1;
 	}
 	else if (pid == 0) // child
 	{
-		if (dup2(pipe_write[0], STDIN_FILENO) == -1) printf("dup2 stdin failed\n");
-		if (dup2(pipe_read[1], STDOUT_FILENO) == -1) printf("dup2 stdout failed\n");
-		if (dup2(pipe_read[1], STDERR_FILENO) == -1) printf("dup2 stderr failed\n");
+		if (dup2(pipe_write[0], STDIN_FILENO) == -1)
+		{
+			printf("dup2 stdin failed\n");
+			return -1;
+		}
+		if (dup2(pipe_read[1], STDOUT_FILENO) == -1)
+		{
+			printf("dup2 stdout failed\n");
+			return -1;
+		}
+		if (dup2(pipe_read[1], STDERR_FILENO) == -1)
+		{
+			printf("dup2 stderr failed\n");
+			return -1;
+		}
 
 		close(pipe_write[1]);
 		close(pipe_read[0]);
@@ -250,6 +289,24 @@ pid_t popen2(const char *cmd, FILE *pipes[2])
 	}
 }
 
+char *fontstr(const char *font)
+{
+	char *str = NULL;
+
+	if (font)
+	{
+		size_t len = strlen(font) + 6;
+		str = malloc(len);
+		snprintf(str, len, "-f \"%s\"", font);
+	}
+	else
+	{
+		str = malloc(1);
+		str[0] = '\0';
+	}
+	return str;
+}
+
 int open_bar(struct bar *b)
 {
 	char width[8];
@@ -258,9 +315,13 @@ int open_bar(struct bar *b)
 	snprintf(width, 8, "%d", b->width);
 	snprintf(height, 8, "%d", b->height);
 
-	char barprocess[512];
-	snprintf(barprocess, 512,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s",
+	char *block_font = fontstr(b->font);
+	char *label_font = fontstr(b->label_font);
+
+	size_t max_cmd_len = 1024;
+	char bar_cmd[max_cmd_len];
+	snprintf(bar_cmd, max_cmd_len,
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s",
 		BAR_PROCESS,
 		(b->width > 0) ? width : "",
 		(b->height > 0) ? height : "",
@@ -271,22 +332,18 @@ int open_bar(struct bar *b)
 		(b->lc && strlen(b->lc)) ? b->lc : "-",	
 		b->line_width,
 		(b->bottom) ? "-b" : "",
-		(b->force)  ? "-f" : ""
+		(b->force)  ? "-d" : "",
+		block_font,
+		label_font
 	);
 
-	printf("Bar process:\n\t%s\n", barprocess);	
+	free(block_font);
+	free(label_font);
 
-	/*
-	b->fd = popen(barprocess, "w"); // Open in write mode
-	if (b->fd == NULL)
-	{
-		return 0;
-	}
-	setlinebuf(b->fd);	// Make sure the stream is line buffered
-	*/
+	printf("Bar command:\n\t%s\n", bar_cmd);
 
 	FILE *fd[2];
-	int pid = popen2(barprocess, fd);
+	int pid = popen2(bar_cmd, fd);
 	setlinebuf(fd[0]);
 	setlinebuf(fd[1]);
 	b->fd_in = fd[1];
@@ -335,6 +392,9 @@ void close_bar(struct bar *b)
 	}
 }
 
+/*
+ * TODO: do we really need the return value? Maybe make it void.
+ */
 int close_block(struct block *b)
 {
 	if (b->fd == NULL)
@@ -346,6 +406,9 @@ int close_block(struct block *b)
 	return 1;
 }
 
+/*
+ * Convenience function: simply runs close_block() for all blocks.
+ */
 void close_blocks(struct block *blocks, int num_blocks)
 {
 	for(int i=0; i<num_blocks; ++i)
@@ -375,6 +438,9 @@ int open_trigger(struct trigger *t)
 	return 1;
 }
 
+/*
+ * TODO: do we really need the return value? Maybe make it void.
+ */
 int close_trigger(struct trigger *t)
 {
 	if (t->fd == NULL)
@@ -457,13 +523,11 @@ int run_block(struct block *b, size_t result_length)
 }
 
 /*
- * Escapes % characters in the given string by prepending
- * another % in front of them, effectively doubling all %.
- * The result is returned as a malloc'd string, so it is 
- * upon the caller to free the result at some point.
- * If `diff` is not NULL, escape() will set it to the 
- * number of % chars found in `str`, effectively giving
- * the difference in size between `str` and the result.
+ * Escapes % characters in the given string by prepending another % in front of them,
+ * effectively doubling all %. The result is returned as a malloc'd string, so it is 
+ * upon the caller to free the result at some point. If `diff` is not NULL, escape() 
+ * will set it to the number of % chars found in `str`, effectively giving the 
+ * difference in size between `str` and the result.
  */
 char *escape(const char *str, size_t *diff)
 {
@@ -505,43 +569,44 @@ char *escape(const char *str, size_t *diff)
  * Given a block, it returns a pointer to a string that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
  * label and suffix. The string is malloc'd and should be free'd by the caller.
+ * TODO: what does len do exactly? Do we calculate len in snprintf correctly?
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
-	char action_start[512];
+	char action_start[(5 * NAME_MAX) + (5 * 11) + 1];
 	action_start[0] = 0;
-	char action_end[256];
+	char action_end[(5 * 4) + 1];
 	action_end[0] = 0;
 
-	if (block->m_left)
+	if (block->cmd_lmb)
 	{
 		strcat(action_start, "%{A1:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->m_middle)
+	if (block->cmd_mmb)
 	{
 		strcat(action_start, "%{A2:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->m_right)
+	if (block->cmd_rmb)
 	{
 		strcat(action_start, "%{A3:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->s_up)
+	if (block->cmd_sup)
 	{
 		strcat(action_start, "%{A4:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_sup:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->s_down)
+	if (block->cmd_sdn)
 	{
 		strcat(action_start, "%{A5:");
 		strcat(action_start, block->name);
@@ -554,7 +619,8 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 
 	char *str = malloc(len + diff);
 	snprintf(str, len,
-		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}%s%s%*s%s%%{F-}%%{B-}%%{U-}%s",
+		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"
+		"%s%%{T2}%s%%{T-}%*s%%{T1}%s%%{T-}%%{F-}%%{B-}%%{U-}%s",
 		action_start,
 		block->offset,
 		block->fg && strlen(block->fg) ? block->fg : "-",
@@ -805,12 +871,24 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
+	if (equals(name, "font"))
+	{
+		bar->font = is_quoted(value) ? unquote(value) : strdup(value);
+	}
+	if (equals(name, "label-font"))
+	{
+		bar->label_font = is_quoted(value) ? unquote(value) : strdup(value);
+	}
+	if (equals(name, "affix-font"))
+	{
+		bar->affix_font = is_quoted(value) ? unquote(value) : strdup(value);
+	}
 	return 0; // unknown section/name, error
 }
 
 int configure_bar(struct bar *b, const char *config_dir)
 {
-	char rc[256];
+	char rc[PATH_MAX];
 	snprintf(rc, sizeof(rc), "%s/%src", config_dir, NAME);
 	if (ini_parse(rc, bar_ini_handler, b) < 0)
 	{
@@ -877,27 +955,27 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	}
 	if (equals(name, "mouse-left"))
 	{
-		block->m_left = is_quoted(value) ? unquote(value) : strdup(value);
+		block->cmd_lmb = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "mouse-middle"))
 	{
-		block->m_middle = is_quoted(value) ? unquote(value) : strdup(value);
+		block->cmd_mmb = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "mouse-right"))
 	{
-		block->m_right = is_quoted(value) ? unquote(value) : strdup(value);
+		block->cmd_rmb = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "scroll-up"))
 	{
-		block->s_up = is_quoted(value) ? unquote(value) : strdup(value);
+		block->cmd_sup = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "scroll-down"))
 	{
-		block->s_down = is_quoted(value) ? unquote(value) : strdup(value);
+		block->cmd_sdn = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	return 0; // unknown section/name or error
