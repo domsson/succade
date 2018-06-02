@@ -317,11 +317,12 @@ int open_bar(struct bar *b)
 
 	char *block_font = fontstr(b->font);
 	char *label_font = fontstr(b->label_font);
+	char *affix_font = fontstr(b->affix_font);
 
 	size_t max_cmd_len = 1024;
 	char bar_cmd[max_cmd_len];
 	snprintf(bar_cmd, max_cmd_len,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s",
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s",
 		BAR_PROCESS,
 		(b->width > 0) ? width : "",
 		(b->height > 0) ? height : "",
@@ -334,11 +335,13 @@ int open_bar(struct bar *b)
 		(b->bottom) ? "-b" : "",
 		(b->force)  ? "-d" : "",
 		block_font,
-		label_font
+		label_font,
+		affix_font
 	);
 
 	free(block_font);
 	free(label_font);
+	free(affix_font);
 
 	printf("Bar command:\n\t%s\n", bar_cmd);
 
@@ -620,7 +623,7 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	char *str = malloc(len + diff);
 	snprintf(str, len,
 		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"
-		"%s%%{T2}%s%%{T-}%*s%%{T1}%s%%{T-}%%{F-}%%{B-}%%{U-}%s",
+		"%%{T3}%s%%{T2}%s%%{T1}%*s%%{T3}%s%%{T-}%%{F-}%%{B-}%%{U-}%s",
 		action_start,
 		block->offset,
 		block->fg && strlen(block->fg) ? block->fg : "-",
