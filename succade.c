@@ -19,10 +19,6 @@
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
 
-#define FONT_SLOT_BLOCK = 1
-#define FONT_SLOT_LABEL = 2
-#define FONT_SLOT_AFFIX = 3
-
 extern char **environ;      // Required to pass the env to child cmds
 
 struct bar
@@ -43,9 +39,9 @@ struct bar
 	int bottom : 1;         // Position bar at bottom of screen?
 	int force : 1;          // Force docking?
 	char *format;           // List and position of blocks
-	char *font;		// The default font to use
-	char *label_font;	// If given, use this font for the label
-	char *affix_font;	// If given, use this font for prefix/suffix
+	char *block_font;	// The default font to use (slot 1)
+	char *label_font;	// Font used for the label (slot 2)
+	char *affix_font;	// Font used for prefix/suffix (slot 3)
 };
 
 struct block
@@ -105,7 +101,7 @@ void init_bar(struct bar *b)
 	b->prefix = NULL;
 	b->suffix = NULL;
 	b->format = NULL;
-	b->font = NULL;
+	b->block_font = NULL;
 	b->label_font = NULL;
 	b->affix_font = NULL;
 }
@@ -148,7 +144,7 @@ void free_bar(struct bar *b)
 	free(b->prefix);
 	free(b->suffix);
 	free(b->format);
-	free(b->font);
+	free(b->block_font);
 	free(b->label_font);
 	free(b->affix_font);
 
@@ -315,7 +311,7 @@ int open_bar(struct bar *b)
 	snprintf(width, 8, "%d", b->width);
 	snprintf(height, 8, "%d", b->height);
 
-	char *block_font = fontstr(b->font);
+	char *block_font = fontstr(b->block_font);
 	char *label_font = fontstr(b->label_font);
 	char *affix_font = fontstr(b->affix_font);
 
@@ -874,17 +870,20 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "font"))
+	if (equals(name, "font") || equals(name, "block-font"))
 	{
-		bar->font = is_quoted(value) ? unquote(value) : strdup(value);
+		bar->block_font = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
 	}
 	if (equals(name, "label-font"))
 	{
 		bar->label_font = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
 	}
 	if (equals(name, "affix-font"))
 	{
 		bar->affix_font = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
 	}
 	return 0; // unknown section/name, error
 }
