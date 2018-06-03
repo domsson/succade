@@ -949,6 +949,11 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 		}
 		return 1;
 	}
+	if (equals(name, "trigger"))
+	{
+		block->trigger = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
 	if (equals(name, "mouse-left"))
 	{
 		block->cmd_lmb = is_quoted(value) ? unquote(value) : strdup(value);
@@ -1247,11 +1252,64 @@ pid_t run_cmd(const char *cmd)
 	return (res == 0 ? pid : 0);
 }
 
-void process_action(const char *action, struct block *blocks, int num_blocks)
+int process_action(const char *action, struct block *blocks, int num_blocks)
 {
+	size_t len = strlen(action);
+	if (len < 5)
+	{
+		return -1;	// Can not be an action command, too short
+	}
+
+	char types[5][5] = {"_lmb", "_mmb", "_rmb", "_sup", "_sdn"};
+
+	char type[5]; // For the type suffix, including the underscore
+	snprintf(type, 5, "%s", action + len - 5); // Extract the suffix
+	char block[len-4]; // For everything _before_ the suffix
+	snprintf(block, len - 4, "%s", action); // Extract that first part
+
+	// Check if the string ends with either of these:
+	// _lmb _mmb _rmb _sup _sdn
+	// If so, take whatever comes before that, it should be the block name
+	// Then find the block with that name and run it's according command
+	int b = 0;
+	int found = 0;
+	for (; b < 5; ++b)
+	{
+		if (equals(type, types[b]))
+		{
+			found = 1;
+			break;
+		}
+	}
+	if (!found)
+	{
+		return -1;	// Not a recognized action type
+	}
 	for (int i=0; i<num_blocks; ++i)
 	{
+		if (equals(blocks[i].name, block))
+		{
+			switch (b) {
+				case 0:
+					run_cmd(blocks[i].cmd_lmb);
+					break;
+				case 1:
+					run_cmd(blocks[i].cmd_mmb);
+					break;
+				case 2:
+					run_cmd(blocks[i].cmd_rmb);
+					break;
+				case 3:
+					run_cmd(blocks[i].cmd_sup);
+					break;
+				case 4:
+					run_cmd(blocks[i].cmd_sdn);
+					break;
+			}
+			return 0;
+		}
 	}
+	return -2; // Could not find the block associated with the action
 }
 
 int main(void)
@@ -1430,13 +1488,19 @@ int main(void)
 			}
 		}
 
-		// TODO process bartrig, if it is ready
+		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
-			char act[128];
-			fgets(act, 128, lemonbar.fd_out);
-			printf("action_registered: %s\n", act);
-			process_action(act, blocks, num_blocks); 
+			char act[1024];
+			fgets(act, 1024, lemonbar.fd_out);
+			// printf("action_registered: %s\n", act);
+			if (process_action(act, blocks, num_blocks) < 0)
+			{
+				// It wasn't a recognized command, so chances
+				// are that it was some debug/error output
+				// of Lemonbar. Let's print this to stdout.
+				printf("Lemonbar: %s", act);
+			}
 			bartrig.ready = 0;
 		}
 
