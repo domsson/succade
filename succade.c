@@ -31,11 +31,11 @@ struct bar
 	char *lc;               // Overline/underline color
 	char *prefix;           // Prepend this to every block's result
 	char *suffix;           // Append this to every block's result
-	size_t line_width : 8;  // Overline/underline width in px
-	size_t width : 16;
-	size_t height : 16;
-	size_t x : 16;
-	size_t y : 16;
+	size_t lw : 8;          // Overline/underline width in px
+	size_t w : 16;          // Width of the bar
+	size_t h : 16;          // Height of the bar
+	size_t x : 16;          // x-position of the bar
+	size_t y : 16;          // y-position of the bar
 	int bottom : 1;         // Position bar at bottom of screen?
 	int force : 1;          // Force docking?
 	char *format;           // List and position of blocks
@@ -91,9 +91,9 @@ void init_bar(struct bar *b)
 	b->fg = NULL;
 	b->bg = NULL;
 	b->lc = NULL;
-	b->line_width = 1;
-	b->width = 0;
-	b->height = 0;
+	b->lw = 1;
+	b->w = 0;
+	b->h = 0;
 	b->x = 0;
 	b->y = 0;
 	b->bottom = 0;
@@ -305,11 +305,11 @@ char *fontstr(const char *font)
 
 int open_bar(struct bar *b)
 {
-	char width[8];
-	char height[8];
+	char w[8];
+	char h[8];
 
-	snprintf(width, 8, "%d", b->width);
-	snprintf(height, 8, "%d", b->height);
+	snprintf(w, 8, "%d", b->w);
+	snprintf(h, 8, "%d", b->h);
 
 	char *block_font = fontstr(b->block_font);
 	char *label_font = fontstr(b->label_font);
@@ -320,14 +320,14 @@ int open_bar(struct bar *b)
 	snprintf(bar_cmd, max_cmd_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s",
 		BAR_PROCESS,
-		(b->width > 0) ? width : "",
-		(b->height > 0) ? height : "",
+		(b->w > 0) ? w : "",
+		(b->h > 0) ? h : "",
 		b->x,
 		b->y,
 		(b->fg && strlen(b->fg)) ? b->fg : "-", 
 		(b->bg && strlen(b->bg)) ? b->bg : "-",
 		(b->lc && strlen(b->lc)) ? b->lc : "-",	
-		b->line_width,
+		b->lw,
 		(b->bottom) ? "-b" : "",
 		(b->force)  ? "-d" : "",
 		block_font,
@@ -638,20 +638,14 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	return str;
 }
 
+/*
+ * Returns 'l', 'c' or 'r' for input values -1, 0 and 1 respectively.
+ * For other input values, the behavior is undefined.
+ */
 char get_align(const int align)
 {
-	if (align == -1)
-	{
-		return 'l';
-	}
-	if (align == 0)
-	{
-		return 'c';
-	}
-	if (align == 1)
-	{
-		return 'r';
-	}
+	char a[] = {'l', 'c', 'r'};
+	return a[align+1]; 
 }
 
 /*
@@ -822,17 +816,17 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	}
 	if (equals(name, "line-width"))
 	{
-		bar->line_width = atoi(value);
+		bar->lw = atoi(value);
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
 	{
-		bar->height = atoi(value);
+		bar->h = atoi(value);
 		return 1;
 	}
 	if (equals(name, "w") || equals(name, "width"))
 	{
-		bar->width = atoi(value);
+		bar->w = atoi(value);
 		return 1;
 	}
 	if (equals(name, "x"))
@@ -865,7 +859,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->suffix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "format"))
+	if (equals(name, "format") || equals(name, "blocks"))
 	{
 		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
