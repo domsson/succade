@@ -315,7 +315,7 @@ int open_bar(struct bar *b)
 	char *label_font = fontstr(b->label_font);
 	char *affix_font = fontstr(b->affix_font);
 
-	size_t max_cmd_len = 1024;
+	size_t max_cmd_len = 1024; // TODO 1024? U sure?
 	char bar_cmd[max_cmd_len];
 	snprintf(bar_cmd, max_cmd_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s",
@@ -616,7 +616,7 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	size_t diff;
 	char *result = escape(block->result, &diff);
 
-	char *str = malloc(len + diff);
+	char *str = malloc(len + diff); // TODO bad idea to use len!
 	snprintf(str, len,
 		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"
 		"%%{T3}%s%%{T2}%s%%{T1}%*s%%{T3}%s%%{T-}%%{F-}%%{B-}%%{U-}%s",
@@ -654,7 +654,7 @@ char get_align(const int align)
  */
 char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
 {
-	size_t blockstr_len = 256;
+	size_t blockstr_len = 1024; // TODO 1024? Let's add some realloc logic here!
 	char *bar_str = malloc(blockstr_len * num_blocks);
 	bar_str[0] = '\0';
 
@@ -709,7 +709,6 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 	{
 		char *lemonbar_str = barstr(bar, blocks, num_blocks);
 		if (DEBUG) { printf("%s", lemonbar_str); }
-		//fputs(lemonbar_str, bar->fd);
 		fputs(lemonbar_str, bar->fd_in);
 		free(lemonbar_str);
 	}
@@ -1110,7 +1109,11 @@ int create_blocks(struct block **blocks, const struct block *blocks_req, int num
 	return num_blocks_created;
 }
 
-// NEW and UNTESTED
+/*
+ * Returns a pointer to a string that holds the config dir we want to use.
+ * This does not check if the dir actually exists. You need to check still.
+ * The string is allocated with malloc() and needs to be freed by the caller.
+ */
 char *config_dir()
 {
 	char *home = getenv("HOME");
@@ -1132,46 +1135,19 @@ char *config_dir()
 	return cfg_dir;
 }
 
-int get_config_dir(char *buffer, int buffer_size)
+/*
+ * Returns a pointer to a string that holds the blocks dir we want to use.
+ * This does not check if the dir actually exists. You need to check still.
+ * If configdir is NULL, this method will call config_dir() to get it.
+ * The returned string is malloc'd, so remember to free it at some point.
+ */
+char *blocks_dir(const char *configdir)
 {
-	char *config_home = getenv("XDF_CONFIG_HOME");
-	if (config_home != NULL)
-	{
-		return snprintf(buffer, buffer_size, "%s/%s",
-			config_home,
-			NAME
-		);
-	}
-	else
-	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s",
-			getenv("HOME"),
-			".config",
-			NAME
-		);
-	}
-}
-
-int get_blocks_dir(char *buffer, int buffer_size)
-{
-	char *config_home = getenv("XDG_CONFIG_HOME");
-	if (config_home != NULL)
-	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s",
-			config_home,
-			NAME,
-			BLOCKS_DIR
-		);
-	}
-	else
-	{
-		return snprintf(buffer, buffer_size, "%s/%s/%s/%s",
-			getenv("HOME"),
-			".config",
-			NAME,
-			BLOCKS_DIR
-		);
-	}
+	const char *cfg_dir = (configdir) ? configdir : config_dir();
+	size_t dir_len = strlen(cfg_dir) + strlen(BLOCKS_DIR) + 2;
+	char *blocks_dir = malloc(dir_len);
+	snprintf(blocks_dir, dir_len, "%s/%s", cfg_dir, BLOCKS_DIR);
+	return blocks_dir;
 }
 
 double get_time()
@@ -1198,13 +1174,15 @@ int run_trigger(struct trigger *t)
 	{
 		return 0;
 	}
-	char res[256];
-	
+
+	char res[512]; // TODO: Why 512? Why not something else?
 	int num_lines = 0;
-	while (fgets(res, 256, t->fd) != NULL)
+
+	while (fgets(res, 512, t->fd) != NULL)
 	{
 		++num_lines;
 	}
+	
 	if (num_lines)
 	{
 		struct block *b = t->b;
@@ -1215,12 +1193,14 @@ int run_trigger(struct trigger *t)
 		}
 		b->input = strdup(res);
 	}
+	
 	return num_lines;
 }
 
 /*
  * Run the given command, which we want to do when the user triggers 
  * an action of a clickable area that has a command associated with it.
+ * Returns the pid of the spawned process or 0 if running it failed.
  */
 pid_t run_cmd(const char *cmd)
 {
@@ -1267,10 +1247,7 @@ int process_action(const char *action, struct block *blocks, int num_blocks)
 	char block[len-4]; // For everything _before_ the suffix
 	snprintf(block, len - 4, "%s", action); // Extract that first part
 
-	// Check if the string ends with either of these:
-	// _lmb _mmb _rmb _sup _sdn
-	// If so, take whatever comes before that, it should be the block name
-	// Then find the block with that name and run it's according command
+	// We check if the action type is valid (see types)
 	int b = 0;
 	int found = 0;
 	for (; b < 5; ++b)
@@ -1281,14 +1258,18 @@ int process_action(const char *action, struct block *blocks, int num_blocks)
 			break;
 		}
 	}
+
 	if (!found)
 	{
 		return -1;	// Not a recognized action type
 	}
+
+	// Now we go through all blocks and try to find the right one
 	for (int i=0; i<num_blocks; ++i)
 	{
 		if (equals(blocks[i].name, block))
 		{
+			// Now to fire the right command for the action type
 			switch (b) {
 				case 0:
 					run_cmd(blocks[i].cmd_lmb);
@@ -1309,6 +1290,7 @@ int process_action(const char *action, struct block *blocks, int num_blocks)
 			return 0;
 		}
 	}
+
 	return -2; // Could not find the block associated with the action
 }
 
@@ -1319,18 +1301,12 @@ int main(void)
 	{
 		printf("Failed to ignore children's signals\n");
 	}
-	
-	char configdir[256];
-	if (get_config_dir(configdir, sizeof(configdir)))
-	{
-		printf("Config directory:\n\t%s\n", configdir);
-	}
 
-	char blocksdir[256];
-	if (get_blocks_dir(blocksdir, sizeof(blocksdir)))
-	{
-		printf("Blocks directory:\n\t%s\n", blocksdir);
-	}
+	char *configdir = config_dir();
+	printf("Config directory:\n\t%s\n", configdir);
+
+	char *blocksdir = blocks_dir(configdir);
+	printf("Blocks directory:\n\t%s\n", blocksdir);
 
 	/*
 	 * BAR
@@ -1350,6 +1326,8 @@ int main(void)
 		exit(1);
 	}
 
+	free(configdir);
+	
 	/*
 	 * BLOCKS
 	 */
@@ -1376,8 +1354,10 @@ int main(void)
 	}
 	printf("\n");
 
+	free(blocksdir);
+
 	/*
-	 * BAR TRIGGER
+	 * BAR TRIGGER - triggers when lemonbar spits something to stdout/stderr
 	 */
 	
 	struct trigger bartrig = {
@@ -1389,7 +1369,7 @@ int main(void)
 	};
 	
 	/*
-	 * TRIGGERS
+	 * TRIGGERS - trigger when their respective commands output something
 	 */
 
 	struct trigger *triggers;
@@ -1491,7 +1471,7 @@ int main(void)
 		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
-			char act[1024];
+			char act[1024]; // TODO why 1024? why not something else?
 			fgets(act, 1024, lemonbar.fd_out);
 			// printf("action_registered: %s\n", act);
 			if (process_action(act, blocks, num_blocks) < 0)
