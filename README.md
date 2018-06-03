@@ -23,8 +23,6 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # What's missing?
 
-- Support for clickable areas
-- Support for fonts
 - Support for multiple bars
 - Support for multiple monitors
 - Lots of testing to find and fix bugs
