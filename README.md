@@ -57,6 +57,78 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 Take a look at the example configuration in this repository. The bar and some general configuration happens in `succaderc`, plus every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available and the names of those already in place are subject to change. However, I'm trying to keep a high compatibility to Captain. Check our the example files here, as well as the Captain wiki and play around. Eventually, as things are finally decided upon, there will be extensive documentation here.
 
+## succarerc
+
+`succaderc` is the config file for the bar itself. You need this file, otherwise succade won't start. All least the `format` property needs to be defined, everything else is optional.
+
+- `format`  
+   Specifies what blocks to display on the bar - and where. Just write down the file names of your blocks, separated by spaces. By adding two pipes you can tell succade to align the blocks left, center or right, depending on whether you note down the block names on the left of the pipes, the right of the pipes or in the middle of the two pipes. Example: `desktop | title | time`
+- `w` or `width` (int)  
+   Width of the bar in pixel - omit this value for a full-width bar.
+- `h` or `height` (int)  
+   Height of the bar in pixel.
+- `x` (int)  
+   x-position of the bar - omit to have it sit at the edge of your screen.
+- `y` (int)  
+   y-position of the bar - omit to have it sit at the edge of your screen.
+- `fg` or `foreground` (string)  
+   Foreground color (font color) in hex format, for example `#FF0000` for red.
+- `bg` or `background` (string)  
+   Background color in hex format.
+- `lc` or `line` (string)  
+   Color for underlines and overlines, if used.
+- `lw` or `line-width` (int)  
+   Thickness of the underlines/overlines in pixel.
+- `prefix` (string)  
+   A string that will be prepended to every block, for example a space: `" "`.
+- `suffix`  (string)  
+   Same as the prefix, but will be added to the end of every block.
+- `dock` (string)  
+   Set to `bottom` if you want the bar to sit at the bottom of your screen.
+- `force` (bool)  
+   Set to `true` if you want to force docking of Lemonbar.
+- `font` or `block-font` (string)  
+   Font to use for the body of the blocks (will be used for everything by default).
+- `label-font` (string)  
+   Font to use only for the block's labels.
+- `affix-font` (string)  
+   Font to use for the block's prefixes / suffixes.
+
+## name-of-block.ini
+
+In the block directory, you can create one config file for each block. The file name should be the same as the block, but end in `.ini`. For example, if you have a `time` block (script), name the config file `time.ini`. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there.
+
+- `fg` or `foreground` (string)  
+   See above.
+- `bg` or `background` (string)  
+   See above.
+- `lc` or `line` (string)  
+   See above.
+- `ol` or `overline` (bool)  
+   Set to `true` in order to draw an overline for this block.
+- `ul` or `underline` (bool)  
+   Set to `true` in order to draw an underline for this block.
+- `pad` or `padding` (int)  
+   Defines the minimum width for the block's main text, that is, the text between prefix, label and suffix. If you set this to `3`, succade will make sure that the values returned from your block will display with 3 characters by appending spaces to the left, if required. This can help achieve a uniform look when using monospace fonts.
+- `offset` (int)  
+   Defines an offset, in pixel, that this block should have to the next block (if any).
+- `label` (string)  
+   A string that will be displayed before the block's main text, but after the prefix. Can be used to display an icon by using an appropriate font, like Siji.
+- `reload` (float)  
+  Defines in what interval (in seconds) this block should be run. Setting this to `5` will run this block every 5 seconds. Lower values will lead to more CPU usage. A third option is to set `reload` to `0`. In this case, succade will run your block once, and only once, effectively creating a static block.
+- `trigger` (string)  
+  If your block should be run depending on the output of another command, then set this command here. If you do this, succade will run that trigger command and monitor its output. Whenever the command produces new output, succade will run the block - and pipe the trigger's output as input to the block. This will set `reload` to `0`.
+- `mouse-left` (string)  
+  Set this to a command that you want succade to run when you left-click this block.
+- `mouse-middle` (string)
+  See above.
+- `mouse-right` (string)  
+  See above.
+- `scroll-up` (string)
+  Set this to a command that you want succade to run when you scroll your mouse wheel up while hovering over this block.
+- `scroll-down` (string)  
+  See above.
+
 # Licence
 
 - succade is free software, dedicated to the public domain. Do with it whatever you want, but don't hold me responsible for anything either.
