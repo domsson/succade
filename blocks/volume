@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Dependencies: amixer, siji
+# Dependencies: amixer
 
 volume=$(amixer sget Master | sed -n "0,/.*\[\([0-9]\+\)%\].*/s//\1/p")
 state=$(amixer sget Master | grep -Eoe '\[(on|off)\]')
@@ -7,7 +7,7 @@ state=$(amixer sget Master | grep -Eoe '\[(on|off)\]')
 if   [[ $state == '[off]' ]]; then
 	output="muted"
 else
-	output="$volume %%"
+	output="$volume %"
 fi
 
 echo "$output"
