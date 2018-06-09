@@ -1603,5 +1603,6 @@ int main(void)
 	free_trigger(&bartrig);
 	close_bar(&lemonbar);
 	free_bar(&lemonbar);
-	return 0;
+
+	return EXIT_SUCCESS;
 }
