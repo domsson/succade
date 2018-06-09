@@ -841,6 +841,10 @@ char *filepath(const char *dir, const char *filename, const char *fileext)
  */
 int parse_format(const char *format, struct block **blocks, const char *blockdir)
 {
+	if (format == NULL)
+	{
+		return -1;
+	}
 	size_t size = 8;
 	*blocks = malloc(size * sizeof(struct block));
 	size_t format_len = strlen(format) + 1;
@@ -1450,6 +1454,13 @@ int main(void)
 
 	struct block *blocks_requested; 
 	int num_blocks_requested = parse_format(lemonbar.format, &blocks_requested, blocksdir);
+
+	if (num_blocks_requested < 0)
+	{
+		fprintf(stderr, "Could not figure out what blocks to load, stopping %s\n",
+				NAME);
+		exit(EXIT_FAILURE);
+	}
 
 	printf("Blocks requested: (%d total)\n\t", num_blocks_requested);
 	for (int i=0; i<num_blocks_requested; ++i)
