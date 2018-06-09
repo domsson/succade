@@ -1472,6 +1472,13 @@ int main(void)
 
 	free(blocksdir);
 
+	if (num_blocks == 0)
+	{
+		fprintf(stderr, "No blocks loaded (%d requested), stopping %s.\n",
+			       	num_blocks_requested, NAME);
+		exit(EXIT_FAILURE);
+	}
+
 	/*
 	 * BAR TRIGGER - triggers when lemonbar spits something to stdout/stderr
 	 */
@@ -1556,6 +1563,8 @@ int main(void)
 	double delta;
 	double wait = 0.0;
 
+	struct epoll_event tev[num_triggers + 1];
+
 	char bar_output[BUFFER_SIZE];
 	bar_output[0] = '\0';
 
@@ -1567,8 +1576,8 @@ int main(void)
 		
 		//printf("WAIT = %f\n", wait);
 
-		struct epoll_event tev[num_triggers];
-		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
+		// Wait for trigger input - at least bartrig is always present
+		int num_events = epoll_wait(epfd, tev, num_triggers + 1, wait * 1000);
 
 		// Mark triggers that fired as ready to be read
 		for (int i=0; i<num_events; ++i)
