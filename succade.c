@@ -570,6 +570,7 @@ int run_block(struct block *b, size_t result_length)
 	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
 	b->used = 1; // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
+	b->input = NULL; // Discard input, as we've processed it now
 	close_block(b);
 	return 0;
 }
@@ -764,7 +765,8 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	return bar_str;
 }
 
-int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double delta, double *next)
+int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, 
+		double delta, double tolerance, double *next)
 {
 	if (bar->fd_in == NULL)
 	{
@@ -772,19 +774,29 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 	}
 
 	int num_blocks_executed = 0;	
-//	double until_next = 5; // TODO 5? Why? Shouldn't it be "infinity"?
 	double until_next = DBL_MAX;
+	double idle_left;
 
 	for(int i=0; i<num_blocks; ++i)
 	{
 		blocks[i].waited += delta;
-		if (!blocks[i].used || blocks[i].input || blocks[i].waited >= blocks[i].reload)
+		idle_left = blocks[i].reload - blocks[i].waited;
+
+		if (!blocks[i].used || blocks[i].input || 
+				(blocks[i].reload > 0.0 && idle_left < tolerance))
 		{
-			num_blocks_executed += (run_block(&blocks[i], 64) == 0) ? 1 : 0;
+			num_blocks_executed += 
+				(run_block(&blocks[i], BUFFER_SIZE) == 0) ? 1 : 0;
 		}
-		if (blocks[i].input == NULL && (blocks[i].reload - blocks[i].waited) < until_next)
+
+		idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
+		if (blocks[i].input == NULL && idle_left < until_next)
 		{
-			until_next = blocks[i].reload - blocks[i].waited;
+			// If reload is 0, this block idles forever
+			if (blocks[i].reload > 0.0)
+			{
+				until_next = (idle_left > 0.0) ? idle_left : 0.0;
+			}
 		}
 	}
 	*next = until_next;
@@ -1029,6 +1041,7 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 		if (is_quoted(value)) // String means trigger!
 		{
 			block->trigger = unquote(value);
+			block->reload = 0.0;
 		}
 		else
 		{
@@ -1324,6 +1337,13 @@ pid_t run_cmd(const char *cmd)
 	return (res == 0 ? pid : -1);
 }
 
+/*
+ * Takes a string that might represent an action that was registered with one 
+ * of the blocks and tries to find the associated block. If found, the command
+ * associated with the action will be executed.
+ * Returns 0 on success, -1 if the string was not a recognized action command
+ * or the block that the action belongs to could not be found.
+ */
 int process_action(const char *action, struct block *blocks, int num_blocks)
 {
 	size_t len = strlen(action);
@@ -1544,6 +1564,8 @@ int main(void)
 		now = get_time();
 		delta = now - before;
 		before = now;
+		
+		//printf("WAIT = %f\n", wait);
 
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
@@ -1586,7 +1608,7 @@ int main(void)
 		}
 
 		// Let's update bar!
-		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
+		feed_bar(&lemonbar, blocks, num_blocks, delta, 0.1, &wait);
 	}
 
 	/*
