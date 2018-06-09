@@ -1056,6 +1056,7 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	if (equals(name, "trigger"))
 	{
 		block->trigger = is_quoted(value) ? unquote(value) : strdup(value);
+		block->reload = 0.0;
 		return 1;
 	}
 	if (equals(name, "mouse-left"))
