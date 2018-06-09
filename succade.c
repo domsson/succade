@@ -18,6 +18,7 @@
 #define NAME "succade"
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
+#define BUFFER_SIZE 2048
 
 extern char **environ;      // Required to pass the env to child cmds
 
@@ -136,6 +137,9 @@ void init_block(struct block *b)
 	b->result = NULL;
 }
 
+/*
+ * Frees all members of the given bar that need freeing and sets them to NULL.
+ */
 void free_bar(struct bar *b)
 {
 	free(b->fg);
@@ -151,6 +155,9 @@ void free_bar(struct bar *b)
 	init_bar(b); // Sets all pointers to NULL, just in case
 }
 
+/*
+ * Frees all members of the given block that need freeing and sets them to NULL.
+ */
 void free_block(struct block *b)
 {
 	free(b->name);
@@ -217,8 +224,11 @@ char *unquote(const char *str)
 }
 
 /*
- * TODO: Make sure this function handles errors properly (return value?)
- * and then comment this thing properly. Also, give it a different name.
+ * Opens the process `cmd` similar to popen() but does not invoke a shell.
+ * Instead, wordexp() is used to expand the given command, if necessary.
+ * If successful, the process id of the new process is being returned and the 
+ * given FILE pointers are set to streams that correspond to pipes for reading 
+ * and writing to the child process, accordingly. On error, -1 is returned.
  */
 pid_t popen2(const char *cmd, FILE *pipes[2])
 {
@@ -233,36 +243,30 @@ pid_t popen2(const char *cmd, FILE *pipes[2])
 	// [0] = read end, [1] = write end
 	if (pipe(pipe_write) < 0)
        	{
-		printf("can't open stdin pipe\n");
 		return -1;
 	}
 	if (pipe(pipe_read) < 0)
 	{
-		printf("can't open stdout pipe\n");
 		return -1;
 	}
 
 	pid_t pid = fork();
 	if (pid == -1)
 	{
-		printf("can't fork\n");
 		return -1;
 	}
 	else if (pid == 0) // child
 	{
 		if (dup2(pipe_write[0], STDIN_FILENO) == -1)
 		{
-			printf("dup2 stdin failed\n");
 			return -1;
 		}
 		if (dup2(pipe_read[1], STDOUT_FILENO) == -1)
 		{
-			printf("dup2 stdout failed\n");
 			return -1;
 		}
 		if (dup2(pipe_read[1], STDERR_FILENO) == -1)
 		{
-			printf("dup2 stderr failed\n");
 			return -1;
 		}
 
@@ -270,9 +274,12 @@ pid_t popen2(const char *cmd, FILE *pipes[2])
 		close(pipe_read[0]);
 
 		wordexp_t p;
-		wordexp(cmd, &p, 0);
+		if (wordexp(cmd, &p, 0) != 0)
+		{
+			return -1;
+		}
 		
-		execvp(p.we_wordv[0], p.we_wordv);
+		execvp(p.we_wordv[0], p.we_wordv); // TODO add error handling
 		_exit(1);
 	}
 	else // parent
@@ -285,6 +292,11 @@ pid_t popen2(const char *cmd, FILE *pipes[2])
 	}
 }
 
+/*
+ * Creates a font parameter string that can be used when running lemonbar.
+ * If the given font is not set, fontstr() will return an empty string.
+ * In any case, the string returnd is malloc'd, so remember to free it.
+ */
 char *fontstr(const char *font)
 {
 	char *str = NULL;
@@ -303,6 +315,10 @@ char *fontstr(const char *font)
 	return str;
 }
 
+/*
+ * Runs the bar process and opens file descriptors for reading and writing.
+ * Returns 0 on success, -1 if bar could not be started.
+ */
 int open_bar(struct bar *b)
 {
 	char w[8];
@@ -315,42 +331,57 @@ int open_bar(struct bar *b)
 	char *label_font = fontstr(b->label_font);
 	char *affix_font = fontstr(b->affix_font);
 
-	size_t max_cmd_len = 1024; // TODO 1024? U sure?
-	char bar_cmd[max_cmd_len];
-	snprintf(bar_cmd, max_cmd_len,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s",
-		BAR_PROCESS,
-		(b->w > 0) ? w : "",
-		(b->h > 0) ? h : "",
-		b->x,
-		b->y,
-		(b->fg && strlen(b->fg)) ? b->fg : "-", 
-		(b->bg && strlen(b->bg)) ? b->bg : "-",
-		(b->lc && strlen(b->lc)) ? b->lc : "-",	
-		b->lw,
-		(b->bottom) ? "-b" : "",
-		(b->force)  ? "-d" : "",
-		block_font,
-		label_font,
-		affix_font
+	size_t buf_len = 25;
+	buf_len += strlen(BAR_PROCESS);
+	buf_len += strlen(block_font);
+	buf_len += strlen(label_font);
+	buf_len += strlen(affix_font);
+	buf_len += (16 + 16 + 27 + 4 + 4);
+
+	char bar_cmd[buf_len];
+	snprintf(bar_cmd, buf_len,
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s", // 24+1
+		BAR_PROCESS, // strlen
+		(b->w > 0) ? w : "", // max 8
+		(b->h > 0) ? h : "", // max 8
+		b->x, // max 8
+		b->y, // max 8
+		(b->fg && strlen(b->fg)) ? b->fg : "-", // strlen, max 9
+		(b->bg && strlen(b->bg)) ? b->bg : "-", // strlen, max 9
+		(b->lc && strlen(b->lc)) ? b->lc : "-",	// strlen, max 9
+		b->lw, // max 4
+		(b->bottom) ? "-b" : "", // max 2
+		(b->force)  ? "-d" : "", // max 2
+		block_font, // strlen
+		label_font, // strlen
+		affix_font  // strlen
 	);
 
 	free(block_font);
 	free(label_font);
 	free(affix_font);
 
-	printf("Bar command:\n\t%s\n", bar_cmd);
+	printf("Bar command: (length %d/%d)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 
 	FILE *fd[2];
-	int pid = popen2(bar_cmd, fd);
+	if (popen2(bar_cmd, fd) == -1)
+	{
+		return -1;
+	}
+
 	setlinebuf(fd[0]);
 	setlinebuf(fd[1]);
 	b->fd_in = fd[1];
 	b->fd_out = fd[0];
 
-	return 1;
+	return 0;
 }
 
+/*
+ * Runs a block and creates a file descriptor for reading.
+ * Returns 0 on success, -1 if block could not be executed.
+ * TODO: Should this function check if the block is already open?
+ */
 int open_block(struct block *b)
 {
 	if (b->input)
@@ -365,44 +396,52 @@ int open_block(struct block *b)
 	{
 		b->fd = popen(b->path, "r");
 	}
-	return (b->fd == NULL) ? 0 : 1;
+	return (b->fd == NULL) ? -1 : 0;
 }
 
 /*
  * Convenience function: simply runs open_block() for all blocks.
+ * Returns the number of blocks that were successfully opened.
  */
-void open_blocks(struct block *blocks, int num_blocks)
+int open_blocks(struct block *blocks, int num_blocks)
 {
+	int blocks_opened;
 	for(int i=0; i<num_blocks; ++i)
 	{
-		open_block(&blocks[i]);
+		blocks_opened += (open_block(&blocks[i]) == 0) ? 1 : 0;
 	}
+	return blocks_opened;
 }
 
+/*
+ * Closes the given bar process by closing its file descriptors.
+ * The descriptors will also be set to NULL after closing.
+ */
 void close_bar(struct bar *b)
 {
 	if (b->fd_in != NULL)
 	{
 		fclose(b->fd_in);
+		b->fd_in = NULL;
 	}
 	if (b->fd_out != NULL)
 	{
 		fclose(b->fd_out);
+		b->fd_out = NULL;
 	}
 }
 
 /*
- * TODO: do we really need the return value? Maybe make it void.
+ * Closes the given block by closing its file descriptor.
+ * The descriptor will also be set to NULL after closing.
  */
-int close_block(struct block *b)
+void close_block(struct block *b)
 {
-	if (b->fd == NULL)
+	if (b->fd != NULL)
 	{
-		return 0;
+		pclose(b->fd);
+		b->fd = NULL;
 	}
-	pclose(b->fd);
-	b->fd = NULL;	
-	return 1;
 }
 
 /*
@@ -420,47 +459,52 @@ int open_trigger(struct trigger *t)
 {
 	if (t->cmd == NULL)
 	{
-		return 0;
+		return -1;
 	}
 	t->fd = popen(t->cmd, "r");
 	if (t->fd == NULL)
 	{
-		printf("Failed to open trigger: %s\n", t->cmd);
-		return 0;
+		return -1;
 	}
-	setlinebuf(t->fd);
+	setlinebuf(t->fd); // TODO add error handling
 	int fn = fileno(t->fd);
 	int flags;
-	flags = fcntl(fn, F_GETFL, 0);
+	flags = fcntl(fn, F_GETFL, 0); // TODO add error handling
 	flags |= O_NONBLOCK;
-	fcntl(fn, F_SETFL, flags);
-	return 1;
+	fcntl(fn, F_SETFL, flags); // TODO add error handling
+	return 0;
 }
 
 /*
- * TODO: do we really need the return value? Maybe make it void.
+ * Closes the trigger by closing its file descriptor.
+ * Also sets the file descriptor to NULL.
  */
-int close_trigger(struct trigger *t)
+void close_trigger(struct trigger *t)
 {
-	if (t->fd == NULL)
+	if (t->fd != NULL)
 	{
-		return 0;
+		pclose(t->fd);
+		t->fd = NULL;
 	}
-	pclose(t->fd);
-	t->fd = NULL;
-	return 1;
 }
 
+/*
+ * Convenience function: simply opens all given triggers.
+ * Returns the number of successfully opened triggers.
+ */ 
 int open_triggers(struct trigger *triggers, int num_triggers)
 {
 	int num_triggers_opened = 0;
 	for (int i=0; i<num_triggers; ++i)
 	{
-		num_triggers_opened += open_trigger(&triggers[i]);
+		num_triggers_opened += (open_trigger(&triggers[i]) == 0) ? 1 : 0;
 	}
 	return num_triggers_opened;
 }
 
+/*
+ * Convenience function: simply closes all given triggers.
+ */
 void close_triggers(struct trigger *triggers, int num_triggers)
 {
 	for (int i=0; i<num_triggers; ++i)
@@ -494,13 +538,21 @@ void free_triggers(struct trigger *triggers, int num_triggers)
 	}
 }
 
+/*
+ * Executes the given block by calling open_block() on it and saves the output 
+ * of the block, if any, in its `result` field. If the block was run for the 
+ * first time, it will be marked as `used`. The `result_length` argument gives
+ * the size of the buffer that will be used to fetch the block's output.
+ * Returns 0 on success, -1 if the block could not be run or its output could
+ * not be fetched.
+ */
 int run_block(struct block *b, size_t result_length)
 {
 	open_block(b);
 	if (b->fd == NULL)
 	{
-		printf("Block is dead: `%s`", b->name);
-		return 0;
+		// printf("Block is dead: `%s`", b->name);
+		return -1;
 	}
 	if (b->result != NULL)
 	{
@@ -510,15 +562,15 @@ int run_block(struct block *b, size_t result_length)
 	b->result = malloc(result_length);
 	if (fgets(b->result, result_length, b->fd) == NULL)
 	{
-		printf("Unable to fetch input from block: `%s`", b->name);
+		// printf("Unable to fetch input from block: `%s`", b->name);
 		close_block(b);
-		return 0;
+		return -1;
 	}
 	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
 	b->used = 1; // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
 	close_block(b);
-	return 1;
+	return 0;
 }
 
 /*
@@ -568,7 +620,10 @@ char *escape(const char *str, size_t *diff)
  * Given a block, it returns a pointer to a string that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
  * label and suffix. The string is malloc'd and should be free'd by the caller.
- * TODO: what does len do exactly? Do we calculate len in snprintf correctly?
+ * If `len` is positive, it will be used as buffer size for the result string.
+ * This means that `len` needs to be big enough to contain the fully formatted 
+ * string this function is putting together, otherwise truncation will happen.
+ * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
@@ -616,24 +671,43 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	size_t diff;
 	char *result = escape(block->result, &diff);
 
-	char *str = malloc(len + diff); // TODO bad idea to use len!
-	snprintf(str, len,
-		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"
+	size_t buf_len;
+
+	if (len > 0)
+	{
+		// If len is given, we use that as buffer size
+		buf_len = len;
+	}
+	else
+	{
+		// Required buffer mainly depends on the result and name of a block
+		buf_len = 75 + 57;
+		buf_len += strlen(action_start);
+		buf_len += bar->prefix ? strlen(bar->prefix) : 0;
+		buf_len += bar->suffix ? strlen(bar->suffix) : 0;
+		buf_len += block->label ? strlen(block->label) : 0;
+		buf_len += strlen(result);
+	}
+	
+	char *str = malloc(buf_len);
+	snprintf(str, buf_len,
+		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"        // 26 + 48 = 74
 		"%%{T3}%s%%{T2}%s%%{T1}%*s%%{T3}%s%%{T-}%%{F-}%%{B-}%%{U-}%s",
-		action_start,
-		block->offset,
-		block->fg && strlen(block->fg) ? block->fg : "-",
-		block->bg && strlen(block->bg) ? block->bg : "-",
-		block->lc && strlen(block->lc) ? block->lc : "-",
-		block->ol ? '+' : '-',
-		block->ul ? '+' : '-',
-		bar->prefix ? bar->prefix : "",
-		block->label ? block->label : "",
-		block->padding + diff,
-		result,
-		bar->suffix ? bar->suffix : "",
-		action_end
+		action_start,                                     // strlen
+		block->offset,                                    // max 4
+		block->fg && strlen(block->fg) ? block->fg : "-", // strlen, max 9
+		block->bg && strlen(block->bg) ? block->bg : "-", // strlen, max 9
+		block->lc && strlen(block->lc) ? block->lc : "-", // strlen, max 9
+		block->ol ? '+' : '-',                            // 1
+		block->ul ? '+' : '-',                            // 1
+		bar->prefix ? bar->prefix : "",                   // strlen
+		block->label ? block->label : "",                 // strlen
+		block->padding + diff,                            // max 4
+		result,                                           // strlen
+		bar->suffix ? bar->suffix : "",                   // strlen
+		action_end                                        // 5*4
 	);
+
 	free(result);
 	return str;
 }
@@ -654,24 +728,33 @@ char get_align(const int align)
  */
 char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
 {
-	size_t blockstr_len = 1024; // TODO 1024? Let's add some realloc logic here!
-	char *bar_str = malloc(blockstr_len * num_blocks);
+	// Short blocks like temperatur, volume or battery info will usually use 
+	// something in the range of 140 to 210 byte. So let's go with 256 byte.
+	size_t bar_str_len = 256 * num_blocks;
+	char *bar_str = malloc(bar_str_len);
 	bar_str[0] = '\0';
 
 	char align[5];
-	int last_align = blocks[0].align;
-	snprintf(align, 5, "%%{%c}", get_align(last_align));
-	strcat(bar_str, align);
+	int last_align;
 
 	for (int i=0; i<num_blocks; ++i)
 	{
-		char *block_str = blockstr(bar, &blocks[i], blockstr_len);
+		char *block_str = blockstr(bar, &blocks[i], 0);
+		size_t block_str_len = strlen(block_str);
 		if (blocks[i].align != last_align)
 		{
 			last_align = blocks[i].align;
 			snprintf(align, 5, "%%{%c}", get_align(last_align));
 			strcat(bar_str, align);
-		}	
+		}
+		// Let's check if this block string can fit in our buffer
+		size_t free_len = bar_str_len - (strlen(bar_str) + 1);
+		if (block_str_len > free_len)
+		{
+			// Let's make space for approx. two more blocks
+			bar_str_len += 256 * 2; 
+			bar_str = realloc(bar_str, bar_str_len);
+		}
 		strcat(bar_str, block_str);
 		free(block_str);
 	}
@@ -684,8 +767,7 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 {
 	if (bar->fd_in == NULL)
 	{
-		perror("Bar seems dead");
-		return 0;
+		return -1;
 	}
 
 	int num_blocks_executed = 0;	
@@ -696,7 +778,7 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 		blocks[i].waited += delta;
 		if (!blocks[i].used || blocks[i].input || blocks[i].waited >= blocks[i].reload)
 		{
-			num_blocks_executed += run_block(&blocks[i], 64);
+			num_blocks_executed += (run_block(&blocks[i], 64) == 0) ? 1 : 0;
 		}
 		if (blocks[i].input == NULL && (blocks[i].reload - blocks[i].waited) < until_next)
 		{
@@ -881,16 +963,20 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	return 0; // unknown section/name, error
 }
 
+/*
+ * Tries to load the config file (succaderc) and then goes on to set up the bar
+ * by setting its properties according to the values read from the config file.
+ * Returns 0 on success, -1 if the config file could not be found or read.
+ */
 int configure_bar(struct bar *b, const char *config_dir)
 {
 	char rc[PATH_MAX];
 	snprintf(rc, sizeof(rc), "%s/%src", config_dir, NAME);
 	if (ini_parse(rc, bar_ini_handler, b) < 0)
 	{
-		printf("Can't parse rc file %s\n", rc);
-		return 0;
+		return -1;
 	}
-	return 1;
+	return 0;
 }
 
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
@@ -1175,10 +1261,10 @@ int run_trigger(struct trigger *t)
 		return 0;
 	}
 
-	char res[512]; // TODO: Why 512? Why not something else?
+	char res[BUFFER_SIZE];
 	int num_lines = 0;
 
-	while (fgets(res, 512, t->fd) != NULL)
+	while (fgets(res, BUFFER_SIZE, t->fd) != NULL)
 	{
 		++num_lines;
 	}
@@ -1299,7 +1385,7 @@ int main(void)
 	// Prevent zombie children during runtime
 	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
 	{
-		printf("Failed to ignore children's signals\n");
+		fprintf(stderr, "Failed to ignore children's signals\n");
 	}
 
 	char *configdir = config_dir();
@@ -1315,15 +1401,15 @@ int main(void)
 	struct bar lemonbar;
 	init_bar(&lemonbar);
 
-	if (!configure_bar(&lemonbar, configdir))
+	if (configure_bar(&lemonbar, configdir) == -1)
 	{
-		printf("Failed to load RC file: %src\n", NAME);
-		exit(1);
+		fprintf(stderr, "Failed to load RC file: %src\n", NAME);
+		exit(EXIT_FAILURE);
 	}
-	if (!open_bar(&lemonbar))
+	if (open_bar(&lemonbar) == -1)
 	{
-		printf("Failed to open bar: %s\n", BAR_PROCESS);
-		exit(1);
+		fprintf(stderr, "Failed to open bar: %s\n", BAR_PROCESS);
+		exit(EXIT_FAILURE);
 	}
 
 	free(configdir);
@@ -1471,8 +1557,8 @@ int main(void)
 		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
-			char act[1024]; // TODO why 1024? why not something else?
-			fgets(act, 1024, lemonbar.fd_out);
+			char act[BUFFER_SIZE];
+			fgets(act, BUFFER_SIZE, lemonbar.fd_out);
 			// printf("action_registered: %s\n", act);
 			if (process_action(act, blocks, num_blocks) < 0)
 			{
