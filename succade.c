@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <time.h>
 #include <fcntl.h>
+#include <float.h>
 #include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -771,7 +772,8 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, double de
 	}
 
 	int num_blocks_executed = 0;	
-	double until_next = 5;
+//	double until_next = 5; // TODO 5? Why? Shouldn't it be "infinity"?
+	double until_next = DBL_MAX;
 
 	for(int i=0; i<num_blocks; ++i)
 	{
@@ -1070,7 +1072,7 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 /*
  * Load the configuration file (ini) for the given block, if it exists,
  * and have the ini reader (inih) call block_ini_handler() accordingly.
- * Returns 1 on success, 0 if the config file does'n exist or couldn't be read.
+ * Returns 0 on success, -1 if the config file does'n exist or couldn't be read.
  */
 int configure_block(struct block *b, const char *blocks_dir)
 {
@@ -1078,27 +1080,31 @@ int configure_block(struct block *b, const char *blocks_dir)
 	if (access(blockini, R_OK) == -1)
 	{
 		//printf("No block config found for: %s\n", b->name);
-		return 0;
+		return -1;
 	}
 	if (ini_parse(blockini, block_ini_handler, b) < 0)
 	{
-		printf("Can't parse block INI: %s\n", blockini);
+		//printf("Can't parse block INI: %s\n", blockini);
 		free(blockini);
-		return 0;
+		return -1;
 	}
 	free(blockini);
-	return 1;
+	return 0;
 }
 
 /*
  * Convenience function: simply runs configure_block() for all blocks.
+ * Returns the number of blocks that were successfully configured.
  */
 int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
 {
+	int num_blocks_configured = 0;
 	for (int i=0; i<num_blocks; ++i)
 	{
-		configure_block(&blocks[i], blocks_dir);
+		num_blocks_configured += 
+			(configure_block(&blocks[i], blocks_dir) == 0) ? 1 : 0;
 	}
+	return num_blocks_configured;
 }
 
 /*
@@ -1286,19 +1292,19 @@ int run_trigger(struct trigger *t)
 /*
  * Run the given command, which we want to do when the user triggers 
  * an action of a clickable area that has a command associated with it.
- * Returns the pid of the spawned process or 0 if running it failed.
+ * Returns the pid of the spawned process or -1 if running it failed.
  */
 pid_t run_cmd(const char *cmd)
 {
 	if (!cmd || !strlen(cmd))
 	{
-		return 0;
+		return -1;
 	}
 	wordexp_t p;
 	if (wordexp(cmd, &p, 0) != 0)
 	{
-		printf("Could not parse the command:\n\t'%s'\n", cmd);
-		return 0;
+		//printf("Could not parse the command:\n\t'%s'\n", cmd);
+		return -1;
 	}
 	
 	/*
@@ -1315,7 +1321,7 @@ pid_t run_cmd(const char *cmd)
 	int res = posix_spawnp(&pid, p.we_wordv[0], NULL, NULL, p.we_wordv, environ);
 	wordfree(&p);
 
-	return (res == 0 ? pid : 0);
+	return (res == 0 ? pid : -1);
 }
 
 int process_action(const char *action, struct block *blocks, int num_blocks)
@@ -1377,7 +1383,7 @@ int process_action(const char *action, struct block *blocks, int num_blocks)
 		}
 	}
 
-	return -2; // Could not find the block associated with the action
+	return -1; // Could not find the block associated with the action
 }
 
 int main(void)
@@ -1387,6 +1393,10 @@ int main(void)
 	{
 		fprintf(stderr, "Failed to ignore children's signals\n");
 	}
+
+	/*
+	 * DIRECTORIES
+	 */
 
 	char *configdir = config_dir();
 	printf("Config directory:\n\t%s\n", configdir);
@@ -1478,16 +1488,17 @@ int main(void)
 	printf("\n");
 
 	/* 
-	 * EVENTS
+	 * EVENTS - register our triggers with the system so we'll be notified
 	 */
 
 	int epfd = epoll_create(1);
 	if (epfd < 0)
 	{
-		printf("Could not create epoll file descriptor\n");
-		exit(1);
+		fprintf(stderr, "Could not create epoll file descriptor\n");
+		exit(EXIT_FAILURE);
 	}
 
+	// Let's first register all our triggers associated with blocks	 
 	int epctl_result = 0;
 	for (int i=0; i<num_triggers; ++i)
 	{
@@ -1501,14 +1512,19 @@ int main(void)
 		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
 	}
 
+	if (epctl_result)
+	{
+		fprintf(stderr, "%d trigger events could not be registered\n", -1 * epctl_result);
+	}
+
+	// Now let's also add the bar trigger
 	struct epoll_event eev = { 0 };
 	eev.data.ptr = &bartrig;
 	eev.events = EPOLLIN | EPOLLET;
-	epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(bartrig.fd), &eev);
 
-	if (epctl_result)
+	if (epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(bartrig.fd), &eev))
 	{
-		printf("%d trigger events could not be registered\n", -1 * epctl_result);
+		fprintf(stderr, "Failed to register bar trigger - clickable areas will not work.\n");
 	}
 
 	/*
@@ -1518,20 +1534,16 @@ int main(void)
 	double now;
 	double before = get_time();
 	double delta;
-	double wait;
+	double wait = 0.0;
+
+	char bar_output[BUFFER_SIZE];
+	bar_output[0] = '\0';
 
 	while (1)
 	{
 		now = get_time();
 		delta = now - before;
 		before = now;
-
-		/*
-		if (fgets(buf, 256, fdchild[0]) != NULL)
-		{
-			printf("OUTPUT: %s\n", buf);
-		}
-		*/
 
 		struct epoll_event tev[num_triggers];
 		int num_events = epoll_wait(epfd, tev, num_triggers, wait * 1000);
@@ -1557,21 +1569,29 @@ int main(void)
 		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
-			char act[BUFFER_SIZE];
-			fgets(act, BUFFER_SIZE, lemonbar.fd_out);
-			// printf("action_registered: %s\n", act);
-			if (process_action(act, blocks, num_blocks) < 0)
-			{
-				// It wasn't a recognized command, so chances
-				// are that it was some debug/error output
-				// of Lemonbar. Let's print this to stdout.
-				printf("Lemonbar: %s", act);
-			}
+			fgets(bar_output, BUFFER_SIZE, lemonbar.fd_out);
 			bartrig.ready = 0;
 		}
 
+		// Let's process bar's output, if any
+		if (strlen(bar_output))
+		{
+			if (process_action(bar_output, blocks, num_blocks) < 0)
+			{
+				// It wasn't a recognized command, so chances are
+				// that is was some debug/error output of bar.
+				printf("Lemonbar: %s", bar_output);
+			}
+			bar_output[0] = '\0';
+		}
+
+		// Let's update bar!
 		feed_bar(&lemonbar, blocks, num_blocks, delta, &wait);
 	}
+
+	/*
+	 * CLEAN UP
+	 */
 
 	close(epfd);
 	free_blocks(blocks, num_blocks);
@@ -1579,6 +1599,8 @@ int main(void)
 	close_triggers(triggers, num_triggers);
 	free_triggers(triggers, num_triggers);
 	free(triggers);
+	close_trigger(&bartrig);
+	free_trigger(&bartrig);
 	close_bar(&lemonbar);
 	free_bar(&lemonbar);
 	return 0;
