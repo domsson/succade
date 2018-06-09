@@ -1,9 +1,13 @@
 format="desktop | | wifi volume temp battery datetime"
-foreground="#000000"
-background="#77FFFFFF"
+foreground="#00FF00"
+bg="#333333"
 height=24
+line="#00FF00"
+line-width=2
 dock=bottom
 force=false
 prefix=" [ " 
 suffix=" ] "
-
+font=6x13
+#label-font=7x13
+#affix-font=9x15
