@@ -1142,17 +1142,21 @@ int is_hidden(const char *filename)
 	return filename[0] == '.';
 }
 
-int is_executable(const char *filename)
+/*
+ * Returns 1 if the given file is executable, 0 otherwise.
+ */
+int is_executable(const char *dir, const char *filename)
 {
-	return 1;
-	// TODO this needs the PATH of the file as well...
+	char *file = filepath(dir, filename, NULL);
 	struct stat sb;
-	return (stat(filename, &sb) == 0 && sb.st_mode & S_IXUSR);
+	int is_exec = (stat(file, &sb) == 0 && sb.st_mode & S_IXUSR);
+	free(file);
+	return is_exec;
 }
 
-int probably_a_block(const char *filename)
+int probably_a_block(const char *dir, const char *filename)
 {
-	return !is_ini(filename) && !is_hidden(filename) && is_executable(filename);
+	return !is_ini(filename) && !is_hidden(filename) && is_executable(dir, filename);
 }
 
 int create_triggers(struct trigger **triggers, struct block *blocks, int num_blocks)
@@ -1195,7 +1199,7 @@ int count_blocks(const char *blockdir)
 	struct dirent *entry;
 	while ((entry = readdir(block_dir)) != NULL)
 	{
-		if (entry->d_type == DT_REG && probably_a_block(entry->d_name))
+		if (entry->d_type == DT_REG && probably_a_block(blockdir, entry->d_name))
 		{
 			++num_blocks;
 		}
