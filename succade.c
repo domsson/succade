@@ -739,7 +739,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	bar_str[0] = '\0';
 
 	char align[5];
-	int last_align;
+	int last_align = 0;
 
 	for (int i=0; i<num_blocks; ++i)
 	{
@@ -1428,16 +1428,18 @@ void sigint_handler()
 int main(void)
 {
 	// Prevent zombie children during runtime
-	struct sigaction sa_chld;
-	sa_chld.sa_handler = SIG_IGN;
+	struct sigaction sa_chld = {
+		.sa_handler = SIG_IGN
+	};
 	if (sigaction(SIGCHLD, &sa_chld, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to ignore children's signals\n");
 	}
 
 	// Make sure we still do clean-up on SIGINT (ctrl+c)
-	struct sigaction sa_int;
-	sa_int.sa_handler = &sigint_handler;
+	struct sigaction sa_int = {
+		.sa_handler = &sigint_handler
+	};
 	if (sigaction(SIGINT, &sa_int, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to register SIGINT handler\n");
