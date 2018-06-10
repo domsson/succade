@@ -4,10 +4,6 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works alm
 
 ![Example bar](https://i.imgur.com/IQ26ypO.png)
 
-# Status
-
-This is currently a work in progress and I'm sure there are nasty bugs still to be found - this is my first time writing C. However, succade seems to work quite well for me already. You might want to give it a try!
-
 # How does it work?
 
 - Starts `lemonbar` for you
@@ -23,15 +19,17 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # What's missing?
 
+- Support for _live_ blocks
 - Support for multiple bars
 - Support for multiple monitors
 - Lots of testing to find and fix bugs
-- Refactoring / cleaning up
+- Some Refactoring
 
 # Dependencies
 
 - `lemonbar`, obviously
 - `inih`, but that's included in this repository
+- `gcc`, to compile succade
 
 # How to install
 
@@ -55,14 +53,14 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # How to configure
 
-Take a look at the example configuration in this repository. The bar and some general configuration happens in `succaderc`, plus every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available and the names of those already in place are subject to change. However, I'm trying to keep a high compatibility to Captain. Check our the example files here, as well as the Captain wiki and play around. Eventually, as things are finally decided upon, there will be extensive documentation here.
+Take a look at the example configuration in this repository. The general configuration of the bar happens in `succaderc`. Additionally, every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available are subject to change. However, I'm trying to keep a high compatibility to Captain.
 
 ## succarerc
 
-`succaderc` is the config file for the bar itself. You need this file, otherwise succade won't start. All least the `format` property needs to be defined, everything else is optional.
+`succaderc` is the config file for the bar itself. You need this file, otherwise succade won't start. At least the `format` property needs to be defined, everything else is optional.
 
-- `format`  
-   Specifies what blocks to display on the bar - and where. Just write down the file names of your blocks, separated by spaces. By adding two pipes you can tell succade to align the blocks left, center or right, depending on whether you note down the block names on the left of the pipes, the right of the pipes or in the middle of the two pipes. Example: `desktop | title | time`
+- `format` (string, required)  
+   Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: `desktop | title | time`
 - `w` or `width` (int)  
    Width of the bar in pixel - omit this value for a full-width bar.
 - `h` or `height` (int)  
@@ -96,7 +94,7 @@ Take a look at the example configuration in this repository. The bar and some ge
 
 ## name-of-block.ini
 
-In the block directory, you can create one config file for each block. The file name should be the same as the block, but end in `.ini`. For example, if you have a `time` block (script), name the config file `time.ini`. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there.
+In the block directory, you can create one config file for each block. The file name should be the same as the block, but end in `.ini`. For example, if you have a `time` block (script), name the config file `time.ini`. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there. This way, you can specify a default font color in `succaderc`, but decide to give some blocks a different one via their own config.
 
 - `fg` or `foreground` (string)  
    See above.
