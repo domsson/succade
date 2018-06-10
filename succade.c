@@ -21,7 +21,8 @@
 #define BAR_PROCESS "lemonbar"
 #define BUFFER_SIZE 2048
 
-extern char **environ;      // Required to pass the env to child cmds
+extern char **environ;        // Required to pass the env to child cmds
+static volatile int running;  // Used to stop main loop in case of SIGINT
 
 struct bar
 {
@@ -1415,12 +1416,31 @@ int process_action(const char *action, struct block *blocks, int num_blocks)
 	return -1; // Could not find the block associated with the action
 }
 
+/*
+ * Handles SIGINT signals (CTRL+C) by setting the static variable
+ * `running` to 0, effectively ending the main loop, so that clean-up happens.
+ */
+void sigint_handler()
+{
+	running = 0;
+}
+
 int main(void)
 {
 	// Prevent zombie children during runtime
-	if (signal(SIGCHLD, SIG_IGN) == SIG_ERR)
+	struct sigaction sa_chld;
+	sa_chld.sa_handler = SIG_IGN;
+	if (sigaction(SIGCHLD, &sa_chld, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to ignore children's signals\n");
+	}
+
+	// Make sure we still do clean-up on SIGINT (ctrl+c)
+	struct sigaction sa_int;
+	sa_int.sa_handler = &sigint_handler;
+	if (sigaction(SIGINT, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGINT handler\n");
 	}
 
 	/*
@@ -1584,7 +1604,9 @@ int main(void)
 	char bar_output[BUFFER_SIZE];
 	bar_output[0] = '\0';
 
-	while (1)
+	running = 1;
+
+	while (running)
 	{
 		now = get_time();
 		delta = now - before;
@@ -1640,6 +1662,8 @@ int main(void)
 	 * CLEAN UP
 	 */
 
+	fprintf(stderr, "succade is about to shutdown, performing clean-up...\n");
+
 	close(epfd);
 	free_blocks(blocks, num_blocks);
 	free(blocks);
@@ -1650,6 +1674,8 @@ int main(void)
 	free_trigger(&bartrig);
 	close_bar(&lemonbar);
 	free_bar(&lemonbar);
+
+	fprintf(stderr, "Clean-up finished, see you next time!\n");
 
 	return EXIT_SUCCESS;
 }
