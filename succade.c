@@ -362,7 +362,7 @@ int open_bar(struct bar *b)
 	free(label_font);
 	free(affix_font);
 
-	printf("Bar command: (length %d/%d)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
+	printf("Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 
 	FILE *fd[2];
 	if (popen2(bar_cmd, fd) == -1)
@@ -514,7 +514,7 @@ void close_triggers(struct trigger *triggers, int num_triggers)
 	}
 }
 
-int free_trigger(struct trigger *t)
+void free_trigger(struct trigger *t)
 {
 	free(t->cmd);
 	t->cmd = NULL;
@@ -672,6 +672,7 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 
 	size_t diff;
 	char *result = escape(block->result, &diff);
+	int padding = block->padding + diff;
 
 	size_t buf_len;
 
@@ -704,7 +705,7 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 		block->ul ? '+' : '-',                            // 1
 		bar->prefix ? bar->prefix : "",                   // strlen
 		block->label ? block->label : "",                 // strlen
-		block->padding + diff,                            // max 4
+		padding,                                                        // max 4
 		result,                                           // strlen
 		bar->suffix ? bar->suffix : "",                   // strlen
 		action_end                                        // 5*4
@@ -1299,13 +1300,12 @@ int run_trigger(struct trigger *t)
 	
 	if (num_lines)
 	{
-		struct block *b = t->b;
-		if (b->input != NULL)
+		if (t->b->input != NULL)
 		{
-			free(b->input);
-			b->input = NULL;
+			free(t->b->input);
+			t->b->input = NULL;
 		}
-		b->input = strdup(res);
+		t->b->input = strdup(res);
 	}
 	
 	return num_lines;
