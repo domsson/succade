@@ -1665,6 +1665,7 @@ int main(void)
 	fprintf(stderr, "succade is about to shutdown, performing clean-up...\n");
 
 	close(epfd);
+	close_blocks(blocks, num_blocks);
 	free_blocks(blocks, num_blocks);
 	free(blocks);
 	close_triggers(triggers, num_triggers);
