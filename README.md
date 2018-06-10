@@ -55,7 +55,7 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 Take a look at the example configuration in this repository. The general configuration of the bar happens in `succaderc`. Additionally, every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available are subject to change. However, I'm trying to keep a high compatibility to Captain.
 
-## succarerc
+## succaderc
 
 `succaderc` is the config file for the bar itself. You need this file, otherwise succade won't start. At least the `format` property needs to be defined, everything else is optional.
 
