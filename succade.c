@@ -34,6 +34,8 @@ struct bar
 	char *lc;               // Overline/underline color
 	char *prefix;           // Prepend this to every block's result
 	char *suffix;           // Append this to every block's result
+	int ol : 1;		// Draw overline for all blocks?
+	int ul : 1;		// Draw underline for all blocks?
 	size_t lw : 8;          // Overline/underline width in px
 	size_t w : 16;          // Width of the bar
 	size_t h : 16;          // Height of the bar
@@ -41,10 +43,17 @@ struct bar
 	size_t y : 16;          // y-position of the bar
 	int bottom : 1;         // Position bar at bottom of screen?
 	int force : 1;          // Force docking?
+	int offset : 16;        // Offset between any two blocks 
 	char *format;           // List and position of blocks
 	char *block_font;	// The default font to use (slot 1)
 	char *label_font;	// Font used for the label (slot 2)
 	char *affix_font;	// Font used for prefix/suffix (slot 3)
+	char *block_fg;         // Foreground color for all blocks
+	char *block_bg;         // Background color for all blocks
+	char *label_fg;         // Foreground color for all labels
+	char *label_bg;         // Background color for all labels
+	char *affix_fg;         // Foreground color for all affixes
+	char *affix_bg;         // Background color for all affixes
 };
 
 struct block
@@ -54,19 +63,25 @@ struct block
 	FILE *fd;               // File descriptor as returned by popen()
 	char *fg;               // Foreground color
 	char *bg;               // Background color
+	char *block_fg;         // Foreground color for all blocks
+	char *block_bg;         // Background color for all blocks
+	char *label_fg;         // Foreground color for all labels
+	char *label_bg;         // Background color for all labels
+	char *affix_fg;         // Foreground color for all affixes
+	char *affix_bg;         // Background color for all affixes
 	char *lc;               // Overline/underline color
 	int ol : 1;             // Draw overline?
 	int ul : 1;             // Draw underline?
 	size_t padding : 8;     // Minimum width of result in chars
-	size_t offset : 16;     // Offset to next block in px
+	int offset : 16;        // Offset to next block in px
 	int align;              // -1, 0, 1 (left, center, right)
 	char *label;            // Prefixes the result string
 	char *trigger;          // Run block based on this cmd
-	char *cmd_lmb;           // Command to run on left mouse click
-	char *cmd_mmb;         // Command to run on middle mouse click
+	char *cmd_lmb;          // Command to run on left mouse click
+	char *cmd_mmb;          // Command to run on middle mouse click
 	char *cmd_rmb;          // Command to run on right mouse click
-	char *cmd_sup;             // Command to run on scroll up
-	char *cmd_sdn;           // Command to run on scroll down
+	char *cmd_sup;          // Command to run on scroll up
+	char *cmd_sdn;          // Command to run on scroll down
 	int used : 1;           // Has this block been run at least once?
 	double reload;          // Interval between runs 
 	double waited;          // Time the block hasn't been run
@@ -95,18 +110,27 @@ void init_bar(struct bar *b)
 	b->bg = NULL;
 	b->lc = NULL;
 	b->lw = 1;
+	b->ul = 0;
+	b->ol = 0;
 	b->w = 0;
 	b->h = 0;
 	b->x = 0;
 	b->y = 0;
 	b->bottom = 0;
 	b->force = 0;
+	b->offset = 0;
 	b->prefix = NULL;
 	b->suffix = NULL;
 	b->format = NULL;
 	b->block_font = NULL;
 	b->label_font = NULL;
 	b->affix_font = NULL;
+	b->block_fg = NULL;
+	b->block_bg = NULL;
+	b->label_fg = NULL;
+	b->label_bg = NULL;
+	b->affix_fg = NULL;
+	b->affix_bg = NULL;
 }
 
 /*
@@ -122,8 +146,12 @@ void init_block(struct block *b)
 	b->lc = NULL;
 	b->ul = 0;
 	b->ol = 0;
+	b->label_fg = NULL;
+	b->label_bg = NULL;
+	b->affix_fg = NULL;
+	b->affix_bg = NULL;
 	b->padding = 0;
-	b->offset = 0;
+	b->offset = -1;
 	b->align = 0;
 	b->label = NULL;
 	b->used = 0;
@@ -153,6 +181,12 @@ void free_bar(struct bar *b)
 	free(b->block_font);
 	free(b->label_font);
 	free(b->affix_font);
+	free(b->block_fg);
+	free(b->block_bg);
+	free(b->label_fg);
+	free(b->label_bg);
+	free(b->affix_fg);
+	free(b->affix_bg);
 
 	init_bar(b); // Sets all pointers to NULL, just in case
 }
@@ -167,6 +201,10 @@ void free_block(struct block *b)
 	free(b->fg);
 	free(b->bg);
 	free(b->lc);
+	free(b->label_fg);
+	free(b->label_bg);
+	free(b->affix_fg);
+	free(b->affix_bg);
 	free(b->label);
 	free(b->trigger);
 	free(b->cmd_lmb);
@@ -524,6 +562,9 @@ void free_trigger(struct trigger *t)
 	t->bar = NULL;
 }
 
+/*
+ * Convenience function: simply frees all given blocks.
+ */
 void free_blocks(struct block *blocks, int num_blocks)
 {
 	for (int i=0; i<num_blocks; ++i)
@@ -532,6 +573,9 @@ void free_blocks(struct block *blocks, int num_blocks)
 	}
 }
 
+/*
+ * Convenience function: simply frees all given triggers.
+ */
 void free_triggers(struct trigger *triggers, int num_triggers)
 {
 	for (int i=0; i<num_triggers; ++i)
@@ -620,6 +664,23 @@ char *escape(const char *str, size_t *diff)
 }
 
 /*
+ * Returns the second string, if not empty or NULL, otherwise the first.
+ * If both are empty or NULL, the fallback is returned.
+ */
+const char *colorstr(const char *standard, const char *override,  const char *fallback)
+{
+	if (override && strlen(override))
+	{
+		return override;
+	}
+	if (standard && strlen(standard))
+	{
+		return standard;
+	}
+	return fallback;
+}
+
+/*
  * Given a block, it returns a pointer to a string that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
  * label and suffix. The string is malloc'd and should be free'd by the caller.
@@ -630,9 +691,9 @@ char *escape(const char *str, size_t *diff)
  */
 char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 {
-	char action_start[(5 * NAME_MAX) + (5 * 11) + 1];
+	char action_start[(5 * strlen(block->name)) + 56]; // ... + (5 * 11) + 1
 	action_start[0] = 0;
-	char action_end[(5 * 4) + 1];
+	char action_end[21]; // (5 * 4) + 1
 	action_end[0] = 0;
 
 	if (block->cmd_lmb)
@@ -685,30 +746,59 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 	else
 	{
 		// Required buffer mainly depends on the result and name of a block
-		buf_len = 75 + 57;
+		buf_len = 239; // format str = 100, known stuff = 138, '\0' = 1
 		buf_len += strlen(action_start);
 		buf_len += bar->prefix ? strlen(bar->prefix) : 0;
 		buf_len += bar->suffix ? strlen(bar->suffix) : 0;
 		buf_len += block->label ? strlen(block->label) : 0;
 		buf_len += strlen(result);
 	}
-	
+
+	const char *fg = colorstr(bar->block_fg, block->fg, NULL);
+	const char *bg = colorstr(bar->block_bg, block->bg, NULL);
+	const char *lc = colorstr(bar->lc, block->lc, NULL);
+	const char *label_fg = colorstr(bar->label_fg, block->label_fg, fg);
+	const char *label_bg = colorstr(bar->label_bg, block->label_bg, bg);
+	const char *affix_fg = colorstr(bar->affix_fg, block->affix_fg, fg);
+	const char *affix_bg = colorstr(bar->affix_bg, block->affix_bg, bg);
+        const int offset = (block->offset >= 0) ? block->offset : bar->offset;	
+	const int ol = block->ol ? 1 : (bar->ol ? 1 : 0);
+	const int ul = block->ul ? 1 : (bar->ul ? 1 : 0);
+
 	char *str = malloc(buf_len);
 	snprintf(str, buf_len,
-		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"        // 26 + 48 = 74
-		"%%{T3}%s%%{T2}%s%%{T1}%*s%%{T3}%s%%{T-}%%{F-}%%{B-}%%{U-}%s",
+		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"        // start:  21
+		"%%{T3}%%{F%s}%%{B%s}%s"                          // prefix: 13
+		"%%{T2}%%{F%s}%%{B%s}%s"                          // label:  13
+		"%%{T1}%%{F%s}%%{B%s}%*s"                         // block:  13
+		"%%{T3}%%{F%s}%%{B%s}%s"                          // suffix: 13
+		"%%{T-}%%{F-}%%{B-}%%{U-}%%{-o-u}%s",             // end:    27
+		// Start
 		action_start,                                     // strlen
-		block->offset,                                    // max 4
-		block->fg && strlen(block->fg) ? block->fg : "-", // strlen, max 9
-		block->bg && strlen(block->bg) ? block->bg : "-", // strlen, max 9
-		block->lc && strlen(block->lc) ? block->lc : "-", // strlen, max 9
-		block->ol ? '+' : '-',                            // 1
-		block->ul ? '+' : '-',                            // 1
+		offset,                                           // max 4
+		fg ? fg : "-",                                    // strlen, max 9
+		bg ? bg : "-",                                    // strlen, max 9
+		lc ? lc : "-",                                    // strlen, max 9
+		ol ? '+' : '-',                                   // 1
+		ul ? '+' : '-',                                   // 1
+		// Prefix
+		affix_fg ? affix_fg : "-",                        // strlen, max 9
+		affix_bg ? affix_bg : "-",		          // strlen, max 9
 		bar->prefix ? bar->prefix : "",                   // strlen
+		// Label
+		label_fg ? label_fg : "-",                        // strlen, max 9
+		label_bg ? label_bg : "-",                        // strlen, max 9
 		block->label ? block->label : "",                 // strlen
-		padding,                                                        // max 4
+		// Block
+		fg ? fg : "-",                                    // strlen, max 9
+		bg ? bg : "-",                                    // strlen, max 9
+		padding,                                          // max 4
 		result,                                           // strlen
+		// Suffix
+		affix_fg ? affix_fg : "-",                        // strlen, max 9
+		affix_bg ? affix_bg : "-",                        // strlen, max 9
 		bar->suffix ? bar->suffix : "",                   // strlen
+		// End
 		action_end                                        // 5*4
 	);
 
@@ -733,7 +823,7 @@ char get_align(const int align)
 char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
 {
 	// Short blocks like temperatur, volume or battery info will usually use 
-	// something in the range of 140 to 210 byte. So let's go with 256 byte.
+	// something in the range of 130 to 200 byte. So let's go with 256 byte.
 	size_t bar_str_len = 256 * num_blocks;
 	char *bar_str = malloc(bar_str_len);
 	bar_str[0] = '\0';
@@ -910,7 +1000,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "line"))
+	if (equals(name, "lc") || equals(name, "line"))
 	{
 		bar->lc = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
@@ -918,6 +1008,16 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "line-width"))
 	{
 		bar->lw = atoi(value);
+		return 1;
+	}
+	if (equals(name, "ol") || equals(name, "overline"))
+	{
+		bar->ol = equals(value, "true") ? 1 : 0;
+		return 1;
+	}
+	if (equals(name, "ul") || equals(name, "underline"))
+	{
+		bar->ul = equals(value, "true") ? 1 : 0;
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
@@ -950,6 +1050,11 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 		bar->force = (equals(value, "true")) ? 1 : 0;
 		return 1;
 	}
+	if (equals(name, "offset") || equals(name, "block-offset"))
+	{
+		bar->offset = atoi(value);
+		return 1;
+	}
 	if (equals(name, "prefix") || equals(name, "block-prefix"))
 	{
 		bar->prefix = is_quoted(value) ? unquote(value) : strdup(value);
@@ -978,6 +1083,36 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "affix-font"))
 	{
 		bar->affix_font = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "block-background") || equals(name, "block-bg"))
+	{
+		bar->block_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "block-foreground") || equals(name, "block-fg"))
+	{
+		bar->block_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "label-background") || equals(name, "label-bg"))
+	{
+		bar->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "label-foreground") || equals(name, "label-fg"))
+	{
+		bar->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "affix-background") || equals(name, "affix-bg"))
+	{
+		bar->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "affix-foreground") || equals(name, "affix-fg"))
+	{
+		bar->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	return 0; // unknown section/name, error
@@ -1010,6 +1145,26 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	if (equals(name, "bg") || equals(name, "background"))
 	{
 		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "label-background") || equals(name, "label-bg"))
+	{
+		block->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "label-foreground") || equals(name, "label-fg"))
+	{
+		block->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "affix-background") || equals(name, "affix-bg"))
+	{
+		block->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "affix-foreground") || equals(name, "affix-fg"))
+	{
+		block->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "lc") || equals(name, "line"))
