@@ -1,13 +1,28 @@
+# format is required, it lists the blocks to display
 format="desktop | | wifi volume temp battery datetime"
-foreground="#00FF00"
-bg="#333333"
+# dock defines bar's position: 'top' or 'bottom'
+dock=top
+# height of the bar in pixel
 height=24
-line="#00FF00"
-line-width=2
-dock=bottom
-force=false
-prefix=" [ " 
-suffix=" ] "
+# default font color
+foreground=#ECCB87
+# default background color for the entire bar
+background=#2E3440
+# display underline? true or false
+underline=true
+# display overline? true or false
+overline=false
+# thickness of the line(s) in pixel
+line-width=3
+# color of the line(s), if any
+line=#ECCB87
+# defines a different font color for labels
+label-fg=#EEE
+# string to display in front of every block
+prefix=" " 
+# string to display after every block
+suffix=" "
+# distance between any two blocks in pixel
+offset=8
+# default font to use
 font=6x13
-#label-font=7x13
-#affix-font=9x15
