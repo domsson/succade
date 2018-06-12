@@ -94,7 +94,7 @@ Take a look at the example configuration in this repository. The general configu
 | `label-font`          |                   | string       | Font to use for all block's labels (affixes and actual block content won't be affected). |
 | `affix-font`          |                   | string       | Font to use for all block's prefixes / suffixes (does not affect label and block content). |
 | `block-offset`        | `offset`          | number       | Distance between any two blocks in pixel. Default is `0` |
-| `block-background`    | `block-bg`        | color string | Background color for all blocks (while `fg` tints the whole bar). |
+| `block-background`    | `block-bg`        | color string | Background color for all blocks (while `bg` tints the whole bar). |
 | `label-foreground`    | `label-fg`        | color string | Font color for all block's labels. |
 | `label-background`    | `label-bg`        | color string | Background color for all block's labels. |
 | `affix-foreground`    | `affix-fg`        | color string | Font color for all block's prefixes / suffixes. |
