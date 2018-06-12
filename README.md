@@ -53,14 +53,14 @@ Triggers are commands that succade will run and monitor for output. When there i
 3. Make the build script executable, then run it:  
   `chmod +x ./build`  
   `./build`
-4. Create the config directories:  
+4. Create the config directories (assuming `.config` as your config dir):  
   `mkdir ~/.config/succade`  
   `mkdir ~/.config/succade/blocks`
 5. Copy the example config and example blocks:  
   `cp succaderc ~/.config/succade`  
   `cp blocks/* ~/.config/succade/blocks`
 6. Make sure the blocks are executable:  
-  `chmod +x ~/.config/succade/blocks/name-of-block`
+  `chmod +x ~/.config/succade/blocks/*`
 7. Make `succade` executable and put it somwhere that's included in your path:  
   `chmod +x succade`  
   `cp succade ~/.local/bin`
