@@ -5,7 +5,7 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works alm
 ![Example bar](https://i.imgur.com/IQ26ypO.png)
 ![Example bar](https://i.imgur.com/6iCKW3w.png)
 
-# How does it work?
+# How it works
 
 - Starts `lemonbar` for you
 - Reads the config file `~/.config/succade/succaderc`
@@ -26,11 +26,11 @@ Triggers are commands that succade will run and monitor for output. When there i
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
 - Most settings can be set once for all blocks, then overwritten for individual blocks in their own config, if need be.
 
-# What doesn't work
+# What it can't do
 
 - There is no conditional formatting, blocks always have the colors as defined in the config.
 
-# What's still on the to-do list?
+# To-Do List
 
 - Support for _live_ blocks
 - Support for multiple bars
@@ -73,58 +73,58 @@ Take a look at the example configuration in this repository. The general configu
 
 `succaderc` is the config file for the bar itself. You need this file, otherwise succade won't start. At least the `format` property needs to be defined, everything else is optional.
 
-| Parameter             | Alias             | Type         | Description               |
-|-----------------------|-------------------|--------------|---------------------------|
-| `format`              |                   | string       | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time</code> |
-| `width`               | `w`               | number       | Width of the bar in pixel - omit this value for a full-width bar. |
-| `height`              | `h`               | number       | Height of the bar in pixel. |  
-| `x`                   |                   | number       | x-position of the bar - omit to have it sit at the edge of your screen. |
-| `y`                   |                   | number       | y-position of the bar - omit to have it sit at the edge of your screen. |
-| `dock`                |                   | string       | Set to `bottom` or `top` (default), depending on where you want the bar to show up on your screen. |
-| `force`               |                   | boolean      | Set to `true` if you want to force docking of Lemonbar. Default is `false`. |
-| `foreground`          | `fg`              | color string | Default foreground color (font color) for all blocks. Hex format (example: `#7E22C3`). |
-| `background`          | `bg`              | color string | Default background color for the entire bar. |
-| `line`                | `lc`              | color string | Default underline / overline color for all blocks. |
-| `line-width`          | `lw`              | number       | Thickness of all underlines / overlines, if any, in pixel. |
-| `overline`            | `ol`              | boolean      | Whether or not to draw an overline for all blocks. Set to `true` or `false`. |
-| `underline`           | `ul`              | boolean      | Whether or not to draw an underline for all blocks. |
-| `block-prefix`        | `prefix`          | string       | A string that will be prepended to every block, for example a space: `" "`. |
-| `block-suffix`        | `suffix`          | string       | Same as the prefix, but will be added to the end of every block. |
-| `block-font`          | `font`            | string       | Default font to use for all blocks. |
-| `label-font`          |                   | string       | Font to use for all block's labels (affixes and actual block content won't be affected). |
-| `affix-font`          |                   | string       | Font to use for all block's prefixes / suffixes (does not affect label and block content). |
-| `block-offset`        | `offset`          | number       | Distance between any two blocks in pixel. Default is `0` |
-| `block-background`    | `block-bg`        | color string | Background color for all blocks (while `bg` tints the whole bar). |
-| `label-foreground`    | `label-fg`        | color string | Font color for all block's labels. |
-| `label-background`    | `label-bg`        | color string | Background color for all block's labels. |
-| `affix-foreground`    | `affix-fg`        | color string | Font color for all block's prefixes / suffixes. |
-| `affix-background`    | `affix-bg`        | color string | Background color for all block's prefixes / suffixes. |
+| Parameter             | Alias      | Type    | Description |
+|-----------------------|------------|---------|-------------|
+| `format`              |            | string  | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time</code> |
+| `width`               | `w`        | number  | Width of the bar in pixel - omit this value for a full-width bar. |
+| `height`              | `h`        | number  | Height of the bar in pixel. |  
+| `x`                   |            | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
+| `y`                   |            | number  | y-position of the bar - omit to have it sit at the edge of your screen. |
+| `dock`                |            | string  | Set to `bottom` or `top` (default), depending on where you want the bar to show up on your screen. |
+| `force`               |            | boolean | Set to `true` if you want to force docking of Lemonbar. Default is `false`. |
+| `foreground`          | `fg`       | color   | Default foreground color (font color) for all blocks. Hex format (example: `#7E22C3`). |
+| `background`          | `bg`       | color   | Default background color for the entire bar. |
+| `block-background`    | `block-bg` | color   | Background color for all blocks (while `bg` tints the whole bar). |
+| `label-foreground`    | `label-fg` | color   | Font color for all block's labels. |
+| `label-background`    | `label-bg` | color   | Background color for all block's labels. |
+| `affix-foreground`    | `affix-fg` | color   | Font color for all block's prefixes / suffixes. |
+| `affix-background`    | `affix-bg` | color   | Background color for all block's prefixes / suffixes. |
+| `block-prefix`        | `prefix`   | string  | A string that will be prepended to every block, for example a space: `" "`. |
+| `block-suffix`        | `suffix`   | string  | Same as the prefix, but will be added to the end of every block. |
+| `block-font`          | `font`     | string  | Default font to use for all blocks. |
+| `label-font`          |            | string  | Font to use for all block's labels (affixes and actual block content won't be affected). |
+| `affix-font`          |            | string  | Font to use for all block's prefixes / suffixes (does not affect label and block content). |
+| `line`                | `lc`       | color   | Default underline / overline color for all blocks. |
+| `line-width`          | `lw`       | number  | Thickness of all underlines / overlines, if any, in pixel. |
+| `overline`            | `ol`       | boolean | Whether or not to draw an overline for all blocks. Set to `true` or `false`. |
+| `underline`           | `ul`       | boolean | Whether or not to draw an underline for all blocks. |
+| `block-offset`        | `offset`   | number  | Distance between any two blocks in pixel. Default is `0` |
 
 ## name-of-block.ini
 
 In the block directory, you can create one config file for each block. The file name should be the same as the block, but end in `.ini`. For example, if you have a `time` block (script), name the config file `time.ini`. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there. This way, you can set a default font color in `succaderc`, but decide to give some blocks a different one via their own config.
 
-| Parameter          | Alias             | Type         | Description |
-|--------------------|-------------------|--------------|-------------|
-| `foreground`       | `fg`              | color string | Sets the font color for the whole block. Overwrites the default font color (see above). |
-| `background`       | `bg`              | color string | Sets the background color for the whole block. Overwrites the default font color (see above). |
-| `label-foreground` | `label-fg`        | color string | Sets the font color this the label of this block. Overwrites the default label color. |
-| `label-background` | `label-bg`        | color string | Sets the background color this the label of this block. Overwrites the default. |
-| `affix-foreground` | `affix-fg`        | color string | Sets the font color for the prefix and suffix of this block. Overwrites the default. |
-| `affix-background` | `affix-bg`        | color string | Sets the background color for the prefix and suffix of this block. Overwrites the default. |
-| `line`             | `lc`              | color string | Sets the overline / underline color. Overwrites the default (see above). |
-| `overline`         | `ol`              | boolean      | Whether or not to draw an overline for this block. Overwrites the default. |
-| `underline`        | `ul`              | boolean      | Whether or not to draw an underline for this block. Overwrites the default. |
-| `padding`          | `pad`             | number       | Minimum width of the block's main text. If required, succade will left-pad the string returned by the block with spaces. For example, if you set padding to `6` and your block returns `nice`, then succade will display that as <code>&nbsp;&nbsp;nice</code> (note the spaces). Useful for when you use fixed-width fonts. |
-| `offset`           |                   | number       | Distance to the next block, in pixel. Overwrites the default. |
-| `label`            |                   | string       | A string to be displayed before the block's main text. Can be used to display an icon by using an appropriate font, like Siji. |
-| `reload`           |                   | number       | Defines in what interval (in seconds) this block should be run. Setting this to `5` will run this block every 5 seconds. Lower values will lead to more CPU usage. A third option is to set `reload` to `0`. In this case, succade will run your block once, and only once, effectively creating a static block. |
-| `trigger`          |                   | string       | If your block should be run depending on the output of another command, then set this command here. If you do this, succade will run that trigger command and monitor its output. Whenever the command produces new output, succade will run the block - and pipe the trigger's output as input to the block. This will set `reload` to `0`. |
-| `mouse-left`       |                   | string       | Set this to a command that you want succade to run when you left-click this block. |
-| `mouse-middle`     |                   | string       | See `mouse-left`. |
-| `mouse-right`      |                   | string       | See `mouse-left`. |
-| `scroll-up`        |                   | string       | Set this to a command that you want succade to run when you scroll your mouse wheel up while hovering over this block. |
-| `scroll-down`      |                   | string       | See `scroll-up`. |
+| Parameter          | Alias      | Type    | Description |
+|--------------------|------------|---------|-------------|
+| `reload`           |            | number  | Defines in what interval (in seconds) this block should be run. Setting this to `5` will run this block every 5 seconds. Lower values will lead to more CPU usage. A third option is to set `reload` to `0`. In this case, succade will run your block once, and only once, effectively creating a static block. |
+| `trigger`          |            | string  | If your block should be run depending on the output of another command, then set this command here. If you do this, succade will run that trigger command and monitor its output. Whenever the command produces new output, succade will run the block - and pipe the trigger's output as input to the block. This will set `reload` to `0`. |
+| `label`            |            | string  | A string to be displayed before the block's main text. Can be used to display an icon by using an appropriate font, like Siji. |
+| `padding`          | `pad`      | number  | Minimum width of the block's main text. If required, succade will left-pad the string returned by the block with spaces. For example, if you set padding to `6` and your block returns `nice`, then succade will display that as <code>&nbsp;&nbsp;nice</code> (note the spaces). Useful for when you use fixed-width fonts. |
+| `foreground`       | `fg`       | color   | Sets the font color for the whole block. Overwrites the default font color (see above). |
+| `background`       | `bg`       | color   | Sets the background color for the whole block. Overwrites the default font color (see above). |
+| `label-foreground` | `label-fg` | color   | Sets the font color this the label of this block. Overwrites the default label color. |
+| `label-background` | `label-bg` | color   | Sets the background color this the label of this block. Overwrites the default. |
+| `affix-foreground` | `affix-fg` | color   | Sets the font color for the prefix and suffix of this block. Overwrites the default. |
+| `affix-background` | `affix-bg` | color   | Sets the background color for the prefix and suffix of this block. Overwrites the default. |
+| `line`             | `lc`       | color   | Sets the overline / underline color. Overwrites the default (see above). |
+| `overline`         | `ol`       | boolean | Whether or not to draw an overline for this block. Overwrites the default. |
+| `underline`        | `ul`       | boolean | Whether or not to draw an underline for this block. Overwrites the default. |
+| `offset`           |            | number  | Distance to the next block, in pixel. Overwrites the default. |
+| `mouse-left`       |            | string  | Set this to a command that you want succade to run when you left-click this block. |
+| `mouse-middle`     |            | string  | See `mouse-left`. |
+| `mouse-right`      |            | string  | See `mouse-left`. |
+| `scroll-up`        |            | string  | Set this to a command that you want succade to run when you scroll your mouse wheel up while hovering over this block. |
+| `scroll-down`      |            | string  | See `scroll-up`. |
 
 # Licence
 
