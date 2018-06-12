@@ -20,14 +20,14 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # Notable features
 
-- You can define **labels** for your blocks. Example: for a volume block, have it return "35 %" and define the label "Vol." in the config.
-- You can define a **prefix and suffix** for every block. Want to wrap all blocks in square brackets? That's two lines in the main config.
+- Define **labels** for your blocks. Example: for a volume block, have it return "35 %" and define the label "Vol." in the config.
+- Define a **prefix and suffix** for every block. Want to wrap all blocks in square brackets? That's two lines in the main config.
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
-- Most settings can be set for all blocks (in the main config) but overwritten for individual blocks in their own config, if need be.
+- Most settings can be set once for all blocks, then overwritten for individual blocks in their own config, if need be.
 
 # What doesn't work
 
-- There is no conditional formatting, so you can't have blocks change their color depending on the status of your battery, for example.
+- There is no conditional formatting, blocks always have the colors as defined in the config.
 
 # What's still on the to-do list?
 
