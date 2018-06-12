@@ -12,18 +12,29 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works alm
 - Loads blocks (scripts) and their config files from `~/.config/succade/blocks`
 - Updates Lemonbar based on the block's reloads or triggers
 
-The general config file defines styling and position for the whole bar, lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (prefixes and suffixes).
+The general config file defines styling and position for the whole bar, lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes).
 
 Every block can have a config file that defines its styling, as well as how often the block should be reloaded. Alternatively, a trigger command can be defined.
 
 Triggers are commands that succade will run and monitor for output. When there is output, succade will run the associated block with the trigger's ouput as command line argument.
 
-# What's missing?
+# Notable features
+
+- You can define **labels** for your blocks. Example: for a volume block, have it return "35 %" and define the label "Vol." in the config.
+- You can define a **prefix and suffix** for every block. Want to wrap all blocks in square brackets? That's two lines in the main config.
+- Prefix, suffix, label and actual block content can have different foreground and background colors.
+- Most settings can be set for all blocks (in the main config) but overwritten for individual blocks in their own config, if need be.
+
+# What doesn't work
+
+- There is no conditional formatting, so you can't have blocks change their color depending on the status of your battery, for example.
+
+# What's still on the to-do list?
 
 - Support for _live_ blocks
 - Support for multiple bars
 - Support for multiple monitors
-- Lots of testing to find and fix bugs
+- Lots of testing to find and fix bugs (your help is appreciated!)
 - Some Refactoring
 
 # Dependencies
