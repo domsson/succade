@@ -20,8 +20,9 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # Notable features
 
-- Define **labels** for your blocks. Example: for a volume block, have it return "35 %" and define the label "Vol." in the config.
+- Define **labels** for your blocks. E.g., for a volume block, have it return `35 %` and define the label `Vol.` in the config.
 - Define a **prefix and suffix** for every block. Want to wrap all blocks in square brackets? That's 2 lines in the main config.
+- Define **padding** (fixed width) for your blocks to achieve a uniform look when using fixed-width fonts.
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
 - Most settings can be set once for all blocks, then overwritten for individual blocks in their own config, if need be.
 
@@ -52,14 +53,14 @@ Triggers are commands that succade will run and monitor for output. When there i
 3. Make the build script executable, then run it:  
   `chmod +x ./build`  
   `./build`
-4. Create the config directories:  
+4. Create the config directories (assuming `.config` as your config dir):  
   `mkdir ~/.config/succade`  
   `mkdir ~/.config/succade/blocks`
 5. Copy the example config and example blocks:  
   `cp succaderc ~/.config/succade`  
   `cp blocks/* ~/.config/succade/blocks`
 6. Make sure the blocks are executable:  
-  `chmod +x ~/.config/succade/blocks/name-of-block`
+  `chmod +x ~/.config/succade/blocks/*`
 7. Make `succade` executable and put it somwhere that's included in your path:  
   `chmod +x succade`  
   `cp succade ~/.local/bin`
@@ -74,7 +75,7 @@ Take a look at the example configuration in this repository. The general configu
 
 | Parameter             | Alias             | Type         | Description               |
 |-----------------------|-------------------|--------------|---------------------------|
-| `format`              |                   | string       | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: `desktop | title | time` |
+| `format`              |                   | string       | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time</code> |
 | `width`               | `w`               | number       | Width of the bar in pixel - omit this value for a full-width bar. |
 | `height`              | `h`               | number       | Height of the bar in pixel. |  
 | `x`                   |                   | number       | x-position of the bar - omit to have it sit at the edge of your screen. |
@@ -93,7 +94,7 @@ Take a look at the example configuration in this repository. The general configu
 | `label-font`          |                   | string       | Font to use for all block's labels (affixes and actual block content won't be affected). |
 | `affix-font`          |                   | string       | Font to use for all block's prefixes / suffixes (does not affect label and block content). |
 | `block-offset`        | `offset`          | number       | Distance between any two blocks in pixel. Default is `0` |
-| `block-background`    | `block-bg`        | color string | Background color for all blocks (while `fg` tints the whole bar). |
+| `block-background`    | `block-bg`        | color string | Background color for all blocks (while `bg` tints the whole bar). |
 | `label-foreground`    | `label-fg`        | color string | Font color for all block's labels. |
 | `label-background`    | `label-bg`        | color string | Background color for all block's labels. |
 | `affix-foreground`    | `affix-fg`        | color string | Font color for all block's prefixes / suffixes. |
@@ -114,9 +115,9 @@ In the block directory, you can create one config file for each block. The file 
 | `line`             | `lc`              | color string | Sets the overline / underline color. Overwrites the default (see above). |
 | `overline`         | `ol`              | boolean      | Whether or not to draw an overline for this block. Overwrites the default. |
 | `underline`        | `ul`              | boolean      | Whether or not to draw an underline for this block. Overwrites the default. |
-| `padding`          | `pad`             | numebr       | Minimum width of the block's main text. If required, succade will left-pad the string returned by the block with spaces. For example, if you set padding to `6` and your block returns `nice`, then succade will display that as `  nice` (note the spaces). Useful for when you use fixed-width fonts. |
+| `padding`          | `pad`             | number       | Minimum width of the block's main text. If required, succade will left-pad the string returned by the block with spaces. For example, if you set padding to `6` and your block returns `nice`, then succade will display that as <code>&nbsp;&nbsp;nice</code> (note the spaces). Useful for when you use fixed-width fonts. |
 | `offset`           |                   | number       | Distance to the next block, in pixel. Overwrites the default. |
-| `label`            |                   | string       | A string to be displayed before the blokc's main text. Can be used to display an icon by using an appropriate font, like Siji. |
+| `label`            |                   | string       | A string to be displayed before the block's main text. Can be used to display an icon by using an appropriate font, like Siji. |
 | `reload`           |                   | number       | Defines in what interval (in seconds) this block should be run. Setting this to `5` will run this block every 5 seconds. Lower values will lead to more CPU usage. A third option is to set `reload` to `0`. In this case, succade will run your block once, and only once, effectively creating a static block. |
 | `trigger`          |                   | string       | If your block should be run depending on the output of another command, then set this command here. If you do this, succade will run that trigger command and monitor its output. Whenever the command produces new output, succade will run the block - and pipe the trigger's output as input to the block. This will set `reload` to `0`. |
 | `mouse-left`       |                   | string       | Set this to a command that you want succade to run when you left-click this block. |
