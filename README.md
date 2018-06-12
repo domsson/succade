@@ -75,7 +75,7 @@ Take a look at the example configuration in this repository. The general configu
 
 | Parameter             | Alias             | Type         | Description               |
 |-----------------------|-------------------|--------------|---------------------------|
-| `format`              |                   | string       | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time`</code> |
+| `format`              |                   | string       | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time</code> |
 | `width`               | `w`               | number       | Width of the bar in pixel - omit this value for a full-width bar. |
 | `height`              | `h`               | number       | Height of the bar in pixel. |  
 | `x`                   |                   | number       | x-position of the bar - omit to have it sit at the edge of your screen. |
