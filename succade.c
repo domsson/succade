@@ -48,7 +48,6 @@ struct bar
 	char *block_font;	// The default font to use (slot 1)
 	char *label_font;	// Font used for the label (slot 2)
 	char *affix_font;	// Font used for prefix/suffix (slot 3)
-	char *block_fg;         // Foreground color for all blocks
 	char *block_bg;         // Background color for all blocks
 	char *label_fg;         // Foreground color for all labels
 	char *label_bg;         // Background color for all labels
@@ -63,8 +62,6 @@ struct block
 	FILE *fd;               // File descriptor as returned by popen()
 	char *fg;               // Foreground color
 	char *bg;               // Background color
-	char *block_fg;         // Foreground color for all blocks
-	char *block_bg;         // Background color for all blocks
 	char *label_fg;         // Foreground color for all labels
 	char *label_bg;         // Background color for all labels
 	char *affix_fg;         // Foreground color for all affixes
@@ -125,7 +122,6 @@ void init_bar(struct bar *b)
 	b->block_font = NULL;
 	b->label_font = NULL;
 	b->affix_font = NULL;
-	b->block_fg = NULL;
 	b->block_bg = NULL;
 	b->label_fg = NULL;
 	b->label_bg = NULL;
@@ -181,7 +177,6 @@ void free_bar(struct bar *b)
 	free(b->block_font);
 	free(b->label_font);
 	free(b->affix_font);
-	free(b->block_fg);
 	free(b->block_bg);
 	free(b->label_fg);
 	free(b->label_bg);
@@ -754,9 +749,9 @@ char *blockstr(const struct bar *bar, const struct block *block, size_t len)
 		buf_len += strlen(result);
 	}
 
-	const char *fg = colorstr(bar->block_fg, block->fg, NULL);
+	const char *fg = colorstr(NULL, block->fg, NULL);
 	const char *bg = colorstr(bar->block_bg, block->bg, NULL);
-	const char *lc = colorstr(bar->lc, block->lc, NULL);
+	const char *lc = colorstr(NULL, block->lc, NULL);
 	const char *label_fg = colorstr(bar->label_fg, block->label_fg, fg);
 	const char *label_bg = colorstr(bar->label_bg, block->label_bg, bg);
 	const char *affix_fg = colorstr(bar->affix_fg, block->affix_fg, fg);
@@ -1088,11 +1083,6 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	if (equals(name, "block-background") || equals(name, "block-bg"))
 	{
 		bar->block_bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "block-foreground") || equals(name, "block-fg"))
-	{
-		bar->block_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "label-background") || equals(name, "label-bg"))
