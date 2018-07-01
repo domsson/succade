@@ -24,6 +24,7 @@
 
 extern char **environ;        // Required to pass the env to child cmds
 static volatile int running;  // Used to stop main loop in case of SIGINT
+static volatile int handled;  // The last signal that has been handled 
 
 struct bar
 {
@@ -1636,13 +1637,25 @@ int process_action(const char *action, struct block *blocks, int num_blocks)
  * Handles SIGINT signals (CTRL+C) by setting the static variable
  * `running` to 0, effectively ending the main loop, so that clean-up happens.
  */
-void sigint_handler()
+void sigint_handler(int sig)
 {
 	running = 0;
+	handled = sig;
 }
 
 int main(void)
 {
+	/*
+	 * LOGGING
+	 */
+
+	FILE *log = fopen("/home/julien/.succadelog", "w");
+	if (log == NULL)
+	{
+		fprintf(stderr, "Could not create log file\n");
+	}
+	fprintf(log, "Start of log\n");
+
 	// Prevent zombie children during runtime
 	struct sigaction sa_chld = {
 		.sa_handler = SIG_IGN
@@ -1650,6 +1663,7 @@ int main(void)
 	if (sigaction(SIGCHLD, &sa_chld, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to ignore children's signals\n");
+		fprintf(log, "Failed to ignore children's signals\n");
 	}
 
 	// Make sure we still do clean-up on SIGINT (ctrl+c)
@@ -1660,26 +1674,28 @@ int main(void)
 	if (sigaction(SIGINT, &sa_int, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to register SIGINT handler\n");
-	}
-	if (sigaction(SIGHUP, &sa_int, NULL) == -1)
-	{
-		fprintf(stderr, "Failed to register SIGHUB handler\n");
+		fprintf(log, "Failed to register SIGINT handler\n");
 	}
 	if (sigaction(SIGQUIT, &sa_int, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to register SIGQUIT handler\n");
+		fprintf(log, "Failed to register SIGQUIT handler\n");
 	}
 	if (sigaction (SIGTERM, &sa_int, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to register SIGTERM handler\n");
+		fprintf(log, "Failed to register SIGTERM handler\n");
 	}
 
+	/*
 	// Non-Posix way of making sure that we kill succade when
 	// the parent process (usually a window manage or similar) dies.
 	if (prctl(PR_SET_PDEATHSIG, SIGHUP) == -1)
 	{
 		fprintf(stderr, "Failed to register for parent's death signal.\n");
+		fprintf(log, "Failed to register for parent's death signal.\n");
 	}
+	*/
 
 	/*
 	 * DIRECTORIES
@@ -1701,11 +1717,13 @@ int main(void)
 	if (configure_bar(&lemonbar, configdir) == -1)
 	{
 		fprintf(stderr, "Failed to load RC file: %src\n", NAME);
+		fprintf(log, "Failed to load RC file: %src\n", NAME);
 		exit(EXIT_FAILURE);
 	}
 	if (open_bar(&lemonbar) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", BAR_PROCESS);
+		fprintf(log, "Failed to open bar: %s\n", BAR_PROCESS);
 		exit(EXIT_FAILURE);
 	}
 
@@ -1721,6 +1739,8 @@ int main(void)
 	if (num_blocks_requested < 0)
 	{
 		fprintf(stderr, "Could not figure out what blocks to load, stopping %s\n",
+				NAME);
+		fprintf(log, "Could not figure out what blocks to load, stopping %s\n",
 				NAME);
 		exit(EXIT_FAILURE);
 	}
@@ -1750,6 +1770,8 @@ int main(void)
 	{
 		fprintf(stderr, "No blocks loaded (%d requested), stopping %s.\n",
 			       	num_blocks_requested, NAME);
+		fprintf(log, "No blocks loaded (%d requested), stopping %s.\n",
+			       	num_blocks_requested, NAME);
 		exit(EXIT_FAILURE);
 	}
 
@@ -1773,8 +1795,10 @@ int main(void)
 	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
 
 	printf("Triggers found: (%d total)\n\t", num_triggers);
+	fprintf(log,"Triggers found: (%d total)\n\t", num_triggers);
 	for (int i=0; i<num_triggers; ++i)
 	{
+		fprintf(log, "'%s' ", triggers[i].cmd);
 		printf("'%s' ", triggers[i].cmd);
 	}
 	printf("\n");
@@ -1782,9 +1806,11 @@ int main(void)
 	int num_triggers_opened = open_triggers(triggers, num_triggers);
 
 	printf("Triggeres opened: (%d total)\n\t", num_triggers_opened);
+	fprintf(log,"Triggeres opened: (%d total)\n\t", num_triggers_opened);
 	for (int i=0; i<num_triggers; ++i)
 	{
 		printf("'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
+		fprintf(log, "'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
 	}
 	printf("\n");
 
@@ -1796,6 +1822,7 @@ int main(void)
 	if (epfd < 0)
 	{
 		fprintf(stderr, "Could not create epoll file descriptor\n");
+		fprintf(log, "Could not create epoll file descriptor\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -1816,6 +1843,8 @@ int main(void)
 	if (epctl_result)
 	{
 		fprintf(stderr, "%d trigger events could not be registered\n", -1 * epctl_result);
+		fprintf(log, "%d trigger events could not be registered\n", -1 * epctl_result);
+		
 	}
 
 	// Now let's also add the bar trigger
@@ -1826,6 +1855,7 @@ int main(void)
 	if (epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(bartrig.fd), &eev))
 	{
 		fprintf(stderr, "Failed to register bar trigger - clickable areas will not work.\n");
+		fprintf(log, "Failed to register bar trigger - clickable areas will not work.\n");
 	}
 
 	/*
@@ -1843,9 +1873,13 @@ int main(void)
 	bar_output[0] = '\0';
 
 	running = 1;
+	
+	fprintf(log, "Start of main loop\n");
 
 	while (running)
 	{
+		fprintf(log, "x ");
+
 		now = get_time();
 		delta = now - before;
 		before = now;
@@ -1887,6 +1921,7 @@ int main(void)
 			{
 				// It wasn't a recognized command, so chances are
 				// that is was some debug/error output of bar.
+				fprintf(log, "Lemongbar: %s", bar_output);
 				printf("Lemonbar: %s", bar_output);
 			}
 			bar_output[0] = '\0';
@@ -1900,7 +1935,10 @@ int main(void)
 	 * CLEAN UP
 	 */
 
+	fprintf(log, "Received signal %d\n", handled);
+
 	fprintf(stderr, "succade is about to shutdown, performing clean-up...\n");
+	fprintf(log, "succade is about to shutdown, performing clean-up...\n");
 
 	fprintf(stderr, "\tclosing epoll file descriptor\n");
 	close(epfd);
@@ -1935,6 +1973,9 @@ int main(void)
 	free_bar(&lemonbar);
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
+	fprintf(log, "Clean-up finished, see you next time!\n");
+
+	fclose(log);
 
 	return EXIT_SUCCESS;
 }
