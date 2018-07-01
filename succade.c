@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
+#include <sys/prctl.h>
 #include <spawn.h>
 #include <wordexp.h>
 #include "ini.h"
@@ -27,6 +28,7 @@ static volatile int running;  // Used to stop main loop in case of SIGINT
 struct bar
 {
 	char *name;             // Name of the bar/process
+	pid_t pid;		// Process ID of the bar 
 	FILE *fd_in;            // File descriptor for writing to bar
 	FILE *fd_out;           // File descriptor for reading from bar
 	char *fg;               // Foreground color
@@ -59,6 +61,7 @@ struct block
 {
 	char *name;             // Name of the block and its file/process
 	char *path;             // Full path, including file name
+	pid_t pid;		// Process ID of this block's process
 	FILE *fd;               // File descriptor as returned by popen()
 	char *fg;               // Foreground color
 	char *bg;               // Background color
@@ -89,6 +92,7 @@ struct block
 struct trigger
 {
 	char *cmd;              // Command to run
+	pid_t pid;              // Process ID of trigger command
 	FILE *fd;               // File descriptor as returned by popen()
 	struct block *b;        // Associated block
 	struct bar *bar;	// Associated bar (special use case...)
@@ -101,6 +105,7 @@ struct trigger
 void init_bar(struct bar *b)
 {
 	b->name = NULL;
+	b->pid = 0;
 	b->fd_in = NULL;
 	b->fd_out = NULL;
 	b->fg = NULL;
@@ -136,6 +141,7 @@ void init_block(struct block *b)
 {
 	b->name = NULL;
 	b->path = NULL;
+	b->pid = 0;
 	b->fd = NULL;
 	b->fg = NULL;
 	b->bg = NULL;
@@ -276,12 +282,8 @@ pid_t popen2(const char *cmd, FILE *pipes[2])
 	int pipe_read[2];
 
 	// [0] = read end, [1] = write end
-	if (pipe(pipe_write) < 0)
+	if ((pipe(pipe_write) < 0) || (pipe(pipe_read) < 0))
        	{
-		return -1;
-	}
-	if (pipe(pipe_read) < 0)
-	{
 		return -1;
 	}
 
@@ -326,6 +328,63 @@ pid_t popen2(const char *cmd, FILE *pipes[2])
 		return pid;
 	}
 }
+
+pid_t popenr(const char *cmd, FILE *pipes[2])
+{
+	if (!cmd || !strlen(cmd))
+	{
+		return -1;
+	}
+
+	int pipe_stdout[2];
+	int pipe_stderr[2];
+
+	// [0] = read end of pipe, [1] = write end of pipe
+	if ((pipe(pipe_stdout) < 0) || (pipe(pipe_stderr) < 0))
+       	{
+		return -1;
+	}
+
+	pid_t pid = fork();
+	if (pid == -1)
+	{
+		return -1;
+	}
+	else if (pid == 0) // child
+	{
+		// redirect stdout to the write end of this pipe
+		if (dup2(pipe_stdout[1], STDOUT_FILENO) == -1)
+		{
+			return -1;
+		}
+		// redirect stderr to the write end of this pipe
+		if (dup2(pipe_stderr[1], STDERR_FILENO) == -1)
+		{
+			return -1;
+		}
+
+		close(pipe_stdout[0]); // child doesn't need read end
+		close(pipe_stderr[0]); // child doesn't need read end
+
+		wordexp_t p;
+		if (wordexp(cmd, &p, 0) != 0)
+		{
+			return -1;
+		}
+		
+		execvp(p.we_wordv[0], p.we_wordv); // TODO add error handling
+		_exit(1);
+	}
+	else // parent
+	{
+		close(pipe_stdout[1]); // parent doesn't need write end
+		close(pipe_stderr[1]); // parent doesn't need write end
+		pipes[0] = fdopen(pipe_stdout[0], "r");
+		pipes[1] = fdopen(pipe_stderr[0], "r");
+		return pid;
+	}
+}
+
 
 /*
  * Creates a font parameter string that can be used when running lemonbar.
@@ -496,11 +555,17 @@ int open_trigger(struct trigger *t)
 	{
 		return -1;
 	}
-	t->fd = popen(t->cmd, "r");
-	if (t->fd == NULL)
+
+	FILE *fd[2];
+	t->pid = popenr(t->cmd, fd);
+	if (t->pid == -1)
 	{
 		return -1;
 	}
+
+	t->fd = fd[0];  // stdout is what we're after
+	fclose(fd[1]); // Not interested in stderr
+
 	setlinebuf(t->fd); // TODO add error handling
 	int fn = fileno(t->fd);
 	int flags;
@@ -511,14 +576,19 @@ int open_trigger(struct trigger *t)
 }
 
 /*
- * Closes the trigger by closing its file descriptor.
+ * Closes the trigger by closing its file descriptor
+ * and sending a SIGTERM to the trigger command.
  * Also sets the file descriptor to NULL.
  */
 void close_trigger(struct trigger *t)
 {
+	if (t->pid > 1)
+	{
+		kill(t->pid, SIGTERM); // Politely ask to terminate
+	}
 	if (t->fd != NULL)
 	{
-		pclose(t->fd);
+		fclose(t->fd);
 		t->fd = NULL;
 	}
 }
@@ -1323,6 +1393,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 		}
 		struct trigger t = {
 			.cmd = strdup(blocks[i].trigger),
+			.pid = 0,
 			.fd = NULL,
 			.b = &blocks[i],
 			.bar = NULL,
@@ -1582,12 +1653,32 @@ int main(void)
 	}
 
 	// Make sure we still do clean-up on SIGINT (ctrl+c)
+	// and similar signals that indicate we should quit.
 	struct sigaction sa_int = {
 		.sa_handler = &sigint_handler
 	};
 	if (sigaction(SIGINT, &sa_int, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to register SIGINT handler\n");
+	}
+	if (sigaction(SIGHUP, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGHUB handler\n");
+	}
+	if (sigaction(SIGQUIT, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGQUIT handler\n");
+	}
+	if (sigaction (SIGTERM, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGTERM handler\n");
+	}
+
+	// Non-Posix way of making sure that we kill succade when
+	// the parent process (usually a window manage or similar) dies.
+	if (prctl(PR_SET_PDEATHSIG, SIGHUP) == -1)
+	{
+		fprintf(stderr, "Failed to register for parent's death signal.\n");
 	}
 
 	/*
@@ -1811,16 +1902,36 @@ int main(void)
 
 	fprintf(stderr, "succade is about to shutdown, performing clean-up...\n");
 
+	fprintf(stderr, "\tclosing epoll file descriptor\n");
 	close(epfd);
+
+	fprintf(stderr, "\tclosing all blocks\n");
 	close_blocks(blocks, num_blocks);
+
+	fprintf(stderr, "\tfreeing all blocks\n");
 	free_blocks(blocks, num_blocks);
+
 	free(blocks);
+	
+	// This is where it used to hang, due to pclose() calling wait()
+	fprintf(stderr, "\tclosing all triggers\n");
 	close_triggers(triggers, num_triggers);
+
+	fprintf(stderr, "\tfreeing all triggers\n");
 	free_triggers(triggers, num_triggers);
+
 	free(triggers);
+	
+	fprintf(stderr, "\tclosing bar trigger\n");
 	close_trigger(&bartrig);
+
+	fprintf(stderr, "\tfreeing bar trigger\n");
 	free_trigger(&bartrig);
+
+	fprintf(stderr, "\tclosing bar\n");
 	close_bar(&lemonbar);
+
+	fprintf(stderr, "\tfreeing bar\n");
 	free_bar(&lemonbar);
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
