@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
@@ -473,25 +472,37 @@ int open_bar(struct bar *b)
 }
 
 /*
- * Runs a block and creates a file descriptor for reading.
+ * Runs a block and creates a file descriptor (stream) for reading.
  * Returns 0 on success, -1 if block could not be executed.
  * TODO: Should this function check if the block is already open?
  */
 int open_block(struct block *b)
 {
+	char *cmd;
+	size_t cmd_len;
 	if (b->input)
 	{
-		size_t cmd_len = strlen(b->path) + strlen(b->input) + 4;
-		char *cmd = malloc(cmd_len);
+		cmd_len = strlen(b->path) + strlen(b->input) + 4;
+		cmd = malloc(cmd_len);
 		snprintf(cmd, cmd_len, "%s '%s'", b->path, b->input);
-		b->fd = popen(cmd, "r");
-		free(cmd);
 	}
 	else
 	{
-		b->fd = popen(b->path, "r");
+		cmd_len = strlen(b->path) + 1;
+		cmd = malloc(cmd_len);
+		snprintf(cmd, cmd_len, "%s", b->path);
 	}
-	return (b->fd == NULL) ? -1 : 0;
+	
+	FILE *fd[2];
+	b->pid = popenr(cmd, fd);
+	if (b->pid == -1)
+	{
+		return -1;
+	}
+	b->fd = fd[0];  // stdout is what we're after
+	fclose(fd[1]); // Not interested in stderr
+	free(cmd);
+	return 0;
 }
 
 /*
@@ -532,10 +543,15 @@ void close_bar(struct bar *b)
  */
 void close_block(struct block *b)
 {
+	if (b->pid > 1)
+	{
+		kill(b->pid, SIGTERM);
+	}
 	if (b->fd != NULL)
 	{
-		pclose(b->fd);
+		fclose(b->fd);
 		b->fd = NULL;
+		b->pid = 0;
 	}
 }
 
@@ -591,6 +607,7 @@ void close_trigger(struct trigger *t)
 	{
 		fclose(t->fd);
 		t->fd = NULL;
+		t->pid = 0;
 	}
 }
 
