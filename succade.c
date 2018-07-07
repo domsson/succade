@@ -269,79 +269,31 @@ char *unquote(const char *str)
  * Instead, wordexp() is used to expand the given command, if necessary.
  * If successful, the process id of the new process is being returned and the 
  * given FILE pointers are set to streams that correspond to pipes for reading 
- * and writing to the child process, accordingly. On error, -1 is returned.
+ * and writing to the child process, accordingly. Hand in NULL for pipes that
+ * should not be used. On error, -1 is returned.
  */
-pid_t popen2(const char *cmd, FILE *pipes[2])
+pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 {
 	if (!cmd || !strlen(cmd))
 	{
 		return -1;
 	}
 
-	int pipe_write[2];
-	int pipe_read[2];
-
-	// [0] = read end, [1] = write end
-	if ((pipe(pipe_write) < 0) || (pipe(pipe_read) < 0))
-       	{
-		return -1;
-	}
-
-	pid_t pid = fork();
-	if (pid == -1)
-	{
-		return -1;
-	}
-	else if (pid == 0) // child
-	{
-		if (dup2(pipe_write[0], STDIN_FILENO) == -1)
-		{
-			return -1;
-		}
-		if (dup2(pipe_read[1], STDOUT_FILENO) == -1)
-		{
-			return -1;
-		}
-		if (dup2(pipe_read[1], STDERR_FILENO) == -1)
-		{
-			return -1;
-		}
-
-		close(pipe_write[1]);
-		close(pipe_read[0]);
-
-		wordexp_t p;
-		if (wordexp(cmd, &p, 0) != 0)
-		{
-			return -1;
-		}
-		
-		execvp(p.we_wordv[0], p.we_wordv); // TODO add error handling
-		_exit(1);
-	}
-	else // parent
-	{
-		close(pipe_write[0]);
-		close(pipe_read[1]);
-		pipes[0] = fdopen(pipe_read[0], "r");
-		pipes[1] = fdopen(pipe_write[1], "w");
-		return pid;
-	}
-}
-
-pid_t popenr(const char *cmd, FILE *pipes[2])
-{
-	if (!cmd || !strlen(cmd))
-	{
-		return -1;
-	}
-
+	// 0 = read end of pipes, 1 = write end of pipes
 	int pipe_stdout[2];
 	int pipe_stderr[2];
+	int pipe_stdin[2];
 
-	// [0] = read end of pipe, [1] = write end of pipe
-	if ((pipe(pipe_stdout) < 0) || (pipe(pipe_stderr) < 0))
-       	{
+	if (out && (pipe(pipe_stdout) < 0))
+	{
+		return -1;
+	}
+	if (err && (pipe(pipe_stderr) < 0))
+	{
+		return -1;
+	}
+	if (in && (pipe(pipe_stdin) < 0))
+	{
 		return -1;
 	}
 
@@ -352,19 +304,37 @@ pid_t popenr(const char *cmd, FILE *pipes[2])
 	}
 	else if (pid == 0) // child
 	{
+		// TODO does it even make sense to "return -1" (or whatever)
+		// from the child process? Will the calling function in the
+		// parent even see this, ever?
+
 		// redirect stdout to the write end of this pipe
-		if (dup2(pipe_stdout[1], STDOUT_FILENO) == -1)
+		if (out)
 		{
-			return -1;
+			if (dup2(pipe_stdout[1], STDOUT_FILENO) == -1)
+			{
+				return -1;
+			}
+			close(pipe_stdout[0]); // child doesn't need read end
 		}
 		// redirect stderr to the write end of this pipe
-		if (dup2(pipe_stderr[1], STDERR_FILENO) == -1)
+		if (err)
 		{
-			return -1;
+			if (dup2(pipe_stderr[1], STDERR_FILENO) == -1)
+			{
+				return -1;
+			}
+			close(pipe_stderr[0]); // child doesn't need read end
 		}
-
-		close(pipe_stdout[0]); // child doesn't need read end
-		close(pipe_stderr[0]); // child doesn't need read end
+		// redirect stdin to the read end of this pipe
+		if (in)
+		{
+			if (dup2(pipe_stdin[0], STDIN_FILENO) == -1)
+			{
+				return -1;
+			}
+			close(pipe_stdin[1]); // child doesn't need write end
+		}
 
 		wordexp_t p;
 		if (wordexp(cmd, &p, 0) != 0)
@@ -377,10 +347,21 @@ pid_t popenr(const char *cmd, FILE *pipes[2])
 	}
 	else // parent
 	{
-		close(pipe_stdout[1]); // parent doesn't need write end
-		close(pipe_stderr[1]); // parent doesn't need write end
-		pipes[0] = fdopen(pipe_stdout[0], "r");
-		pipes[1] = fdopen(pipe_stderr[0], "r");
+		if (out)
+		{
+			close(pipe_stdout[1]); // parent doesn't need write end
+			*out = fdopen(pipe_stdout[0], "r");
+		}
+		if (err)
+		{
+			close(pipe_stderr[1]); // parent doesn't need write end
+			*err = fdopen(pipe_stderr[0], "r");
+		}
+		if (in)
+		{
+			close(pipe_stdin[0]); // parent doesn't need read end
+			*in = fdopen(pipe_stdin[1], "w");
+		}
 		return pid;
 	}
 }
@@ -457,16 +438,13 @@ int open_bar(struct bar *b)
 
 	printf("Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 
-	FILE *fd[2];
-	if (popen2(bar_cmd, fd) == -1)
+	b->pid = popen_noshell(bar_cmd, &(b->fd_out), NULL, &(b->fd_in));
+	if (b->pid == -1)
 	{
 		return -1;
 	}
-
-	setlinebuf(fd[0]);
-	setlinebuf(fd[1]);
-	b->fd_in = fd[1];
-	b->fd_out = fd[0];
+	setlinebuf(b->fd_out);
+	setlinebuf(b->fd_in);
 
 	return 0;
 }
@@ -492,15 +470,12 @@ int open_block(struct block *b)
 		cmd = malloc(cmd_len);
 		snprintf(cmd, cmd_len, "%s", b->path);
 	}
-	
-	FILE *fd[2];
-	b->pid = popenr(cmd, fd);
+
+	b->pid = popen_noshell(cmd, &(b->fd), NULL, NULL);
 	if (b->pid == -1)
 	{
 		return -1;
 	}
-	b->fd = fd[0];  // stdout is what we're after
-	fclose(fd[1]); // Not interested in stderr
 	free(cmd);
 	return 0;
 }
@@ -573,15 +548,11 @@ int open_trigger(struct trigger *t)
 		return -1;
 	}
 
-	FILE *fd[2];
-	t->pid = popenr(t->cmd, fd);
+	t->pid = popen_noshell(t->cmd, &(t->fd), NULL, NULL);
 	if (t->pid == -1)
 	{
 		return -1;
 	}
-
-	t->fd = fd[0];  // stdout is what we're after
-	fclose(fd[1]); // Not interested in stderr
 
 	setlinebuf(t->fd); // TODO add error handling
 	int fn = fileno(t->fd);
@@ -1660,11 +1631,31 @@ void sigint_handler(int sig)
 	handled = sig;
 }
 
+void testptr(int **lol)
+{
+	fprintf(stderr, "  lol = %p\n",  lol);
+	fprintf(stderr, " *lol = %p\n", *lol);
+	fprintf(stderr, " &lol = %d\n", &lol);
+	fprintf(stderr, "**lol = %d\n", **lol);
+}
+
 int main(void)
 {
 	/*
 	 * LOGGING
 	 */
+
+/*	
+	int test = 1;
+	int *rofl = &test;
+	fprintf(stderr, "&test = %p\n", &test);
+	fprintf(stderr, " rofl = %p\n",  rofl);
+	fprintf(stderr, "*rofl = %p\n", *rofl);
+	fprintf(stderr, "&rofl = %d\n", &rofl);
+	testptr(&rofl);
+
+	exit(EXIT_SUCCESS);
+*/
 
 	FILE *log = fopen("/home/julien/.succadelog", "w");
 	if (log == NULL)
