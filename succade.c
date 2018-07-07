@@ -669,6 +669,7 @@ int run_block(struct block *b, size_t result_length)
 	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
 	b->used = 1; // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
+	free(b->input);
 	b->input = NULL; // Discard input, as we've processed it now
 	close_block(b);
 	return 0;
