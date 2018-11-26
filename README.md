@@ -41,7 +41,7 @@ Triggers are commands that succade will run and monitor for output. When there i
 # Dependencies
 
 - `lemonbar`, obviously
-- `inih`, but that's included in this repository
+- [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian)
 - `gcc`, to compile succade
 
 # How to install
@@ -62,8 +62,8 @@ Triggers are commands that succade will run and monitor for output. When there i
 6. Make sure the blocks are executable:  
   `chmod +x ~/.config/succade/blocks/*`
 7. Make `succade` executable and put it somwhere that's included in your path:  
-  `chmod +x succade`  
-  `cp succade ~/.local/bin`
+  `chmod +x bin/succade`  
+  `cp bin/succade ~/.local/bin/`
 
 # How to configure
 
@@ -126,7 +126,6 @@ In the block directory, you can create one config file for each block. The file 
 | `scroll-up`        |            | string  | Set this to a command that you want succade to run when you scroll your mouse wheel up while hovering over this block. |
 | `scroll-down`      |            | string  | See `scroll-up`. |
 
-# Licence
+# License
 
-- succade is free software, dedicated to the public domain. Do with it whatever you want, but don't hold me responsible for anything either.
-- [inih](https://github.com/benhoyt/inih) is licensed under the new BSD license, see file headers.
+succade is free software, dedicated to the public domain. Do with it whatever you want, but don't hold me responsible for anything either.
