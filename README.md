@@ -40,11 +40,11 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # Dependencies
 
-- `lemonbar`, obviously
 - [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian)
-- `gcc`, to compile succade
 
 # How to install
+
+Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed.
 
 1. Clone this repository:  
   `git clone https://github.com/domsson/succade.git`
