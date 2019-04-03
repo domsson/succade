@@ -59,8 +59,9 @@ struct bar
 
 struct block
 {
-	char *name;             // Name of the block and its file/process
-	char *path;             // Full path, including file name
+	char *name;             // Name of the block 
+	char *cfg;              // Full path to config file (name.ini)
+	char *bin;		// Command/binary/script to run 
 	pid_t pid;		// Process ID of this block's process
 	FILE *fd;               // File descriptor as returned by popen()
 	char *fg;               // Foreground color
@@ -104,34 +105,7 @@ struct trigger
  */
 void init_bar(struct bar *b)
 {
-	b->name = NULL;
-	b->pid = 0;
-	b->fd_in = NULL;
-	b->fd_out = NULL;
-	b->fg = NULL;
-	b->bg = NULL;
-	b->lc = NULL;
 	b->lw = 1;
-	b->ul = 0;
-	b->ol = 0;
-	b->w = 0;
-	b->h = 0;
-	b->x = 0;
-	b->y = 0;
-	b->bottom = 0;
-	b->force = 0;
-	b->offset = 0;
-	b->prefix = NULL;
-	b->suffix = NULL;
-	b->format = NULL;
-	b->block_font = NULL;
-	b->label_font = NULL;
-	b->affix_font = NULL;
-	b->block_bg = NULL;
-	b->label_fg = NULL;
-	b->label_bg = NULL;
-	b->affix_fg = NULL;
-	b->affix_bg = NULL;
 }
 
 /*
@@ -139,38 +113,12 @@ void init_bar(struct bar *b)
  */
 void init_block(struct block *b)
 {
-	b->name = NULL;
-	b->path = NULL;
-	b->pid = 0;
-	b->fd = NULL;
-	b->fg = NULL;
-	b->bg = NULL;
-	b->lc = NULL;
-	b->ul = 0;
-	b->ol = 0;
-	b->label_fg = NULL;
-	b->label_bg = NULL;
-	b->affix_fg = NULL;
-	b->affix_bg = NULL;
-	b->padding = 0;
 	b->offset = -1;
-	b->align = 0;
-	b->label = NULL;
-	b->used = 0;
-	b->trigger = NULL;
-	b->cmd_lmb = NULL;
-	b->cmd_mmb = NULL;
-	b->cmd_rmb = NULL;
-	b->cmd_sup = NULL;
-	b->cmd_sdn = NULL;
 	b->reload = 5.0;
-	b->waited = 0.0;
-	b->input = NULL;
-	b->result = NULL;
 }
 
 /*
- * Frees all members of the given bar that need freeing and sets them to NULL.
+ * Frees all members of the given bar that need freeing.
  */
 void free_bar(struct bar *b)
 {
@@ -188,17 +136,16 @@ void free_bar(struct bar *b)
 	free(b->label_bg);
 	free(b->affix_fg);
 	free(b->affix_bg);
-
-	init_bar(b); // Sets all pointers to NULL, just in case
 }
 
 /*
- * Frees all members of the given block that need freeing and sets them to NULL.
+ * Frees all members of the given block that need freeing.
  */
 void free_block(struct block *b)
 {
 	free(b->name);
-	free(b->path);
+	free(b->cfg);
+	free(b->bin);
 	free(b->fg);
 	free(b->bg);
 	free(b->lc);
@@ -215,8 +162,6 @@ void free_block(struct block *b)
 	free(b->cmd_sdn);
 	free(b->input);
 	free(b->result);
-
-	init_block(b); // Sets all pointers to NULL, just in case
 }
 
 /*
@@ -456,19 +401,25 @@ int open_bar(struct bar *b)
  */
 int open_block(struct block *b)
 {
-	char *cmd;
-	size_t cmd_len;
+	if (b->bin == NULL)
+	{
+		fprintf(stderr, "Skipping block '%s' as no binary given\n", b->name);
+		return -1;
+	}
+
+	char *cmd = NULL;
+	size_t cmd_len = 0;
 	if (b->input)
 	{
-		cmd_len = strlen(b->path) + strlen(b->input) + 4;
+		cmd_len = strlen(b->bin) + strlen(b->input) + 4;
 		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s '%s'", b->path, b->input);
+		snprintf(cmd, cmd_len, "%s '%s'", b->bin, b->input);
 	}
 	else
 	{
-		cmd_len = strlen(b->path) + 1;
+		cmd_len = strlen(b->bin) + 1;
 		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s", b->path);
+		snprintf(cmd, cmd_len, "%s", b->bin);
 	}
 
 	b->pid = popen_noshell(cmd, &(b->fd), NULL, NULL);
@@ -888,6 +839,11 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 
 	for (int i=0; i<num_blocks; ++i)
 	{
+		// TODO just quick hack to get this working
+		if (blocks[i].bin == NULL)
+		{
+			continue;
+		}
 		char *block_str = blockstr(bar, &blocks[i], 0);
 		size_t block_str_len = strlen(block_str);
 		if (blocks[i].align != last_align)
@@ -992,15 +948,17 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 	{
 		return -1;
 	}
-	size_t size = 8;
+
+	size_t size = 8; // TODO hardcoded value
 	*blocks = malloc(size * sizeof(struct block));
 	size_t format_len = strlen(format) + 1;
-	char cur_block_name[64];
+	char cur_block_name[64]; // TODO hardcoded value
 	     cur_block_name[0] = '\0';
 	size_t cur_block_len = 0;
 	int cur_align = -1;
 	int num_blocks = 0;
-	for(int i=0; i<format_len; ++i)
+
+	for (int i = 0; i < format_len; ++i)
 	{
 		switch (format[i])
 		{
@@ -1018,10 +976,11 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 					size += 2;
 					*blocks = realloc(*blocks, size * sizeof(struct block));
 				}
-				struct block b;
+				struct block b = { 0 };
 				init_block(&b);
 				b.name = strdup(cur_block_name);
-				b.path = filepath(blockdir, cur_block_name, NULL);
+				//b.path = filepath(blockdir, cur_block_name, NULL);
+				b.cfg = filepath(blockdir, cur_block_name, "ini");
 				b.align = cur_align;
 				(*blocks)[num_blocks++] = b;
 				cur_block_name[0] = '\0';
@@ -1187,6 +1146,11 @@ int configure_bar(struct bar *b, const char *config_dir)
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct block *block = (struct block*) b;
+	if (equals(name, "bin"))
+	{
+		block->bin = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
 		block->fg = is_quoted(value) ? unquote(value) : strdup(value);
@@ -1301,19 +1265,21 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
  */
 int configure_block(struct block *b, const char *blocks_dir)
 {
-	char *blockini = filepath(blocks_dir, b->name, "ini");
-	if (access(blockini, R_OK) == -1)
+	//char *blockini = filepath(blocks_dir, b->name, "ini");
+	//if (access(blockini, R_OK) == -1)
+	if (access(b->cfg, R_OK) == -1)
 	{
-		//printf("No block config found for: %s\n", b->name);
+		fprintf(stderr, "No block config found for: %s\n", b->name);
 		return -1;
 	}
-	if (ini_parse(blockini, block_ini_handler, b) < 0)
+	//if (ini_parse(blockini, block_ini_handler, b) < 0)
+	if (ini_parse(b->cfg, block_ini_handler, b) < 0)
 	{
-		//printf("Can't parse block INI: %s\n", blockini);
-		free(blockini);
+		fprintf(stderr, "Can't parse block INI: %s\n", b->cfg);
+		//free(blockini);
 		return -1;
 	}
-	free(blockini);
+	//free(blockini);
 	return 0;
 }
 
@@ -1422,7 +1388,8 @@ int create_blocks(struct block **blocks, const struct block *blocks_req, int num
 	size_t num_blocks_created = 0;
 	for (int i=0; i<num_blocks_req; ++i)
 	{
-		if (access(blocks_req[i].path, F_OK|R_OK|X_OK) != -1)
+		//if (access(blocks_req[i].path, F_OK|R_OK|X_OK) != -1)
+		if (access(blocks_req[i].cfg, F_OK|R_OK) != -1)
 		{
 			(*blocks)[num_blocks_created++] = blocks_req[i];
 		}
@@ -1662,15 +1629,6 @@ int main(void)
 	}
 
 	/*
-	// Non-Posix way of making sure that we kill succade when
-	// the parent process (usually a window manage or similar) dies.
-	if (prctl(PR_SET_PDEATHSIG, SIGHUP) == -1)
-	{
-		fprintf(stderr, "Failed to register for parent's death signal.\n");
-	}
-	*/
-
-	/*
 	 * DIRECTORIES
 	 */
 
@@ -1684,7 +1642,7 @@ int main(void)
 	 * BAR
 	 */
 
-	struct bar lemonbar;
+	struct bar lemonbar = { 0 };
 	init_bar(&lemonbar);
 
 	if (configure_bar(&lemonbar, configdir) == -1)
@@ -1703,6 +1661,12 @@ int main(void)
 	/*
 	 * BLOCKS
 	 */
+	
+	// TODO refactor blocks initalization - and incorporate reading the  
+	// block binary / script path from the config, so we can remove the 
+	// actual binary / script from the config directory. Hopefully we can
+	// get rid of the init_block() func in the process, as well as improve
+	// the initialization process to where we can do it all in one step?	
 
 	struct block *blocks_requested; 
 	int num_blocks_requested = parse_format(lemonbar.format, &blocks_requested, blocksdir);
@@ -1725,6 +1689,7 @@ int main(void)
 	int num_blocks = create_blocks(&blocks, blocks_requested, num_blocks_requested);
 	configure_blocks(blocks, num_blocks, blocksdir);
 	free(blocks_requested);
+
 
 	printf("Blocks found: (%d total)\n\t", num_blocks);
 	for (int i=0; i<num_blocks; ++i)
