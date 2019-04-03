@@ -401,6 +401,7 @@ int open_bar(struct bar *b)
  */
 int open_block(struct block *b)
 {
+	// TODO just a quick hack to get things going
 	if (b->bin == NULL)
 	{
 		fprintf(stderr, "Skipping block '%s' as no binary given\n", b->name);
