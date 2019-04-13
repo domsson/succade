@@ -20,6 +20,9 @@
 #define BLOCKS_DIR "blocks"
 #define BAR_PROCESS "lemonbar"
 #define BUFFER_SIZE 2048
+#define NUM_BLOCKS 8
+#define NUM_BLOCKS_INC 2
+#define BLOCK_NAME_MAX 64
 
 extern char **environ;        // Required to pass the env to child cmds
 static volatile int running;  // Used to stop main loop in case of SIGINT
@@ -99,6 +102,15 @@ struct trigger
 	struct bar *bar;	// Associated bar (special use case...)
 	int ready : 1;          // fd has new data available for reading
 };
+
+struct block_container
+{
+	struct block *blocks;
+	size_t num_blocks;
+	char *block_dir;
+};
+
+typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
 
 /*
  * Init the given bar struct to a well defined state using sensible defaults.
@@ -938,6 +950,69 @@ char *filepath(const char *dir, const char *filename, const char *fileext)
 	}
 }
 
+int scan_blocks(const char *format)
+{
+	int in_a_block = 0;
+	size_t num_blocks = 0;
+	size_t format_len = strlen(format) + 1;
+	for (int i = 0; i < format_len; ++i)
+	{
+		switch (format[i])
+		{
+			case '|':
+			case ' ':
+			case '\0':
+				num_blocks += in_a_block ? 1 : 0;
+				in_a_block = 0;
+				break;
+			default:
+				in_a_block = 1;	
+		}
+	}
+	return num_blocks;
+}
+
+size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
+{
+	if (!format)
+	{
+		return 0;
+	}
+
+	size_t format_len = strlen(format) + 1;
+	char block_name[BLOCK_NAME_MAX];
+	block_name[0] = '\0';
+	size_t block_name_len = 0;
+	int block_align = -1;
+	int num_blocks = 0;
+
+	for (int i = 0; i < format_len; ++i)
+	{
+		switch (format[i])
+		{
+		case '|':
+			// Next align
+			block_align += block_align < 1;
+		case ' ':
+		case '\0':
+			if (block_name_len)
+			{
+				// Block name complete, inform the callback
+				cb(block_name, block_align, num_blocks++, data);
+				// Prepare for the next block name
+				block_name[0] = '\0';
+				block_name_len = 0;
+			}
+			break;
+		default:
+			// Add the char to the current's block name
+			block_name[block_name_len++] = format[i];
+			block_name[block_name_len]   = '\0';
+		}
+	}
+	return num_blocks;
+}
+
 /*
  * Parse the given format string and create blocks accordingly.
  * Those blocks only have their name, path and align properties set.
@@ -964,10 +1039,7 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 		switch (format[i])
 		{
 		case '|':
-			if (cur_align < 1)
-			{
-				++cur_align;
-			}
+			cur_align += cur_align < 1;
 		case ' ':
 		case '\0':
 			if (cur_block_len)
@@ -980,7 +1052,6 @@ int parse_format(const char *format, struct block **blocks, const char *blockdir
 				struct block b = { 0 };
 				init_block(&b);
 				b.name = strdup(cur_block_name);
-				//b.path = filepath(blockdir, cur_block_name, NULL);
 				b.cfg = filepath(blockdir, cur_block_name, "ini");
 				b.align = cur_align;
 				(*blocks)[num_blocks++] = b;
@@ -1260,56 +1331,18 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 }
 
 /*
- * Load the configuration file (ini) for the given block, if it exists,
- * and have the ini reader (inih) call block_ini_handler() accordingly.
- * Returns 0 on success, -1 if the config file does'n exist or couldn't be read.
- */
-int configure_block(struct block *b, const char *blocks_dir)
-{
-	//char *blockini = filepath(blocks_dir, b->name, "ini");
-	//if (access(blockini, R_OK) == -1)
-	if (access(b->cfg, R_OK) == -1)
-	{
-		fprintf(stderr, "No block config found for: %s\n", b->name);
-		return -1;
-	}
-	//if (ini_parse(blockini, block_ini_handler, b) < 0)
-	if (ini_parse(b->cfg, block_ini_handler, b) < 0)
-	{
-		fprintf(stderr, "Can't parse block INI: %s\n", b->cfg);
-		//free(blockini);
-		return -1;
-	}
-	//free(blockini);
-	return 0;
-}
-
-/*
- * Convenience function: simply runs configure_block() for all blocks.
- * Returns the number of blocks that were successfully configured.
- */
-int configure_blocks(struct block *blocks, int num_blocks, const char *blocks_dir)
-{
-	int num_blocks_configured = 0;
-	for (int i=0; i<num_blocks; ++i)
-	{
-		num_blocks_configured += 
-			(configure_block(&blocks[i], blocks_dir) == 0) ? 1 : 0;
-	}
-	return num_blocks_configured;
-}
-
-/*
  * Returns 1 if the given file name ends in ".ini", 0 otherwise.
+ * TODO currently not in use. Do we need it? Maybe put it in a utility file?
  */
 int is_ini(const char *filename)
 {
 	char *dot = strrchr(filename, '.');
-	return (dot && !strcmp(dot, ".ini")) ? 1 : 0;
+	return (dot && !strcmp(dot, ".ini"));
 }
 
 /*
  * Returns 1 if the given file name starts with ".", 0 otherwise.
+ * TODO currently not in use. Do we need it? Maybe put it in a utility file?
  */
 int is_hidden(const char *filename)
 {
@@ -1318,6 +1351,7 @@ int is_hidden(const char *filename)
 
 /*
  * Returns 1 if the given file is executable, 0 otherwise.
+ * TODO currently not in use. Do we need it? Maybe put it in a utility file?
  */
 int is_executable(const char *dir, const char *filename)
 {
@@ -1326,11 +1360,6 @@ int is_executable(const char *dir, const char *filename)
 	int is_exec = (stat(file, &sb) == 0 && sb.st_mode & S_IXUSR);
 	free(file);
 	return is_exec;
-}
-
-int probably_a_block(const char *dir, const char *filename)
-{
-	return !is_ini(filename) && !is_hidden(filename) && is_executable(dir, filename);
 }
 
 int create_triggers(struct trigger **triggers, struct block *blocks, int num_blocks)
@@ -1360,43 +1389,6 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 	}
 	*triggers = realloc(*triggers, num_triggers_created * sizeof(struct trigger));
 	return num_triggers_created;
-}
-
-int count_blocks(const char *blockdir)
-{
-	DIR *block_dir = opendir(blockdir);
-	if (block_dir == NULL)
-	{
-		return -1;
-	}
-
-	int num_blocks = 0;
-	struct dirent *entry;
-	while ((entry = readdir(block_dir)) != NULL)
-	{
-		if (entry->d_type == DT_REG && probably_a_block(blockdir, entry->d_name))
-		{
-			++num_blocks;
-		}
-	}
-	return num_blocks;
-}
-
-int create_blocks(struct block **blocks, const struct block *blocks_req, int num_blocks_req)
-{
-	*blocks = malloc(num_blocks_req * sizeof(struct block));
-
-	size_t num_blocks_created = 0;
-	for (int i=0; i<num_blocks_req; ++i)
-	{
-		//if (access(blocks_req[i].path, F_OK|R_OK|X_OK) != -1)
-		if (access(blocks_req[i].cfg, F_OK|R_OK) != -1)
-		{
-			(*blocks)[num_blocks_created++] = blocks_req[i];
-		}
-	}
-	*blocks = realloc(*blocks, num_blocks_created * sizeof(struct block));
-	return num_blocks_created;
 }
 
 /*
@@ -1600,6 +1592,39 @@ void sigint_handler(int sig)
 	handled = sig;
 }
 
+void found_block_cb(const char *name, int align, int n, void *data)
+{
+	struct block_container *bc = data;
+	fprintf(stderr, "Found block %d: %s (align: %d)\n", n, name, align);
+
+	struct block b = { 0 };
+	init_block(&b);
+	b.name = strdup(name);
+	b.align = align;
+
+	if (n > bc->num_blocks - 1)
+	{
+		bc->num_blocks += NUM_BLOCKS_INC;
+		bc->blocks = realloc(bc->blocks, bc->num_blocks * sizeof(struct block));
+	}
+
+	char *blockini = filepath(bc->block_dir, b.name, "ini");
+	if (access(blockini, F_OK|R_OK) == -1)
+	{
+		fprintf(stderr, "No block config found for: %s\n", b.name);
+		return;
+	}
+	if (ini_parse(blockini, block_ini_handler, &b) < 0)
+	{
+		fprintf(stderr, "Can't parse block INI: %s\n", blockini);
+		free(blockini);
+		return;
+	}
+	free(blockini);
+
+	bc->blocks[n] = b;
+}
+
 int main(void)
 {
 	// Prevent zombie children during runtime
@@ -1628,6 +1653,23 @@ int main(void)
 	{
 		fprintf(stderr, "Failed to register SIGTERM handler\n");
 	}
+
+	/*
+	 * TEMP DEBUG STUFF
+	 */
+
+	char *display = getenv("DISPLAY");
+	if (!display)
+	{
+		fprintf(stderr, "DISPLAY environment variable not set\n");
+		return EXIT_FAILURE;
+	}
+	if (!strstr(display, ":"))
+	{
+		fprintf(stderr, "DISPLAY environment variable seems invalid\n");
+		return EXIT_FAILURE;
+	}
+	fprintf(stderr, "DISPLAY env var:\n\t%s\n", display);
 
 	/*
 	 * DIRECTORIES
@@ -1663,48 +1705,34 @@ int main(void)
 	 * BLOCKS
 	 */
 	
-	// TODO refactor blocks initalization - and incorporate reading the  
-	// block binary / script path from the config, so we can remove the 
-	// actual binary / script from the config directory. Hopefully we can
-	// get rid of the init_block() func in the process, as well as improve
-	// the initialization process to where we can do it all in one step?	
+	// Create a block container, so we can hand that around later on
+	struct block_container bc = {0};
+	bc.num_blocks = NUM_BLOCKS;
+	bc.block_dir = blocksdir;
+	bc.blocks = malloc(bc.num_blocks * sizeof(struct block));
 
-	struct block *blocks_requested; 
-	int num_blocks_requested = parse_format(lemonbar.format, &blocks_requested, blocksdir);
-
-	if (num_blocks_requested < 0)
+	// Parse the format string and call found_block_cb for every block name
+	size_t actual_num_blocks = parse_format_cb(lemonbar.format, found_block_cb, &bc);
+	
+	// Final realloc to trim it down to just the right amount of elements
+	if (actual_num_blocks != bc.num_blocks)
 	{
-		fprintf(stderr, "Could not figure out what blocks to load, stopping %s\n",
-				NAME);
-		return EXIT_FAILURE;
+		bc.blocks = realloc(bc.blocks, actual_num_blocks * sizeof(struct block));
+		bc.num_blocks = actual_num_blocks;
 	}
 
-	printf("Blocks requested: (%d total)\n\t", num_blocks_requested);
-	for (int i=0; i<num_blocks_requested; ++i)
+	printf("Blocks found: (%d total)\n\t", bc.num_blocks);
+	for (int i = 0; i < bc.num_blocks; ++i)
 	{
-		printf("%s ", blocks_requested[i].name);
-	}
-	printf("\n");
-
-	struct block *blocks;
-	int num_blocks = create_blocks(&blocks, blocks_requested, num_blocks_requested);
-	configure_blocks(blocks, num_blocks, blocksdir);
-	free(blocks_requested);
-
-
-	printf("Blocks found: (%d total)\n\t", num_blocks);
-	for (int i=0; i<num_blocks; ++i)
-	{
-		printf("%s ", blocks[i].name);
+		printf("%s ", bc.blocks[i].name);
 	}
 	printf("\n");
 
 	free(blocksdir);
 
-	if (num_blocks == 0)
+	if (bc.num_blocks == 0)
 	{
-		fprintf(stderr, "No blocks loaded (%d requested), stopping %s.\n",
-			       	num_blocks_requested, NAME);
+		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
 		return EXIT_FAILURE;
 	}
 
@@ -1725,7 +1753,7 @@ int main(void)
 	 */
 
 	struct trigger *triggers;
-	int num_triggers = create_triggers(&triggers, blocks, num_blocks);
+	int num_triggers = create_triggers(&triggers, bc.blocks, bc.num_blocks);
 
 	printf("Triggers found: (%d total)\n\t", num_triggers);
 	for (int i=0; i<num_triggers; ++i)
@@ -1836,7 +1864,7 @@ int main(void)
 		// Let's process bar's output, if any
 		if (strlen(bar_output))
 		{
-			if (process_action(bar_output, blocks, num_blocks) < 0)
+			if (process_action(bar_output, bc.blocks, bc.num_blocks) < 0)
 			{
 				// It wasn't a recognized command, so chances are
 				// that is was some debug/error output of bar.
@@ -1847,7 +1875,7 @@ int main(void)
 		}
 
 		// Let's update bar!
-		feed_bar(&lemonbar, blocks, num_blocks, delta, 0.1, &wait);
+		feed_bar(&lemonbar, bc.blocks, bc.num_blocks, delta, 0.1, &wait);
 	}
 
 	/*
@@ -1860,12 +1888,12 @@ int main(void)
 	close(epfd);
 
 	fprintf(stderr, "\tclosing all blocks\n");
-	close_blocks(blocks, num_blocks);
+	close_blocks(bc.blocks, bc.num_blocks);
 
 	fprintf(stderr, "\tfreeing all blocks\n");
-	free_blocks(blocks, num_blocks);
+	free_blocks(bc.blocks, bc.num_blocks);
 
-	free(blocks);
+	free(bc.blocks);
 	
 	// This is where it used to hang, due to pclose() calling wait()
 	fprintf(stderr, "\tclosing all triggers\n");
