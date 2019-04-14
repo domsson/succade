@@ -86,6 +86,7 @@ struct block
 	char *cmd_rmb;          // Command to run on right mouse click
 	char *cmd_sup;          // Command to run on scroll up
 	char *cmd_sdn;          // Command to run on scroll down
+	int live : 1;           // This block is its own trigger
 	int used : 1;           // Has this block been run at least once?
 	double reload;          // Interval between runs 
 	double waited;          // Time the block hasn't been run
@@ -106,8 +107,8 @@ struct trigger
 struct block_container
 {
 	struct block *blocks;
-	size_t num_blocks;
-	char *block_dir;
+	size_t count;
+	char *dir;
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
@@ -393,7 +394,7 @@ int open_bar(struct bar *b)
 	free(label_font);
 	free(affix_font);
 
-	printf("Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
+	fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 
 	b->pid = popen_noshell(bar_cmd, &(b->fd_out), NULL, &(b->fd_in));
 	if (b->pid == -1)
@@ -413,7 +414,6 @@ int open_bar(struct bar *b)
  */
 int open_block(struct block *b)
 {
-	// TODO just a quick hack to get things going
 	if (b->bin == NULL)
 	{
 		fprintf(stderr, "Skipping block '%s' as no binary given\n", b->name);
@@ -447,6 +447,7 @@ int open_block(struct block *b)
 /*
  * Convenience function: simply runs open_block() for all blocks.
  * Returns the number of blocks that were successfully opened.
+ * TODO currently not in use, can we trash it?
  */
 int open_blocks(struct block *blocks, int num_blocks)
 {
@@ -534,11 +535,23 @@ int open_trigger(struct trigger *t)
  */
 void close_trigger(struct trigger *t)
 {
+	// Is the trigger's command still running?
 	if (t->pid > 1)
 	{
 		kill(t->pid, SIGTERM); // Politely ask to terminate
 	}
-	if (t->fd != NULL)
+	// If bar is set, then fd is a copy and will be closed elsewhere
+	if (t->bar)
+	{
+		return;
+	}
+	// If block is live, then fd is a copy and will be closed elsewhere
+	if (t->b && t->b->live)
+	{
+		return;
+	}
+	// Looks like we should actually close/free this fd after all
+	if (t->fd)
 	{
 		fclose(t->fd);
 		t->fd = NULL;
@@ -1010,61 +1023,11 @@ size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 			block_name[block_name_len]   = '\0';
 		}
 	}
-	return num_blocks;
-}
 
-/*
- * Parse the given format string and create blocks accordingly.
- * Those blocks only have their name, path and align properties set.
- * Returns the number of blocks created.
- */
-int parse_format(const char *format, struct block **blocks, const char *blockdir)
-{
-	if (format == NULL)
-	{
-		return -1;
-	}
-
-	size_t size = 8; // TODO hardcoded value
-	*blocks = malloc(size * sizeof(struct block));
-	size_t format_len = strlen(format) + 1;
-	char cur_block_name[64]; // TODO hardcoded value
-	     cur_block_name[0] = '\0';
-	size_t cur_block_len = 0;
-	int cur_align = -1;
-	int num_blocks = 0;
-
-	for (int i = 0; i < format_len; ++i)
-	{
-		switch (format[i])
-		{
-		case '|':
-			cur_align += cur_align < 1;
-		case ' ':
-		case '\0':
-			if (cur_block_len)
-			{
-				if (num_blocks == size)
-				{
-					size += 2;
-					*blocks = realloc(*blocks, size * sizeof(struct block));
-				}
-				struct block b = { 0 };
-				init_block(&b);
-				b.name = strdup(cur_block_name);
-				b.cfg = filepath(blockdir, cur_block_name, "ini");
-				b.align = cur_align;
-				(*blocks)[num_blocks++] = b;
-				cur_block_name[0] = '\0';
-				cur_block_len = 0;
-			}
-			break;
-		default:
-			cur_block_name[cur_block_len++] = format[i];
-			cur_block_name[cur_block_len]   = '\0';
-		}
-	}
-	*blocks = realloc(*blocks, sizeof(struct block) * num_blocks);
+	// We inform the callback one last time, but set name = NULL
+	cb(NULL, 0, num_blocks, data);
+	
+	// Return the number of blocks found
 	return num_blocks;
 }
 
@@ -1331,13 +1294,13 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 }
 
 /*
- * Returns 1 if the given file name ends in ".ini", 0 otherwise.
+ * Returns 1 if the given file name ends in a dot followed by ext, 0 otherwise.
  * TODO currently not in use. Do we need it? Maybe put it in a utility file?
  */
-int is_ini(const char *filename)
+int has_ext(const char *filename, const char *ext)
 {
 	char *dot = strrchr(filename, '.');
-	return (dot && !strcmp(dot, ".ini"));
+	return (dot && !strcmp(dot+1, ext));
 }
 
 /*
@@ -1373,19 +1336,26 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 	int num_triggers_created = 0;
 	for (int i=0; i<num_blocks; ++i)
 	{
-		if (blocks[i].trigger == NULL)
+		// Is it a block triggered by another program/script?
+		if (blocks[i].trigger != NULL)
 		{
+			struct trigger t = { 0 };
+			t.cmd = strdup(blocks[i].trigger);
+			t.b = &blocks[i];
+
+			(*triggers)[num_triggers_created++] = t;
 			continue;
 		}
-		struct trigger t = {
-			.cmd = strdup(blocks[i].trigger),
-			.pid = 0,
-			.fd = NULL,
-			.b = &blocks[i],
-			.bar = NULL,
-			.ready = 0
-		};
-		(*triggers)[num_triggers_created++] = t;
+		// Is it a block triggered by itself? ("Live" block)
+		if (blocks[i].live)
+		{
+			struct trigger t = { 0 };
+			t.fd = blocks[i].fd;
+			t.b = &blocks[i];
+
+			(*triggers)[num_triggers_created++] = t;
+			continue;
+		}
 	}
 	*triggers = realloc(*triggers, num_triggers_created * sizeof(struct trigger));
 	return num_triggers_created;
@@ -1592,26 +1562,35 @@ void sigint_handler(int sig)
 	handled = sig;
 }
 
-void found_block_cb(const char *name, int align, int n, void *data)
+void found_block_handler(const char *name, int align, int n, void *data)
 {
+	// 'Unpack' the data
 	struct block_container *bc = data;
-	fprintf(stderr, "Found block %d: %s (align: %d)\n", n, name, align);
-
-	struct block b = { 0 };
-	init_block(&b);
-	b.name = strdup(name);
-	b.align = align;
-
-	if (n > bc->num_blocks - 1)
+	
+	// If name is NULL, we processed all blocks (a total of n blocks)
+	if (!name)
 	{
-		bc->num_blocks += NUM_BLOCKS_INC;
-		bc->blocks = realloc(bc->blocks, bc->num_blocks * sizeof(struct block));
+		// Perform one final realloc, if required
+		if (n != bc->count)
+		{
+			bc->blocks = realloc(bc->blocks, n * sizeof(struct block));
+			bc->count  = n; 
+		}
+		return;
 	}
 
-	char *blockini = filepath(bc->block_dir, b.name, "ini");
+	// Create a block, set its name and align
+	struct block b = { 0 };
+	init_block(&b);
+	b.name  = strdup(name);
+	b.align = align;
+
+	// Attempt to read and parse the block's config file
+	char *blockini = filepath(bc->dir, b.name, "ini");
 	if (access(blockini, F_OK|R_OK) == -1)
 	{
 		fprintf(stderr, "No block config found for: %s\n", b.name);
+		free(blockini);
 		return;
 	}
 	if (ini_parse(blockini, block_ini_handler, &b) < 0)
@@ -1621,12 +1600,24 @@ void found_block_cb(const char *name, int align, int n, void *data)
 		return;
 	}
 	free(blockini);
+	
+	// Make sure there is enough space for the new block
+	if (n > bc->count - 1)
+	{
+		bc->count += NUM_BLOCKS_INC;
+		bc->blocks = realloc(bc->blocks, bc->count * sizeof(struct block));
+	}
 
+	// Add the block to the struct
 	bc->blocks[n] = b;
 }
 
 int main(void)
 {
+	/*
+	 * SIGNALS
+	 */
+
 	// Prevent zombie children during runtime
 	struct sigaction sa_chld = {
 		.sa_handler = SIG_IGN
@@ -1653,9 +1644,13 @@ int main(void)
 	{
 		fprintf(stderr, "Failed to register SIGTERM handler\n");
 	}
+	if (sigaction (SIGPIPE, &sa_int, NULL) == -1)
+	{
+		fprintf(stderr, "Failed to register SIGPIPE handler\n");
+	}
 
 	/*
-	 * TEMP DEBUG STUFF
+	 * CHECK IF X IS RUNNING
 	 */
 
 	char *display = getenv("DISPLAY");
@@ -1706,35 +1701,30 @@ int main(void)
 	 */
 	
 	// Create a block container, so we can hand that around later on
-	struct block_container bc = {0};
-	bc.num_blocks = NUM_BLOCKS;
-	bc.block_dir = blocksdir;
-	bc.blocks = malloc(bc.num_blocks * sizeof(struct block));
+	struct block_container bc = { 0 };
+	bc.count  = NUM_BLOCKS;
+	bc.dir    = blocksdir;
+	bc.blocks = malloc(bc.count * sizeof(struct block));
 
 	// Parse the format string and call found_block_cb for every block name
-	size_t actual_num_blocks = parse_format_cb(lemonbar.format, found_block_cb, &bc);
-	
-	// Final realloc to trim it down to just the right amount of elements
-	if (actual_num_blocks != bc.num_blocks)
-	{
-		bc.blocks = realloc(bc.blocks, actual_num_blocks * sizeof(struct block));
-		bc.num_blocks = actual_num_blocks;
-	}
-
-	printf("Blocks found: (%d total)\n\t", bc.num_blocks);
-	for (int i = 0; i < bc.num_blocks; ++i)
-	{
-		printf("%s ", bc.blocks[i].name);
-	}
-	printf("\n");
-
+	size_t num_blocks = parse_format_cb(lemonbar.format, found_block_handler, &bc);
 	free(blocksdir);
 
-	if (bc.num_blocks == 0)
+	// Exit if no blocks could be loaded at all	
+	if (num_blocks == 0)
 	{
+		// TODO or should we still run (with an empty lemonbar)?
 		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
 		return EXIT_FAILURE;
 	}
+	
+	// Debug-print all blocks that we found
+	fprintf(stderr, "Blocks found: (%d total)\n\t", bc.count);
+	for (int i = 0; i < bc.count; ++i)
+	{
+		fprintf(stderr, "%s ", bc.blocks[i].name);
+	}
+	fprintf(stderr, "\n");
 
 	/*
 	 * BAR TRIGGER - triggers when lemonbar spits something to stdout/stderr
@@ -1749,27 +1739,29 @@ int main(void)
 	};
 	
 	/*
-	 * TRIGGERS - trigger when their respective commands output something
+	 * TRIGGERS - trigger when their respective commands produce output
 	 */
 
 	struct trigger *triggers;
-	int num_triggers = create_triggers(&triggers, bc.blocks, bc.num_blocks);
+	int num_triggers = create_triggers(&triggers, bc.blocks, bc.count);
 
-	printf("Triggers found: (%d total)\n\t", num_triggers);
+	// Debug-print all triggers that we found
+	fprintf(stderr, "Triggers found: (%d total)\n\t", num_triggers);
 	for (int i=0; i<num_triggers; ++i)
 	{
-		printf("'%s' ", triggers[i].cmd);
+		fprintf(stderr, "'%s' ", triggers[i].cmd);
 	}
-	printf("\n");
+	fprintf(stderr, "\n");
 
 	int num_triggers_opened = open_triggers(triggers, num_triggers);
 
-	printf("Triggeres opened: (%d total)\n\t", num_triggers_opened);
+	// Debug-print all triggers that we opened
+	fprintf(stderr, "Triggeres opened: (%d total)\n\t", num_triggers_opened);
 	for (int i=0; i<num_triggers; ++i)
 	{
-		printf("'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
+		fprintf(stderr, "'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
 	}
-	printf("\n");
+	fprintf(stderr, "\n");
 
 	/* 
 	 * EVENTS - register our triggers with the system so we'll be notified
@@ -1864,18 +1856,18 @@ int main(void)
 		// Let's process bar's output, if any
 		if (strlen(bar_output))
 		{
-			if (process_action(bar_output, bc.blocks, bc.num_blocks) < 0)
+			if (process_action(bar_output, bc.blocks, bc.count) < 0)
 			{
 				// It wasn't a recognized command, so chances are
 				// that is was some debug/error output of bar.
 				// TODO just use stderr in addition to stdout
-				printf("Lemonbar: %s", bar_output);
+				fprintf(stderr, "Lemonbar: %s", bar_output);
 			}
 			bar_output[0] = '\0';
 		}
 
 		// Let's update bar!
-		feed_bar(&lemonbar, bc.blocks, bc.num_blocks, delta, 0.1, &wait);
+		feed_bar(&lemonbar, bc.blocks, bc.count, delta, 0.1, &wait);
 	}
 
 	/*
@@ -1887,15 +1879,11 @@ int main(void)
 	fprintf(stderr, "\tclosing epoll file descriptor\n");
 	close(epfd);
 
-	fprintf(stderr, "\tclosing all blocks\n");
-	close_blocks(bc.blocks, bc.num_blocks);
-
-	fprintf(stderr, "\tfreeing all blocks\n");
-	free_blocks(bc.blocks, bc.num_blocks);
-
-	free(bc.blocks);
 	
 	// This is where it used to hang, due to pclose() calling wait()
+
+	// Close triggers - it's important we free these first as they might
+	// point to instances of bar and/or blocks, which will lead to errors
 	fprintf(stderr, "\tclosing all triggers\n");
 	close_triggers(triggers, num_triggers);
 
@@ -1910,6 +1898,16 @@ int main(void)
 	fprintf(stderr, "\tfreeing bar trigger\n");
 	free_trigger(&bartrig);
 
+	// Close blocks
+	fprintf(stderr, "\tclosing all blocks\n");
+	close_blocks(bc.blocks, bc.count);
+
+	fprintf(stderr, "\tfreeing all blocks\n");
+	free_blocks(bc.blocks, bc.count);
+
+	free(bc.blocks);
+
+	// Close bar
 	fprintf(stderr, "\tclosing bar\n");
 	close_bar(&lemonbar);
 
