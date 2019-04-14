@@ -9,7 +9,7 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works alm
 
 - Starts `lemonbar` for you
 - Reads the config file `~/.config/succade/succaderc`
-- Loads blocks (scripts) and their config files from `~/.config/succade/blocks`
+- Loads blocks (config files that point to binaries/scripts) from `~/.config/succade/blocks`
 - Updates Lemonbar based on the block's reloads or triggers
 
 The general config file defines styling and position for the whole bar, lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes).
@@ -102,10 +102,11 @@ Take a look at the example configuration in this repository. The general configu
 
 ## name-of-block.ini
 
-In the block directory, you can create one config file for each block. The file name should be the same as the block, but end in `.ini`. For example, if you have a `time` block (script), name the config file `time.ini`. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there. This way, you can set a default font color in `succaderc`, but decide to give some blocks a different one via their own config.
+In the block directory, you can create one config file for each block. The file name should end in `.ini`. The `bin` option points to the script/binary that should be run to create the desired output. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there. This way, you can set a default font color in `succaderc`, but decide to give some blocks a different one via their own config.
 
 | Parameter          | Alias      | Type    | Description |
 |--------------------|------------|---------|-------------|
+| `bin`              |            | string  | The binary/script that will be run to generate this block's output. |
 | `reload`           |            | number  | Defines in what interval (in seconds) this block should be run. Setting this to `5` will run this block every 5 seconds. Lower values will lead to more CPU usage. A third option is to set `reload` to `0`. In this case, succade will run your block once, and only once, effectively creating a static block. |
 | `trigger`          |            | string  | If your block should be run depending on the output of another command, then set this command here. If you do this, succade will run that trigger command and monitor its output. Whenever the command produces new output, succade will run the block - and pipe the trigger's output as input to the block. This will set `reload` to `0`. |
 | `label`            |            | string  | A string to be displayed before the block's main text. Can be used to display an icon by using an appropriate font, like Siji. |
