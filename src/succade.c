@@ -512,7 +512,7 @@ int open_trigger(struct trigger *t)
 	{
 		return -1;
 	}
-
+	
 	t->pid = popen_noshell(t->cmd, &(t->fd), NULL, NULL);
 	if (t->pid == -1)
 	{
@@ -521,8 +521,7 @@ int open_trigger(struct trigger *t)
 
 	setlinebuf(t->fd); // TODO add error handling
 	int fn = fileno(t->fd);
-	int flags;
-	flags = fcntl(fn, F_GETFL, 0); // TODO add error handling
+	int flags = fcntl(fn, F_GETFL, 0); // TODO add error handling
 	flags |= O_NONBLOCK;
 	fcntl(fn, F_SETFL, flags); // TODO add error handling
 	return 0;
@@ -542,11 +541,6 @@ void close_trigger(struct trigger *t)
 	}
 	// If bar is set, then fd is a copy and will be closed elsewhere
 	if (t->bar)
-	{
-		return;
-	}
-	// If block is live, then fd is a copy and will be closed elsewhere
-	if (t->b && t->b->live)
 	{
 		return;
 	}
@@ -625,6 +619,12 @@ void free_triggers(struct trigger *triggers, int num_triggers)
  */
 int run_block(struct block *b, size_t result_length)
 {
+	if (b->live)
+	{
+		fprintf(stderr, "Block is live: `%s`\n", b->name);
+		return -1;
+	}
+
 	open_block(b);
 	if (b->fd == NULL)
 	{
@@ -856,20 +856,27 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 {
 	// Short blocks like temperatur, volume or battery info will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
-	size_t bar_str_len = 256 * num_blocks;
+	size_t bar_str_len = 256 * num_blocks; // TODO hardcoded value
 	char *bar_str = malloc(bar_str_len);
 	bar_str[0] = '\0';
 
 	char align[5];
 	int last_align = 0;
 
-	for (int i=0; i<num_blocks; ++i)
+	for (int i = 0; i < num_blocks; ++i)
 	{
 		// TODO just quick hack to get this working
 		if (blocks[i].bin == NULL)
 		{
 			continue;
 		}
+
+		// Live blocks might not have a result available
+		if (blocks[i].result == NULL)
+		{
+			continue;
+		}
+
 		char *block_str = blockstr(bar, &blocks[i], 0);
 		size_t block_str_len = strlen(block_str);
 		if (blocks[i].align != last_align)
@@ -897,6 +904,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, 
 		double delta, double tolerance, double *next)
 {
+	// Can't pipe to bar if its file descriptor isn't available
 	if (bar->fd_in == NULL)
 	{
 		return -1;
@@ -906,11 +914,25 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks,
 	double until_next = DBL_MAX;
 	double idle_left;
 
-	for(int i=0; i<num_blocks; ++i)
+	for (int i = 0; i < num_blocks; ++i)
 	{
+		// Skip live blocks, they will update based on their output
+		if (blocks[i].live && blocks[i].result)
+		{
+			// However, we count them as executed block so that
+			// we actually end up updating the bar further down
+			++num_blocks_executed;
+			continue;
+		}
+
+		// Updated the time this block hasn't been run
 		blocks[i].waited += delta;
+
+		// Calc how long until this block should be run
 		idle_left = blocks[i].reload - blocks[i].waited;
 
+		// Block was never run before OR block has input waiting OR
+		// it's time to run this block according to it's reload option
 		if (!blocks[i].used || blocks[i].input || 
 				(blocks[i].reload > 0.0 && idle_left < tolerance))
 		{
@@ -919,6 +941,8 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks,
 		}
 
 		idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
+
+		// Possibly update the time until we should run feed_bar again
 		if (blocks[i].input == NULL && idle_left < until_next)
 		{
 			// If reload is 0, this block idles forever
@@ -933,7 +957,7 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks,
 	if (num_blocks_executed)
 	{
 		char *lemonbar_str = barstr(bar, blocks, num_blocks);
-		if (DEBUG) { printf("%s", lemonbar_str); }
+		if (DEBUG) { fprintf(stderr, "%s", lemonbar_str); }
 		fputs(lemonbar_str, bar->fd_in);
 		free(lemonbar_str);
 	}
@@ -1339,10 +1363,10 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 	}
 	*triggers = malloc(num_blocks * sizeof(struct trigger));
 	int num_triggers_created = 0;
-	for (int i=0; i<num_blocks; ++i)
+	for (int i = 0; i < num_blocks; ++i)
 	{
 		// Is it a block triggered by another program/script?
-		if (blocks[i].trigger != NULL)
+		if (blocks[i].trigger)
 		{
 			struct trigger t = { 0 };
 			t.cmd = strdup(blocks[i].trigger);
@@ -1352,10 +1376,10 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 			continue;
 		}
 		// Is it a block triggered by itself? ("Live" block)
-		if (blocks[i].live)
+		if (blocks[i].live && blocks[i].bin)
 		{
 			struct trigger t = { 0 };
-			t.fd = blocks[i].fd;
+			t.cmd = strdup(blocks[i].bin);
 			t.b = &blocks[i];
 
 			(*triggers)[num_triggers_created++] = t;
@@ -1439,15 +1463,31 @@ int run_trigger(struct trigger *t)
 	{
 		++num_lines;
 	}
-	
+
 	if (num_lines)
 	{
-		if (t->b->input != NULL)
+		// For live blocks, this will be the actual output
+		if (t->b->live)
 		{
-			free(t->b->input);
-			t->b->input = NULL;
+			if (t->b->result != NULL)
+			{
+				free(t->b->result);
+				t->b->result = NULL;
+			}
+			t->b->result = strdup(res);
+			// Remove '\n'
+			t->b->result[strcspn(t->b->result, "\n")] = 0;
 		}
-		t->b->input = strdup(res);
+		// For regular blocks, this will be input for the block
+		else
+		{
+			if (t->b->input != NULL)
+			{
+				free(t->b->input);
+				t->b->input = NULL;
+			}
+			t->b->input = strdup(res);
+		}
 	}
 	
 	return num_lines;
@@ -1777,7 +1817,7 @@ int main(void)
 
 	// Let's first register all our triggers associated with blocks	 
 	int epctl_result = 0;
-	for (int i=0; i<num_triggers; ++i)
+	for (int i = 0; i < num_triggers; ++i)
 	{
 		if (triggers[i].fd == NULL)
 		{
@@ -1835,6 +1875,9 @@ int main(void)
 			if (tev[i].events & EPOLLIN)
 			{
 				((struct trigger*) tev[i].data.ptr)->ready = 1;
+
+				struct trigger *t = tev[i].data.ptr;
+				fprintf(stderr, "Trigger `%s` has activity!\n", t->cmd);
 			}
 		}	
 
