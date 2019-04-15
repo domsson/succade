@@ -1061,12 +1061,12 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	}
 	if (equals(name, "ol") || equals(name, "overline"))
 	{
-		bar->ol = equals(value, "true") ? 1 : 0;
+		bar->ol = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "ul") || equals(name, "underline"))
 	{
-		bar->ul = equals(value, "true") ? 1 : 0;
+		bar->ul = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
@@ -1091,12 +1091,12 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	}
 	if (equals(name, "dock"))
 	{
-		bar->bottom = (equals(value, "bottom")) ? 1 : 0;
+		bar->bottom = equals(value, "bottom");
 		return 1;
 	}
 	if (equals(name, "force"))
 	{
-		bar->force = (equals(value, "true")) ? 1 : 0;
+		bar->force = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "offset") || equals(name, "block-offset"))
@@ -1223,12 +1223,17 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	}
 	if (equals(name, "ol") || equals(name, "overline"))
 	{
-		block->ol = equals(value, "true") ? 1 : 0;
+		block->ol = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "ul") || equals(name, "underline"))
 	{
-		block->ul = equals(value, "true") ? 1 : 0;
+		block->ul = equals(value, "true");
+		return 1;
+	}
+	if (equals(name, "live"))
+	{
+		block->live = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "pad") || equals(name, "padding"))
@@ -1730,13 +1735,9 @@ int main(void)
 	 * BAR TRIGGER - triggers when lemonbar spits something to stdout/stderr
 	 */
 	
-	struct trigger bartrig = {
-		.cmd = NULL,
-		.fd = lemonbar.fd_out,
-		.b = NULL,
-		.bar = &lemonbar,
-		.ready = 0
-	};
+	struct trigger bartrig = { 0 };
+	bartrig.fd = lemonbar.fd_out;
+	bartrig.bar = &lemonbar;
 	
 	/*
 	 * TRIGGERS - trigger when their respective commands produce output
