@@ -1708,11 +1708,6 @@ int main(int argc, char **argv)
 	struct succade_config cfg = { 0 };
 	parse_args(argc, argv, &cfg);
 
-	if (cfg.help)
-	{
-		fprintf(stderr, "I'm only here to help!\n");
-	}
-
 	/*
 	 * CHECK IF X IS RUNNING
 	 */
