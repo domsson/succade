@@ -462,8 +462,8 @@ int open_blocks(struct block *blocks, int num_blocks)
 }
 
 /*
- * Closes the given bar process by closing its file descriptors.
- * The descriptors will also be set to NULL after closing.
+ * Closes the given bar by killing the process, closing its file descriptors
+ * and setting them to NULL after.
  */
 void close_bar(struct bar *b)
 {
@@ -485,8 +485,8 @@ void close_bar(struct bar *b)
 }
 
 /*
- * Closes the given block by closing its file descriptor.
- * The descriptor will also be set to NULL after closing.
+ * Closes the given block by killing the process, closing its file descriptor
+ * and settings them to NULL after.
  */
 void close_block(struct block *b)
 {
