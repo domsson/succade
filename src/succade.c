@@ -14,6 +14,8 @@
 #include <spawn.h>
 #include <wordexp.h>
 #include "ini.h"
+#include "succade.h"
+#include "args.c"
 
 #define DEBUG 0 
 #define NAME "succade"
@@ -465,6 +467,11 @@ int open_blocks(struct block *blocks, int num_blocks)
  */
 void close_bar(struct bar *b)
 {
+	if (b->pid > 1)
+	{
+		kill(b->pid, SIGKILL);
+		b->pid = 0;
+	}
 	if (b->fd_in != NULL)
 	{
 		fclose(b->fd_in);
@@ -486,12 +493,12 @@ void close_block(struct block *b)
 	if (b->pid > 1)
 	{
 		kill(b->pid, SIGTERM);
+		b->pid = 0;
 	}
 	if (b->fd != NULL)
 	{
 		fclose(b->fd);
 		b->fd = NULL;
-		b->pid = 0;
 	}
 }
 
@@ -1657,7 +1664,7 @@ void found_block_handler(const char *name, int align, int n, void *data)
 	bc->blocks[n] = b;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
 	/*
 	 * SIGNALS
@@ -1692,6 +1699,18 @@ int main(void)
 	if (sigaction (SIGPIPE, &sa_int, NULL) == -1)
 	{
 		fprintf(stderr, "Failed to register SIGPIPE handler\n");
+	}
+
+	/*
+	 * PARSE COMMAND LINE ARGUMENTS
+	 */
+
+	struct succade_config cfg = { 0 };
+	parse_args(argc, argv, &cfg);
+
+	if (cfg.help)
+	{
+		fprintf(stderr, "I'm only here to help!\n");
 	}
 
 	/*
