@@ -32,11 +32,11 @@ Triggers are commands that succade will run and monitor for output. When there i
 
 # To-Do List
 
-- Support for _live_ blocks
-- Support for multiple bars
-- Support for multiple monitors
-- Lots of testing to find and fix bugs (your help is appreciated!)
-- Some Refactoring
+- [x] Support for _live_ blocks
+- [ ] Support for multiple bars
+- [ ] Support for multiple monitors
+- [ ] Lots of testing to find and fix bugs (your help is appreciated!)
+- [ ] Some Refactoring
 
 # Dependencies
 
@@ -47,23 +47,28 @@ Triggers are commands that succade will run and monitor for output. When there i
 Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed.
 
 1. Clone this repository:  
-  `git clone https://github.com/domsson/succade.git`
+   `git clone https://github.com/domsson/succade.git`
 2. Change into the succade directory:  
-  `cd succade`
+   `cd succade`
 3. Make the build script executable, then run it:  
-  `chmod +x ./build`  
-  `./build`
+   `chmod +x ./build`  
+   `./build`
 4. Create the config directories (assuming `.config` as your config dir):  
-  `mkdir ~/.config/succade`  
-  `mkdir ~/.config/succade/blocks`
-5. Copy the example config and example blocks:  
-  `cp succaderc ~/.config/succade`  
-  `cp blocks/* ~/.config/succade/blocks`
-6. Make sure the blocks are executable:  
-  `chmod +x ~/.config/succade/blocks/*`
-7. Make `succade` executable and put it somwhere that's included in your path:  
-  `chmod +x bin/succade`  
-  `cp bin/succade ~/.local/bin/`
+   `mkdir ~/.config/succade`  
+   `mkdir ~/.config/succade/blocks`
+5. Create a directory for the example block scripts:
+   `mkdir ~/.local/bin/candies`
+6. Copy the example config:
+   `cp succaderc ~/.config/succade`  
+7. Copy the example block config files:
+   `cp blocks/cfg/* ~/.config/succade/blocks`
+8. Copy the example block scripts:
+   `cp blocks/bin/* ~/.local/bin/candies`
+7. Make sure the blocks are executable:  
+   `chmod +x ~/.local/bin/candies/*`
+8. Make `succade` executable and put it somwhere that's included in your path:  
+   `chmod +x bin/succade`  
+   `cp bin/succade ~/.local/bin/`
 
 # How to configure
 
@@ -75,7 +80,7 @@ Take a look at the example configuration in this repository. The general configu
 
 | Parameter             | Alias      | Type    | Description |
 |-----------------------|------------|---------|-------------|
-| `format`              |            | string  | Specifies what blocks to display on the bar. Write down the file names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time</code> |
+| `format`              |            | string  | Specifies what blocks to display on the bar: the names of your blocks, separated by spaces. By adding two pipes you can align the blocks left, center or right, depending on whether you note down the block names on the left of both pipes, the right of both pipes or in the middle of them. Example: <code>desktop  &#124; title  &#124; time</code> |
 | `width`               | `w`        | number  | Width of the bar in pixel - omit this value for a full-width bar. |
 | `height`              | `h`        | number  | Height of the bar in pixel. |  
 | `x`                   |            | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
@@ -106,9 +111,10 @@ In the block directory, you can create one config file for each block. The file 
 
 | Parameter          | Alias      | Type    | Description |
 |--------------------|------------|---------|-------------|
-| `bin`              |            | string  | The binary/script that will be run to generate this block's output. |
+| `bin`              |            | string  | The binary/script that will be run to generate this block's output. This is (currently) required. |
 | `reload`           |            | number  | Defines in what interval (in seconds) this block should be run. Setting this to `5` will run this block every 5 seconds. Lower values will lead to more CPU usage. A third option is to set `reload` to `0`. In this case, succade will run your block once, and only once, effectively creating a static block. |
 | `trigger`          |            | string  | If your block should be run depending on the output of another command, then set this command here. If you do this, succade will run that trigger command and monitor its output. Whenever the command produces new output, succade will run the block - and pipe the trigger's output as input to the block. This will set `reload` to `0`. |
+| `live`             |            | boolean | Puts the block into live mode, meaning that it will act as its own trigger (whenever a new line is being printed to `stdout`, `succade` will update `lemonbar` with the new output |
 | `label`            |            | string  | A string to be displayed before the block's main text. Can be used to display an icon by using an appropriate font, like Siji. |
 | `padding`          | `pad`      | number  | Minimum width of the block's main text. If required, succade will left-pad the string returned by the block with spaces. For example, if you set padding to `6` and your block returns `nice`, then succade will display that as <code>&nbsp;&nbsp;nice</code> (note the spaces). Useful for when you use fixed-width fonts. |
 | `foreground`       | `fg`       | color   | Sets the font color for the whole block. Overwrites the default font color (see above). |
