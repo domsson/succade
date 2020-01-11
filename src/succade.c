@@ -371,7 +371,7 @@ int open_bar(struct bar *b)
 	char *affix_font = fontstr(b->affix_font);
 
 	size_t buf_len = 25;
-	buf_len += strlen(BAR_PROCESS);
+	buf_len += strlen(b->name);
 	buf_len += strlen(block_font);
 	buf_len += strlen(label_font);
 	buf_len += strlen(affix_font);
@@ -380,7 +380,7 @@ int open_bar(struct bar *b)
 	char bar_cmd[buf_len];
 	snprintf(bar_cmd, buf_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s", // 24+1
-		BAR_PROCESS, // strlen
+		b->name, // strlen
 		(b->w > 0) ? w : "", // max 8
 		(b->h > 0) ? h : "", // max 8
 		b->x, // max 8
@@ -1379,19 +1379,10 @@ int cfg_handler(void *cfg, const char *section, const char *name, const char *va
 }
 
 /*
- * Tries to load the config file (succaderc) and then goes on to set up the bar
+ * Tries to load the config file (succaderc) and then goes on to set up the bar (and blocks)
  * by setting its properties according to the values read from the config file.
  * Returns 0 on success, -1 if the config file could not be found or read.
  */
-int configure_bar(struct bar *b, const char *config_path)
-{
-	if (ini_parse(config_path, cfg_handler, b) < 0)
-	{
-		return -1;
-	}
-	return 0;
-}
-
 int load_config(const char *cfg_path, struct succade_config *cfg)
 {
 	if (ini_parse(cfg_path, cfg_handler, cfg) < 0)
@@ -1782,8 +1773,9 @@ int main(int argc, char **argv)
 	 */
 
 	struct bar lemonbar = { 0 };
+	lemonbar.name = cfg.binary ? cfg.binary : BAR_PROCESS;
 	init_bar(&lemonbar);
-
+	
 	// Create a block container, so we can hand that around later on
 	struct block_container bc = { 0 };
 
@@ -1796,7 +1788,7 @@ int main(int argc, char **argv)
 	}
 	if (open_bar(&lemonbar) == -1)
 	{
-		fprintf(stderr, "Failed to open bar: %s\n", BAR_PROCESS);
+		fprintf(stderr, "Failed to open bar: %s\n", lemonbar.name);
 		return EXIT_FAILURE;
 	}
 
