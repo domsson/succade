@@ -110,7 +110,6 @@ struct block_container
 {
 	struct block *blocks;
 	size_t count;
-	char *dir;
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
@@ -301,8 +300,12 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 		{
 			return -1;
 		}
-		
-		execvp(p.we_wordv[0], p.we_wordv); // TODO add error handling
+	
+		// Child process could not be run (errno has more info)	
+		if (execvp(p.we_wordv[0], p.we_wordv) == -1)
+		{
+			return -1;
+		}
 		_exit(1);
 	}
 	else // parent
@@ -322,6 +325,7 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 			close(pipe_stdin[0]); // parent doesn't need read end
 			*in = fdopen(pipe_stdin[1], "w");
 		}
+		fprintf(stderr, "CMD = %s\nPID = %d\n", cmd, pid);
 		return pid;
 	}
 }
@@ -416,10 +420,10 @@ int open_bar(struct bar *b)
  */
 int open_block(struct block *b)
 {
+	// If no binary given, just use the block's name
 	if (b->bin == NULL)
 	{
-		fprintf(stderr, "Skipping block '%s' as no binary given\n", b->name);
-		return -1;
+		b->bin = strdup(b->name);
 	}
 
 	char *cmd = NULL;
@@ -440,8 +444,10 @@ int open_block(struct block *b)
 	b->pid = popen_noshell(cmd, &(b->fd), NULL, NULL);
 	if (b->pid == -1)
 	{
+		free(cmd);
 		return -1;
 	}
+
 	free(cmd);
 	return 0;
 }
@@ -632,10 +638,12 @@ int run_block(struct block *b, size_t result_length)
 		return -1;
 	}
 
+	fprintf(stderr, "Attempting to open block `%s`\n", b->name);
+
 	open_block(b);
 	if (b->fd == NULL)
 	{
-		// printf("Block is dead: `%s`", b->name);
+		fprintf(stderr, "Block is dead: `%s`", b->name);
 		return -1;
 	}
 	if (b->result != NULL)
@@ -646,7 +654,7 @@ int run_block(struct block *b, size_t result_length)
 	b->result = malloc(result_length);
 	if (fgets(b->result, result_length, b->fd) == NULL)
 	{
-		// printf("Unable to fetch input from block: `%s`", b->name);
+		fprintf(stderr, "Unable to fetch input from block: `%s`", b->name);
 		close_block(b);
 		return -1;
 	}
@@ -875,6 +883,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 		// TODO just quick hack to get this working
 		if (blocks[i].bin == NULL)
 		{
+			fprintf(stderr, "Block binary not given, skipping\n");
 			continue;
 		}
 
@@ -924,7 +933,9 @@ int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks,
 	for (int i = 0; i < num_blocks; ++i)
 	{
 		// Skip live blocks, they will update based on their output
-		if (blocks[i].live && blocks[i].result)
+		//if (blocks[i].live && blocks[i].result)
+		// ^-- why did we do the '&& block[i].result' thing?
+		if (blocks[i].live)
 		{
 			// However, we count them as executed block so that
 			// we actually end up updating the bar further down
@@ -1018,7 +1029,7 @@ int scan_blocks(const char *format)
 
 size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 {
-	if (!format)
+	if (format == NULL)
 	{
 		return 0;
 	}
@@ -1056,7 +1067,7 @@ size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 	}
 
 	// We inform the callback one last time, but set name = NULL
-	cb(NULL, 0, num_blocks, data);
+	//cb(NULL, 0, num_blocks, data);
 	
 	// Return the number of blocks found
 	return num_blocks;
@@ -1193,22 +1204,6 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 	return 0; // unknown section/name, error
 }
 
-/*
- * Tries to load the config file (succaderc) and then goes on to set up the bar
- * by setting its properties according to the values read from the config file.
- * Returns 0 on success, -1 if the config file could not be found or read.
- */
-int configure_bar(struct bar *b, const char *config_dir)
-{
-	char rc[PATH_MAX];
-	snprintf(rc, sizeof(rc), "%s/%src", config_dir, NAME);
-	if (ini_parse(rc, bar_ini_handler, b) < 0)
-	{
-		return -1;
-	}
-	return 0;
-}
-
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	struct block *block = (struct block*) b;
@@ -1330,35 +1325,80 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 }
 
 /*
- * Returns 1 if the given file name ends in a dot followed by ext, 0 otherwise.
- * TODO currently not in use. Do we need it? Maybe put it in a utility file?
+ * Add the block with the given name to the collection of blocks in the given 
+ * block container, unless there is already a block with that name in there. 
+ * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
-int has_ext(const char *filename, const char *ext)
+struct block *add_block(struct block_container *bc, const char *name)
 {
-	char *dot = strrchr(filename, '.');
-	return (dot && !strcmp(dot+1, ext));
+	// Iterate over all existing blocks and check for a name match
+	for (int i = 0; i < bc->count; ++i)
+	{
+		// If names match, return a pointer to this block
+		if (strcmp(bc->blocks[i].name, name) == 0)
+		{
+			return &bc->blocks[i];
+		}
+	}
+
+	// Resize the block container to be able to hold one more block
+	bc->count += 1;
+	bc->blocks = realloc(bc->blocks, sizeof(struct block) * bc->count);
+	
+	// Create the block, setting its name
+	struct block b = { 0 };
+	init_block(&b);
+	b.name = strdup(name);
+
+	// Add the block to the block container and return a pointer to it	
+	size_t new_count = bc->count - 1;
+	bc->blocks[new_count] = b;
+	return &bc->blocks[new_count];
+}
+
+int cfg_handler(void *cfg, const char *section, const char *name, const char *value)
+{
+	struct succade_config *config = (struct succade_config*) cfg;
+
+	// Return early if no section given (user/config error)
+	if (section[0] == '\0')
+	{
+		return 0;
+	}
+	// Call the bar config handler for the special section "bar"
+	if (strcmp(section, "bar") == 0)
+	{
+		return bar_ini_handler(config->bar, section, name, value);
+	}
+	// Call the block config handler for any other section
+	else
+	{
+		struct block *block = add_block(config->blocks, section);
+		return block_ini_handler(block, section, name, value);
+	}
 }
 
 /*
- * Returns 1 if the given file name starts with ".", 0 otherwise.
- * TODO currently not in use. Do we need it? Maybe put it in a utility file?
+ * Tries to load the config file (succaderc) and then goes on to set up the bar
+ * by setting its properties according to the values read from the config file.
+ * Returns 0 on success, -1 if the config file could not be found or read.
  */
-int is_hidden(const char *filename)
+int configure_bar(struct bar *b, const char *config_path)
 {
-	return filename[0] == '.';
+	if (ini_parse(config_path, cfg_handler, b) < 0)
+	{
+		return -1;
+	}
+	return 0;
 }
 
-/*
- * Returns 1 if the given file is executable, 0 otherwise.
- * TODO currently not in use. Do we need it? Maybe put it in a utility file?
- */
-int is_executable(const char *dir, const char *filename)
+int load_config(const char *cfg_path, struct succade_config *cfg)
 {
-	char *file = filepath(dir, filename, NULL);
-	struct stat sb;
-	int is_exec = (stat(file, &sb) == 0 && sb.st_mode & S_IXUSR);
-	free(file);
-	return is_exec;
+	if (ini_parse(cfg_path, cfg_handler, cfg) < 0)
+	{
+		return -1;
+	}
+	return 0;
 }
 
 int create_triggers(struct trigger **triggers, struct block *blocks, int num_blocks)
@@ -1402,7 +1442,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
  * This does not check if the dir actually exists. You need to check still.
  * The string is allocated with malloc() and needs to be freed by the caller.
  */
-char *config_dir()
+char *config_dir(const char *name)
 {
 	char *home = getenv("HOME");
 	char *cfg_home = getenv("XDF_CONFIG_HOME");
@@ -1410,17 +1450,31 @@ char *config_dir()
 	size_t cfg_dir_len;
 	if (cfg_home == NULL)
 	{
-		cfg_dir_len = strlen(home) + strlen(".config") + strlen(NAME) + 3;
+		cfg_dir_len = strlen(home) + strlen(".config") + strlen(name) + 3;
 		cfg_dir = malloc(cfg_dir_len);
-		snprintf(cfg_dir, cfg_dir_len, "%s/%s/%s", home, ".config", NAME);
+		snprintf(cfg_dir, cfg_dir_len, "%s/%s/%s", home, ".config", name);
 	}
 	else
 	{
-		cfg_dir_len = strlen(cfg_home) + strlen(NAME) + 2;
+		cfg_dir_len = strlen(cfg_home) + strlen(name) + 2;
 		cfg_dir = malloc(cfg_dir_len);
-		snprintf(cfg_dir, cfg_dir_len, "%s/%s", cfg_home, NAME);
+		snprintf(cfg_dir, cfg_dir_len, "%s/%s", cfg_home, name);
 	}
 	return cfg_dir;
+}
+
+// cfg_file must not be NULL
+char *config_path(const char *cfg_file)
+{
+	char *cfg_dir = config_dir(NAME);
+	size_t cfg_dir_len  = strlen(cfg_dir);
+	size_t cfg_file_len = strlen(cfg_file);
+	size_t cfg_path_len = cfg_dir_len + cfg_file_len + 2;
+
+	char *cfg_path = malloc(sizeof(char) * cfg_path_len);
+	snprintf(cfg_path, cfg_path_len, "%s/%s", cfg_dir, cfg_file);
+	free(cfg_dir);
+	return cfg_path;
 }
 
 /*
@@ -1428,15 +1482,15 @@ char *config_dir()
  * This does not check if the dir actually exists. You need to check still.
  * If configdir is NULL, this method will call config_dir() to get it.
  * The returned string is malloc'd, so remember to free it at some point.
- */
 char *blocks_dir(const char *configdir)
 {
-	const char *cfg_dir = (configdir) ? configdir : config_dir();
+	const char *cfg_dir = (configdir) ? configdir : config_dir(NAME);
 	size_t dir_len = strlen(cfg_dir) + strlen(BLOCKS_DIR) + 2;
 	char *blocks_dir = malloc(dir_len);
 	snprintf(blocks_dir, dir_len, "%s/%s", cfg_dir, BLOCKS_DIR);
 	return blocks_dir;
 }
+ */
 
 double get_time()
 {
@@ -1614,54 +1668,32 @@ void sigint_handler(int sig)
 	handled = sig;
 }
 
+
 void found_block_handler(const char *name, int align, int n, void *data)
 {
 	// 'Unpack' the data
-	struct block_container *bc = data;
+	struct block_container *bc = (struct block_container*) data;
 	
-	// If name is NULL, we processed all blocks (a total of n blocks)
-	if (!name)
-	{
-		// Perform one final realloc, if required
-		if (n != bc->count)
-		{
-			bc->blocks = realloc(bc->blocks, n * sizeof(struct block));
-			bc->count  = n; 
-		}
-		return;
-	}
-
-	// Create a block, set its name and align
-	struct block b = { 0 };
-	init_block(&b);
-	b.name  = strdup(name);
-	b.align = align;
-
-	// Attempt to read and parse the block's config file
-	char *blockini = filepath(bc->dir, b.name, "ini");
-	if (access(blockini, F_OK|R_OK) == -1)
-	{
-		fprintf(stderr, "No block config found for: %s\n", b.name);
-		free(blockini);
-		return;
-	}
-	if (ini_parse(blockini, block_ini_handler, &b) < 0)
-	{
-		fprintf(stderr, "Can't parse block INI: %s\n", blockini);
-		free(blockini);
-		return;
-	}
-	free(blockini);
+	// Find or add the block with the given name
+	struct block *block = add_block(bc, name);
 	
-	// Make sure there is enough space for the new block
-	if (n > bc->count - 1)
-	{
-		bc->count += NUM_BLOCKS_INC;
-		bc->blocks = realloc(bc->blocks, bc->count * sizeof(struct block));
-	}
+	// Set the block's align to the given one
+	block->align = align;
+}
 
-	// Add the block to the struct
-	bc->blocks[n] = b;
+// http://courses.cms.caltech.edu/cs11/material/general/usage.html
+void help(const char *invocation)
+{
+	fprintf(stderr, "USAGE\n");
+	fprintf(stderr, "\t%s [OPTIONS...]\n", invocation);
+	fprintf(stderr, "\n");
+	fprintf(stderr, "OPTIONS\n");
+	fprintf(stderr, "\t-b BAR_BINARY\n");
+	fprintf(stderr, "\t\tSpecify the bar binary to use.\n");
+	fprintf(stderr, "\t-h\n");
+	fprintf(stderr, "\t\tPrint this help text and exit.\n");
+	fprintf(stderr, "\t-p\n");
+	fprintf(stderr, "\t\tDon't run bar, just print the bar string to stdout.\n");
 }
 
 int main(int argc, char **argv)
@@ -1709,6 +1741,16 @@ int main(int argc, char **argv)
 	parse_args(argc, argv, &cfg);
 
 	/*
+	 * PRINT HELP AND EXIT, IF REQUESTED
+	 */
+
+	if (cfg.help)
+	{
+		help(argv[0]);
+		return EXIT_SUCCESS;
+	}
+
+	/*
 	 * CHECK IF X IS RUNNING
 	 */
 
@@ -1729,22 +1771,27 @@ int main(int argc, char **argv)
 	 * DIRECTORIES
 	 */
 
-	char *configdir = config_dir();
-	printf("Config directory:\n\t%s\n", configdir);
-
-	char *blocksdir = blocks_dir(configdir);
-	printf("Blocks directory:\n\t%s\n", blocksdir);
+	// If no custom config file given, set it to the default
+	if (cfg.config == NULL)
+	{
+		cfg.config = config_path("succaderc");
+	}
 
 	/*
-	 * BAR
+	 * BAR & BLOCKS
 	 */
 
 	struct bar lemonbar = { 0 };
 	init_bar(&lemonbar);
 
-	if (configure_bar(&lemonbar, configdir) == -1)
+	// Create a block container, so we can hand that around later on
+	struct block_container bc = { 0 };
+
+	cfg.bar    = &lemonbar;
+	cfg.blocks = &bc;
+	if (load_config(cfg.config, &cfg) == -1)
 	{
-		fprintf(stderr, "Failed to load RC file: %src\n", NAME);
+		fprintf(stderr, "Failed loading config file: %s\n", cfg.config);
 		return EXIT_FAILURE;
 	}
 	if (open_bar(&lemonbar) == -1)
@@ -1753,21 +1800,8 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	free(configdir);
-	
-	/*
-	 * BLOCKS
-	 */
-	
-	// Create a block container, so we can hand that around later on
-	struct block_container bc = { 0 };
-	bc.count  = NUM_BLOCKS;
-	bc.dir    = blocksdir;
-	bc.blocks = malloc(bc.count * sizeof(struct block));
-
 	// Parse the format string and call found_block_cb for every block name
 	size_t num_blocks = parse_format_cb(lemonbar.format, found_block_handler, &bc);
-	free(blocksdir);
 
 	// Exit if no blocks could be loaded at all	
 	if (num_blocks == 0)
@@ -1776,7 +1810,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
 		return EXIT_FAILURE;
 	}
-	
+
 	// Debug-print all blocks that we found
 	fprintf(stderr, "Blocks found: (%d total)\n\t", bc.count);
 	for (int i = 0; i < bc.count; ++i)
@@ -1937,7 +1971,6 @@ int main(int argc, char **argv)
 	fprintf(stderr, "\tclosing epoll file descriptor\n");
 	close(epfd);
 
-	
 	// This is where it used to hang, due to pclose() calling wait()
 
 	// Close triggers - it's important we free these first as they might

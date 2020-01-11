@@ -5,8 +5,11 @@ struct succade_config
 {
 	char *binary;		// Custom bar binary
 	char *config;		// Custom config file
-	int pipe : 1;		// Pipe mode (print to stdout instead of feedin bar)
+	int pipe : 1;		// Pipe mode (print to stdout instead of feeding bar)
 	int help : 1;		// Help mode (print help text, then exit)
+	
+	struct bar *bar;
+	struct block_container *blocks;
 };
 
 #endif 

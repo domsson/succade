@@ -1,28 +1,34 @@
+[bar]
 # format is required, it lists the blocks to display
-format="desktop | | wifi volume temp battery datetime"
+format = "| dt |"
 # dock defines bar's position: 'top' or 'bottom'
-dock=top
+dock = bottom
 # height of the bar in pixel
-height=24
+height = 24
 # default font color
-foreground=#ECCB87
+foreground = "#e0e2e4"
 # default background color for the entire bar
-background=#2E3440
+background = "#293134"
 # display underline? true or false
-underline=true
+underline = true
 # display overline? true or false
-overline=false
+overline = false
 # thickness of the line(s) in pixel
-line-width=3
+line-width = 3
 # color of the line(s), if any
-line=#ECCB87
+line = "#678cb1"
 # defines a different font color for labels
-label-fg=#EEE
+label-fg = "#7d8c93"
 # string to display in front of every block
-prefix=" " 
+prefix = " " 
 # string to display after every block
-suffix=" "
+suffix = " "
 # distance between any two blocks in pixel
-offset=8
+offset = 8
 # default font to use
-font=6x13
+font = 6x13
+
+[dt]
+bin="~/.local/bin/candies/datetime -m"
+live=true
+
