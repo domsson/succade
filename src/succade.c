@@ -1780,6 +1780,18 @@ int main(int argc, char **argv)
 
 	cfg.bar    = &lemonbar;
 	cfg.blocks = &bc;
+	// TODO since the config now contians section for blocks, we have a new 
+	//      issue: we create a block with add_block() when we discover a 
+	//      section that does not have a block in the block container yet.
+	//      That's nice, but what if that block was NOT listed in the bar's
+	//      format string? Then we shouldn't create/open/load/display that 
+	//      block (in other words, we should ignore it). So how can we
+	//      achieve that? We would need to make sure to parse the format 
+	//      string first... which, technically, I guess, is possible by 
+	//      simply requiring the user to specifiy the [bar] section first 
+	//      in the file... but then we still need to somehow implement 
+	//      logic to compare a block's name (from a section heading) to the 
+	//      bar's format string...
 	if (load_config(cfg.config, &cfg) == -1)
 	{
 		fprintf(stderr, "Failed loading config file: %s\n", cfg.config);
@@ -1794,8 +1806,8 @@ int main(int argc, char **argv)
 	// Parse the format string and call found_block_handler for every block name
 	size_t num_blocks = parse_format_cb(lemonbar.format, found_block_handler, &bc);
 
-	// Exit if no blocks could be loaded at all	
-	if (num_blocks == 0)
+	// Exit if no blocks could be loaded and 'empty' option isn't present
+	if (num_blocks == 0 && cfg.empty == 0)
 	{
 		// TODO or should we still run (with an empty lemonbar)?
 		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
