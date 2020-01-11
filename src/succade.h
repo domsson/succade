@@ -3,13 +3,14 @@
 
 struct succade_config
 {
-	char *binary;		// Custom bar binary
-	char *config;		// Custom config file
-	int pipe : 1;		// Pipe mode (print to stdout instead of feeding bar)
-	int help : 1;		// Help mode (print help text, then exit)
+	char *binary; // Custom bar binary
+	char *config; // Custom config file
+	int pipe : 1; // Pipe mode (print to stdout instead of feeding bar)
+	int help : 1; // Help mode (print help text, then exit)
 	
-	struct bar *bar;
-	struct block_container *blocks;
+	// We need the following for when we hand user data to the inih handler
+	struct bar *bar;                 // Reference to the bar
+	struct block_container *blocks;  // Reference to the blocks container
 };
 
 #endif 

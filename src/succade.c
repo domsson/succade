@@ -325,7 +325,6 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 			close(pipe_stdin[0]); // parent doesn't need read end
 			*in = fdopen(pipe_stdin[1], "w");
 		}
-		fprintf(stderr, "CMD = %s\nPID = %d\n", cmd, pid);
 		return pid;
 	}
 }
@@ -876,7 +875,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	bar_str[0] = '\0';
 
 	char align[5];
-	int last_align = 0;
+	int last_align = -1;
 
 	for (int i = 0; i < num_blocks; ++i)
 	{
@@ -1792,7 +1791,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	// Parse the format string and call found_block_cb for every block name
+	// Parse the format string and call found_block_handler for every block name
 	size_t num_blocks = parse_format_cb(lemonbar.format, found_block_handler, &bc);
 
 	// Exit if no blocks could be loaded at all	
