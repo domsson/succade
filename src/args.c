@@ -6,7 +6,7 @@ void parse_args(int argc, char **argv, struct succade_config *cfg)
 	// Get arguments, if any
 	opterr = 0;
 	int o;
-	while ((o = getopt(argc, argv, "b:c:eph")) != -1)
+	while ((o = getopt(argc, argv, "b:c:eh")) != -1)
 	{
 		switch (o)
 		{
@@ -18,9 +18,6 @@ void parse_args(int argc, char **argv, struct succade_config *cfg)
 				break;
 			case 'e': // empty (run bar even if no blocks present)
 				cfg->empty = 1;
-				break;
-			case 'p': // pipe/print (dump output to stdout)
-				cfg->pipe = 1;
 				break;
 			case 'h': // help (show help)
 				cfg->help = 1;

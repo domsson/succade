@@ -96,12 +96,12 @@ struct block
 
 struct trigger
 {
-	char *cmd;                // Command to run
-	pid_t pid;                // Process ID of trigger command
-	FILE *fd;                 // File descriptor as returned by popen()
-	struct block *b;          // Associated block
-	struct bar *bar;          // Associated bar (special use case...)
-	unsigned int ready : 1;   // fd has new data available for reading
+	char *cmd;             // Command to run
+	pid_t pid;             // Process ID of trigger command
+	FILE *fd;              // File descriptor as returned by popen()
+	struct block *b;       // Associated block
+	struct bar *bar;       // Associated bar (special use case...)
+	unsigned ready : 1;    // fd has new data available for reading
 };
 
 struct block_container
@@ -1497,34 +1497,27 @@ char *config_dir(const char *name)
 	return cfg_dir;
 }
 
-// cfg_file must not be NULL
+/*
+ * Given a file name (base name including extension, if any, but without path),
+ * this function concatenates the configuration directory path with the file 
+ * name and returns it as a malloc'd string that the caller has to free. 
+ * No checks are performed to verify whether the file actually exists and/or 
+ * can be read; if required, the caller has to take care of this.
+ * The configuration directory is determined via config_dir().
+ */
 char *config_path(const char *cfg_file)
 {
-	char *cfg_dir = config_dir(NAME);
+	char  *cfg_dir      = config_dir(NAME);
 	size_t cfg_dir_len  = strlen(cfg_dir);
 	size_t cfg_file_len = strlen(cfg_file);
 	size_t cfg_path_len = cfg_dir_len + cfg_file_len + 2;
+	char  *cfg_path     = malloc(sizeof(char) * cfg_path_len);
 
-	char *cfg_path = malloc(sizeof(char) * cfg_path_len);
 	snprintf(cfg_path, cfg_path_len, "%s/%s", cfg_dir, cfg_file);
 	free(cfg_dir);
+
 	return cfg_path;
 }
-
-/*
- * Returns a pointer to a string that holds the blocks dir we want to use.
- * This does not check if the dir actually exists. You need to check still.
- * If configdir is NULL, this method will call config_dir() to get it.
- * The returned string is malloc'd, so remember to free it at some point.
-char *blocks_dir(const char *configdir)
-{
-	const char *cfg_dir = (configdir) ? configdir : config_dir(NAME);
-	size_t dir_len = strlen(cfg_dir) + strlen(BLOCKS_DIR) + 2;
-	char *blocks_dir = malloc(dir_len);
-	snprintf(blocks_dir, dir_len, "%s/%s", cfg_dir, BLOCKS_DIR);
-	return blocks_dir;
-}
- */
 
 double get_time()
 {
@@ -1595,21 +1588,25 @@ int run_trigger(struct trigger *t)
  */
 pid_t run_cmd(const char *cmd)
 {
-	if (!cmd || !strlen(cmd))
+	// Return early if cmd is NULL or empty
+	if (cmd == NULL || !strlen(cmd))
 	{
 		return -1;
 	}
+
+	// Try to parse the command (expand symbols like . and ~ etc)
 	wordexp_t p;
 	if (wordexp(cmd, &p, 0) != 0)
 	{
-		//printf("Could not parse the command:\n\t'%s'\n", cmd);
 		return -1;
 	}
 	
+	// Spawn a new child process with the given command
 	pid_t pid;
 	int res = posix_spawnp(&pid, p.we_wordv[0], NULL, NULL, p.we_wordv, environ);
 	wordfree(&p);
-
+	
+	// Return the child's PID on success, -1 on failure
 	return (res == 0 ? pid : -1);
 }
 
@@ -1721,8 +1718,6 @@ void help(const char *invocation)
 	fprintf(stderr, "\t\tRun bar even if it is empty (no blocks).\n");
 	fprintf(stderr, "\t-h\n");
 	fprintf(stderr, "\t\tPrint this help text and exit.\n");
-	fprintf(stderr, "\t-p\n");
-	fprintf(stderr, "\t\tDon't run bar, just print the bar string to stdout.\n");
 }
 
 int main(int argc, char **argv)
@@ -1835,6 +1830,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed loading config file: %s\n", cfg.config);
 		return EXIT_FAILURE;
 	}
+
 	if (open_bar(&lemonbar) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", lemonbar.name);
