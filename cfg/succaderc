@@ -1,6 +1,6 @@
 [bar]
 # format is required, it lists the blocks to display
-format = ""
+format = "dt | lol"
 # dock defines bar's position: 'top' or 'bottom'
 dock = bottom
 # height of the bar in pixel
