@@ -1,18 +1,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-#include <dirent.h>
 #include <signal.h>
 #include <time.h>
 #include <fcntl.h>
 #include <float.h>
-#include <limits.h>
-#include <sys/stat.h>
+#include <spawn.h>
+#include <wordexp.h>
 #include <sys/types.h>
 #include <sys/epoll.h>
 #include <sys/prctl.h>
-#include <spawn.h>
-#include <wordexp.h>
 #include "ini.h"
 #include "succade.h"
 #include "args.c"
@@ -194,7 +191,7 @@ int is_quoted(const char *str)
 	char first = str[0];
 	char last  = str[len - 1];
 	if (first == '\'' && last == '\'') return 1; // Single-quoted string
-	if (first == '"' && last == '"') return 1;   // Double-quoted string
+	if (first == '"'  && last == '"')  return 1; // Double-quoted string
 	return 0;
 }
 
@@ -227,7 +224,10 @@ char *unquote(const char *str)
  * If successful, the process id of the new process is being returned and the 
  * given FILE pointers are set to streams that correspond to pipes for reading 
  * and writing to the child process, accordingly. Hand in NULL for pipes that
- * should not be used. On error, -1 is returned.
+ * should not be used. On error, -1 is returned. Note that the child process 
+ * might have failed to execute the given `cmd` (and therefore ended exection); 
+ * the return value of this function only indicates whether the child process 
+ * was successfully forked or not.
  */
 pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 {
@@ -261,16 +261,12 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 	}
 	else if (pid == 0) // child
 	{
-		// TODO does it even make sense to "return -1" (or whatever)
-		// from the child process? Will the calling function in the
-		// parent even see this, ever?
-
 		// redirect stdout to the write end of this pipe
 		if (out)
 		{
 			if (dup2(pipe_stdout[1], STDOUT_FILENO) == -1)
 			{
-				return -1;
+				_exit(-1);
 			}
 			close(pipe_stdout[0]); // child doesn't need read end
 		}
@@ -279,7 +275,7 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 		{
 			if (dup2(pipe_stderr[1], STDERR_FILENO) == -1)
 			{
-				return -1;
+				_exit(-1);
 			}
 			close(pipe_stderr[0]); // child doesn't need read end
 		}
@@ -288,7 +284,7 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 		{
 			if (dup2(pipe_stdin[0], STDIN_FILENO) == -1)
 			{
-				return -1;
+				_exit(-1);
 			}
 			close(pipe_stdin[1]); // child doesn't need write end
 		}
@@ -296,13 +292,13 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 		wordexp_t p;
 		if (wordexp(cmd, &p, 0) != 0)
 		{
-			return -1;
+			_exit(-1);
 		}
 	
 		// Child process could not be run (errno has more info)	
 		if (execvp(p.we_wordv[0], p.we_wordv) == -1)
 		{
-			return -1;
+			_exit(-1);
 		}
 		_exit(1);
 	}
@@ -1022,6 +1018,9 @@ char *filepath(const char *dir, const char *filename, const char *fileext)
 	}
 }
 
+/*
+ * Quickly scan the 'format' string and return the number of block names in it.
+ */
 int scan_blocks(const char *format)
 {
 	int in_a_block = 0;
@@ -1727,6 +1726,14 @@ int main(int argc, char **argv)
 	 */
 
 	// Prevent zombie children during runtime
+	// https://en.wikipedia.org/wiki/Child_process#End_of_life
+	
+	// TODO However, maybe it would be a good idea to handle
+	//      this signal, as children will send it to the parent
+	//      process when they exit; so we could use this to detect
+	//      blocks that have died (prematurely/unexpectedly), for 
+	//      example those that failed the `execvp()` call from 
+	//      within `fork()` in `popen_noshell()`... not sure.
 	struct sigaction sa_chld = {
 		.sa_handler = SIG_IGN
 	};
@@ -1798,6 +1805,12 @@ int main(int argc, char **argv)
 	// If no custom config file given, set it to the default
 	if (cfg.config == NULL)
 	{
+		// TODO If we get this string from args, we don't need to free
+		//      it but if we get it via config_path(), then we DO need 
+		//      to free it. That's an issue as there is no way, later,
+		//      to know where it came from. Should we simply strdup() 
+		//      everything that comes in via args, so that we get some
+		//      consistency? That would waste some memory though...
 		cfg.config = config_path("succaderc");
 	}
 
@@ -1811,23 +1824,14 @@ int main(int argc, char **argv)
 	
 	// Create a block container, so we can hand that around later on
 	struct block_container bc = { 0 };
+
+	// Add references to the bar and blocks structs to the config struct
 	cfg.bar    = &lemonbar;
 	cfg.blocks = &bc;
-	// TODO since the config now contians section for blocks, we have a new 
-	//      issue: we create a block with add_block() when we discover a 
-	//      section that does not have a block in the block container yet.
-	//      That's nice, but what if that block was NOT listed in the bar's
-	//      format string? Then we shouldn't create/open/load/display that 
-	//      block (in other words, we should ignore it). So how can we
-	//      achieve that? We would need to make sure to parse the format 
-	//      string first... which, technically, I guess, is possible by 
-	//      simply requiring the user to specifiy the [bar] section first 
-	//      in the file... but then we still need to somehow implement 
-	//      logic to compare a block's name (from a section heading) to the 
-	//      bar's format string...
+
 	if (load_config(cfg.config, &cfg) == -1)
 	{
-		fprintf(stderr, "Failed loading config file: %s\n", cfg.config);
+		fprintf(stderr, "Failed to load config file: %s\n", cfg.config);
 		return EXIT_FAILURE;
 	}
 
@@ -1837,7 +1841,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	// Parse the format string and call found_block_handler for every block name
+	// Parse the format string and call found_block_handler for every block
 	size_t num_blocks_parsed = parse_format_cb(lemonbar.format, found_block_handler, &bc);
 
 	// Check how many blocks we _actually_ have (some might not have been
@@ -1855,6 +1859,16 @@ int main(int argc, char **argv)
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu, enabled = %zu\n", 
 			num_blocks_parsed, bc.count, num_blocks_enabled);
 
+	if (DEBUG)
+	{
+		fprintf(stderr, "Blocks found: (%zu total)\n\t", bc.count);
+		for (int i = 0; i < bc.count; ++i)
+		{
+			fprintf(stderr, "%s ", bc.blocks[i].name);
+		}
+		fprintf(stderr, "\n");
+	}
+
 	// Exit if no blocks could be loaded and 'empty' option isn't present
 	if (num_blocks_enabled == 0 && cfg.empty == 0)
 	{
@@ -1867,7 +1881,7 @@ int main(int argc, char **argv)
 	 */
 	
 	struct trigger bartrig = { 0 };
-	bartrig.fd = lemonbar.fd_out;
+	bartrig.fd  =  lemonbar.fd_out;
 	bartrig.bar = &lemonbar;
 	
 	/*
@@ -1878,22 +1892,28 @@ int main(int argc, char **argv)
 	size_t num_triggers = create_triggers(&triggers, bc.blocks, bc.count);
 
 	// Debug-print all triggers that we found
-	fprintf(stderr, "Triggers found: (%zu total)\n\t", num_triggers);
-	for (int i = 0; i < num_triggers; ++i)
+	if (DEBUG)
 	{
-		fprintf(stderr, "'%s' ", triggers[i].cmd);
+		fprintf(stderr, "Triggers found: (%zu total)\n\t", num_triggers);
+		for (int i = 0; i < num_triggers; ++i)
+		{
+			fprintf(stderr, "'%s' ", triggers[i].cmd);
+		}
+		fprintf(stderr, "\n");
 	}
-	fprintf(stderr, "\n");
 
 	size_t num_triggers_opened = open_triggers(triggers, num_triggers);
 
 	// Debug-print all triggers that we opened
-	fprintf(stderr, "Triggeres opened: (%zu total)\n\t", num_triggers_opened);
-	for (int i=0; i<num_triggers; ++i)
+	if (DEBUG)
 	{
-		fprintf(stderr, "'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
+		fprintf(stderr, "Triggeres opened: (%zu total)\n\t", num_triggers_opened);
+		for (int i=0; i<num_triggers; ++i)
+		{
+			fprintf(stderr, "'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
+		}
+		fprintf(stderr, "\n");
 	}
-	fprintf(stderr, "\n");
 
 	/* 
 	 * EVENTS - register our triggers with the system so we'll be notified
@@ -1942,7 +1962,7 @@ int main(int argc, char **argv)
 	double now;
 	double before = get_time();
 	double delta;
-	double wait = 0.0;
+	double wait = 0.0; // Will later be set to suitable value by feed_bar()
 
 	struct epoll_event tev[num_triggers + 1];
 
@@ -2001,7 +2021,7 @@ int main(int argc, char **argv)
 			bar_output[0] = '\0';
 		}
 
-		// Let's update bar!
+		// Let's update bar! TODO hardcoded value (tolerance = 0.01)
 		feed_bar(&lemonbar, bc.blocks, bc.count, delta, 0.1, &wait);
 	}
 
@@ -2009,43 +2029,33 @@ int main(int argc, char **argv)
 	 * CLEAN UP
 	 */
 
-	fprintf(stderr, "succade is about to shutdown, performing clean-up...\n");
-
-	fprintf(stderr, "\tclosing epoll file descriptor\n");
+	fprintf(stderr, "Performing clean-up ...\n");
 	close(epfd);
 
 	// This is where it used to hang, due to pclose() calling wait()
 
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
-	fprintf(stderr, "\tclosing all triggers\n");
 	close_triggers(triggers, num_triggers);
 
-	fprintf(stderr, "\tfreeing all triggers\n");
 	free_triggers(triggers, num_triggers);
 
 	free(triggers);
 	
-	fprintf(stderr, "\tclosing bar trigger\n");
 	close_trigger(&bartrig);
 
-	fprintf(stderr, "\tfreeing bar trigger\n");
 	free_trigger(&bartrig);
 
 	// Close blocks
-	fprintf(stderr, "\tclosing all blocks\n");
 	close_blocks(bc.blocks, bc.count);
 
-	fprintf(stderr, "\tfreeing all blocks\n");
 	free_blocks(bc.blocks, bc.count);
 
 	free(bc.blocks);
 
 	// Close bar
-	fprintf(stderr, "\tclosing bar\n");
 	close_bar(&lemonbar);
 
-	fprintf(stderr, "\tfreeing bar\n");
 	free_bar(&lemonbar);
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
