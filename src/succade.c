@@ -602,20 +602,25 @@ char *barstr(const scd_lemon_s *bar, const scd_block_s *blocks, size_t num_block
 	return bar_str;
 }
 
-int feed_bar(scd_lemon_s *bar, scd_block_s *blocks, size_t num_blocks, 
-		double delta, double tolerance, double *next)
+size_t feed_bar(scd_state_s *state, double delta, double tolerance, double *next)
 {
+
 	// Can't pipe to bar if its file descriptor isn't available
-	if (bar->fd_in == NULL)
+	if (state->lemon->fd_in == NULL)
 	{
 		return -1;
 	}
+	
+	// For convenience...
+	scd_lemon_s *bar = state->lemon;
+	scd_block_s *blocks = state->blocks;
+	size_t num_blocks = state->num_blocks;
 
-	int num_blocks_executed = 0;	
+	size_t num_blocks_executed = 0;	
 	double until_next = DBL_MAX;
 	double idle_left;
 
-	for (int i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		// Skip blocks that aren't enabled
 		if (!blocks[i].enabled)
@@ -1345,7 +1350,7 @@ int main(int argc, char **argv)
 		}
 
 		// Let's update bar! TODO hardcoded value (tolerance = 0.01)
-		feed_bar(&lemonbar, state.blocks, state.num_blocks, delta, 0.1, &wait);
+		feed_bar(&state, delta, 0.1, &wait);
 	}
 
 	/*
