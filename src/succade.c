@@ -11,7 +11,6 @@
 #include "execute.c"   // Execute child processes
 #include "loadini.c"   // Handles loading/processing of INI cfg file
 
-extern char **environ;         // Required to pass the env to child cmds
 static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
 
