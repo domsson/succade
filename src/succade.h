@@ -7,8 +7,9 @@
 #define BUFFER_SIZE 2048
 #define BLOCK_NAME_MAX 64
 
-#define DEFAULT_LEMON_BIN  "lemonbar"
-#define DEFAULT_LEMON_NAME "succade_lemonbar"
+#define DEFAULT_LEMON_BIN     "lemonbar"
+#define DEFAULT_LEMON_NAME    "succade_lemonbar"
+#define DEFAULT_LEMON_SECTION "bar"
 
 struct succade_lemon;
 struct succade_block;
@@ -74,7 +75,7 @@ struct succade_block
 	int offset : 16;       // Offset to next block in px
 	unsigned align;        // -1, 0, 1 (left, center, right)
 	char *label;           // Prefixes the result string
-	char *trigger;         // Run block based on this cmd
+	char *spark;           // Run block based on this cmd
 	char *cmd_lmb;         // Command to run on left mouse click
 	char *cmd_mmb;         // Command to run on middle mouse click
 	char *cmd_rmb;         // Command to run on right mouse click

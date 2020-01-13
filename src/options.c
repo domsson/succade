@@ -1,5 +1,5 @@
-#include <unistd.h>
-#include "succade.h"
+#include <unistd.h>    // getopt()
+#include "succade.h"   // scd_pref_s
 
 void parse_args(int argc, char **argv, scd_prefs_s *prefs)
 {

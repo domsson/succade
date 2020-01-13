@@ -33,4 +33,5 @@ font = 6x13
 [dt]
 bin="~/.local/bin/candies/datetime -m"
 live=true
+mouse-left=xclock
 

@@ -1,16 +1,15 @@
-#include <stdlib.h>    //
-#include <unistd.h>    //
+#include <stdlib.h>    // NULL, size_t, EXIT_SUCCESS, EXIT_FAILURE, ...
 #include <string.h>    // strlen(), strcmp(), ...
-#include <signal.h>    // 
+#include <signal.h>    // sigaction(), ... 
 #include <fcntl.h>     // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <float.h>     // DBL_MAX
-#include <sys/types.h> // 
-#include <sys/epoll.h> // 
+#include <sys/epoll.h> // epoll_wait(), ... 
 #include "ini.h"       // https://github.com/benhoyt/inih
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
 #include "helpers.c"   // Helper functions, mostly for strings
 #include "execute.c"   // Execute child processes
+#include "loadini.c"   // Handles loading/processing of INI cfg file
 
 extern char **environ;         // Required to pass the env to child cmds
 static volatile int running;   // Used to stop main loop in case of SIGINT
@@ -72,7 +71,7 @@ static void free_block(scd_block_s *block)
 	free(block->affix_fg);
 	free(block->affix_bg);
 	free(block->label);
-	free(block->trigger);
+	free(block->spark);
 	free(block->cmd_lmb);
 	free(block->cmd_mmb);
 	free(block->cmd_rmb);
@@ -97,7 +96,7 @@ int open_bar(scd_lemon_s *b)
 	char *block_font = optstr('f', b->block_font);
 	char *label_font = optstr('f', b->label_font);
 	char *affix_font = optstr('f', b->affix_font);
-	char *name_str = optstr('n', b->name);
+	char *name_str   = optstr('n', b->name);
 
 	size_t buf_len = 26; // TODO hardcoded value
 	buf_len += strlen(b->bin);
@@ -745,6 +744,7 @@ size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 	return num_blocks;
 }
 
+/*
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
 	scd_lemon_s *bar = (scd_lemon_s*) b;
@@ -1000,16 +1000,17 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	}
 	return 0; // unknown section/name or error
 }
+*/
 
-scd_block_s *get_block(scd_block_s *blocks, size_t num_blocks, const char *name)
+scd_block_s *get_block(const scd_state_s *state, const char *name)
 {
 	// Iterate over all existing blocks and check for a name match
-	for (size_t i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
 		// If names match, return a pointer to this block
-		if (strcmp(blocks[i].name, name) == 0)
+		if (strcmp(state->blocks[i].name, name) == 0)
 		{
-			return &blocks[i];
+			return &state->blocks[i];
 		}
 	}
 	return NULL;
@@ -1023,7 +1024,8 @@ scd_block_s *get_block(scd_block_s *blocks, size_t num_blocks, const char *name)
 scd_block_s *add_block(scd_state_s *state, const char *name)
 {
 	// See if there is an existing block by this name (and return, if so)
-	scd_block_s *eb = get_block(state->blocks, state->num_blocks, name);
+	//scd_block_s *eb = get_block(state->blocks, state->num_blocks, name);
+	scd_block_s *eb = get_block(state, name);
 	if (eb)
 	{
 		return eb;
@@ -1046,16 +1048,18 @@ int cfg_handler(void *data, const char *section, const char *name, const char *v
 {
 	scd_state_s *state = (scd_state_s*) data;
 
-	// Return early if no section given (user/config error)
+	// No section means we assume this is for the bar itself then
 	if (section[0] == '\0')
 	{
-		return 0;
+		return lemon_ini_handler(state->lemon, section, name, value);
 	}
+	
 	// Call the bar config handler for the special section "bar"
 	if (strcmp(section, "bar") == 0)
 	{
-		return bar_ini_handler(state->lemon, section, name, value);
+		return lemon_ini_handler(state->lemon, section, name, value);
 	}
+	
 	// Call the block config handler for any other section
 	else
 	{
@@ -1102,10 +1106,10 @@ size_t create_sparks(scd_state_s *state)
 		}
 
 		// Block that's triggered by another program's output
-		if (state->blocks[i].trigger)
+		if (state->blocks[i].spark)
 		{
 			state->sparks[num_sparks] = (scd_spark_s) { 0 };
-			state->sparks[num_sparks].cmd = strdup(state->blocks[i].trigger);
+			state->sparks[num_sparks].cmd = strdup(state->blocks[i].spark);
 			state->sparks[num_sparks].block = &state->blocks[i];
 			num_sparks += 1;
 			continue;
@@ -1185,7 +1189,7 @@ int run_trigger(scd_spark_s *t)
  * Returns 0 on success, -1 if the string was not a recognized action command
  * or the block that the action belongs to could not be found.
  */
-int process_action(const char *action, scd_block_s *blocks, size_t num_blocks)
+int process_action(const scd_state_s *state, const char *action)
 {
 	size_t len = strlen(action);
 	if (len < 5)
@@ -1193,12 +1197,19 @@ int process_action(const char *action, scd_block_s *blocks, size_t num_blocks)
 		return -1;	// Can not be an action command, too short
 	}
 
+	// A valid action command should have the format <blockname>_<cmd-type>
+	// For example, for a block named `datetime` that was clicked with the 
+	// left mouse button, `action` should be "datetime_lmb"
+
 	char types[5][5] = {"_lmb", "_mmb", "_rmb", "_sup", "_sdn"};
 
-	char type[5]; // For the type suffix, including the underscore
-	snprintf(type, 5, "%s", action + len - 5); // Extract the suffix
-	char block[len-4]; // For everything _before_ the suffix
-	snprintf(block, len - 4, "%s", action); // Extract that first part
+	// Extract the type suffix, including the underscore
+	char type[5]; 
+	snprintf(type, 5, "%s", action + len - 5);
+
+	// Extract everything _before_ the suffix (this is the block name)
+	char block[len-4];
+	snprintf(block, len - 4, "%s", action); 
 
 	// We check if the action type is valid (see types)
 	int b = 0;
@@ -1212,52 +1223,51 @@ int process_action(const char *action, scd_block_s *blocks, size_t num_blocks)
 		}
 	}
 
+	// Not a recognized action type
 	if (!found)
 	{
-		return -1;	// Not a recognized action type
+		return -1;
 	}
 
-	// Now we go through all blocks and try to find the right one
-	for (int i = 0; i < num_blocks; ++i)
+	// Find the source block of the action
+	scd_block_s *source = get_block(state, block);
+	if (source == NULL)
 	{
-		if (equals(blocks[i].name, block))
-		{
-			// Now to fire the right command for the action type
-			switch (b) {
-				case 0:
-					run_cmd(blocks[i].cmd_lmb);
-					break;
-				case 1:
-					run_cmd(blocks[i].cmd_mmb);
-					break;
-				case 2:
-					run_cmd(blocks[i].cmd_rmb);
-					break;
-				case 3:
-					run_cmd(blocks[i].cmd_sup);
-					break;
-				case 4:
-					run_cmd(blocks[i].cmd_sdn);
-					break;
-			}
-			return 0;
-		}
+		return -1;
 	}
 
-	return -1; // Could not find the block associated with the action
+	// Now to fire the right command for the action type
+	switch (b) {
+		case 0:
+			run_cmd(source->cmd_lmb);
+			return 0;
+		case 1:
+			run_cmd(source->cmd_mmb);
+			return 0;
+		case 2:
+			run_cmd(source->cmd_rmb);
+			return 0;
+		case 3:
+			run_cmd(source->cmd_sup);
+			return 0;
+		case 4:
+			run_cmd(source->cmd_sdn);
+			return 0;
+		default:
+			// Should never happen...
+			return -1;
+	}
 }
 
 /*
- * Handles SIGINT signals (CTRL+C) by setting the static variable
- * `running` to 0, effectively ending the main loop, so that clean-up happens.
+ * This callback is supposed to be called for every block name that is being 
+ * extracted from the config file's 'format' option for the bar itself, which 
+ * lists the blocks to be displayed on the bar. `name` should contain the name 
+ * of the block as read from the format string, `align` should be -1, 0 or 1, 
+ * meaning left, center or right, accordingly (indicating where the block is 
+ * supposed to be displayed on the bar).
  */
-void sigint_handler(int sig)
-{
-	running = 0;
-	handled = sig;
-}
-
-void found_block_handler(const char *name, int align, int n, void *data)
+static void found_block_handler(const char *name, int align, int n, void *data)
 {
 	// 'Unpack' the data
 	scd_state_s *state = (scd_state_s*) data;
@@ -1270,6 +1280,16 @@ void found_block_handler(const char *name, int align, int n, void *data)
 
 	// Set the block's align to the given one
 	block->align = align;
+}
+
+/*
+ * Handles SIGINT signals (CTRL+C) by setting the static variable
+ * `running` to 0, effectively ending the main loop, so that clean-up happens.
+ */
+void sigint_handler(int sig)
+{
+	running = 0;
+	handled = sig;
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
@@ -1580,7 +1600,7 @@ int main(int argc, char **argv)
 		// Let's process bar's output, if any
 		if (strlen(bar_output))
 		{
-			if (process_action(bar_output, state.blocks, state.num_blocks) < 0)
+			if (process_action(&state, bar_output) < 0)
 			{
 				// It wasn't a recognized command, so chances are
 				// that is was some debug/error output of bar.
@@ -1601,30 +1621,22 @@ int main(int argc, char **argv)
 	fprintf(stderr, "Performing clean-up ...\n");
 	close(epfd);
 
-	// This is where it used to hang, due to pclose() calling wait()
-
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
 	close_triggers(triggers, num_triggers);
-
 	free_triggers(triggers, num_triggers);
-
 	free(triggers);
 	
 	close_trigger(&bartrig);
-
 	free_trigger(&bartrig);
 
 	// Close blocks
 	close_blocks(state.blocks, state.num_blocks);
-
 	free_blocks(state.blocks, state.num_blocks);
-
 	free(state.blocks);
 
 	// Close bar
 	close_bar(&lemonbar);
-
 	free_bar(&lemonbar);
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
