@@ -1,26 +1,16 @@
-#include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <signal.h>
-#include <time.h>
-#include <fcntl.h>
-#include <float.h>
-#include <spawn.h>
-#include <wordexp.h>
-#include <sys/types.h>
-#include <sys/epoll.h>
-#include <sys/prctl.h>
-#include "ini.h"
-#include "succade.h"
-#include "options.c"
-#include "helpers.c"
-//#include "execute.c" (or "process.c"?)
-
-#define DEBUG 0 
-#define NAME "succade"
-#define BAR_PROCESS "lemonbar"
-#define BUFFER_SIZE 2048
-#define BLOCK_NAME_MAX 64
+#include <stdlib.h>    //
+#include <unistd.h>    //
+#include <string.h>    // strlen(), strcmp(), ...
+#include <signal.h>    // 
+#include <fcntl.h>     // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
+#include <float.h>     // DBL_MAX
+#include <sys/types.h> // 
+#include <sys/epoll.h> // 
+#include "ini.h"       // https://github.com/benhoyt/inih
+#include "succade.h"   // defines, structs, all that stuff
+#include "options.c"   // Command line args/options parsing
+#include "helpers.c"   // Helper functions, mostly for strings
+#include "execute.c"   // Execute child processes
 
 extern char **environ;         // Required to pass the env to child cmds
 static volatile int running;   // Used to stop main loop in case of SIGINT
@@ -30,7 +20,7 @@ static volatile int handled;   // The last signal that has been handled
  * Init the given bar struct to a well defined state using sensible defaults.
  */
 
-void init_bar(scd_lemon_s *lemon)
+static void init_bar(scd_lemon_s *lemon)
 {
 	lemon->lw = 1;
 }
@@ -38,7 +28,7 @@ void init_bar(scd_lemon_s *lemon)
 /*
  * Init the given block struct to a well defined state using sensible defaults.
  */
-void init_block(scd_block_s *block)
+static void init_block(scd_block_s *block)
 {
 	block->offset = -1;
 	block->reload = 5.0;
@@ -47,8 +37,10 @@ void init_block(scd_block_s *block)
 /*
  * Frees all members of the given bar that need freeing.
  */
-void free_bar(scd_lemon_s *lemon)
+static void free_bar(scd_lemon_s *lemon)
 {
+	free(lemon->name);
+	free(lemon->bin);
 	free(lemon->fg);
 	free(lemon->bg);
 	free(lemon->lc);
@@ -68,10 +60,9 @@ void free_bar(scd_lemon_s *lemon)
 /*
  * Frees all members of the given block that need freeing.
  */
-void free_block(scd_block_s *block)
+static void free_block(scd_block_s *block)
 {
 	free(block->name);
-	free(block->cfg);
 	free(block->bin);
 	free(block->fg);
 	free(block->bg);
@@ -92,167 +83,33 @@ void free_block(scd_block_s *block)
 }
 
 /*
- * Opens the process `cmd` similar to popen() but does not invoke a shell.
- * Instead, wordexp() is used to expand the given command, if necessary.
- * If successful, the process id of the new process is being returned and the 
- * given FILE pointers are set to streams that correspond to pipes for reading 
- * and writing to the child process, accordingly. Hand in NULL for pipes that
- * should not be used. On error, -1 is returned. Note that the child process 
- * might have failed to execute the given `cmd` (and therefore ended exection); 
- * the return value of this function only indicates whether the child process 
- * was successfully forked or not.
- */
-pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
-{
-	if (!cmd || !strlen(cmd))
-	{
-		return -1;
-	}
-
-	// 0 = read end of pipes, 1 = write end of pipes
-	int pipe_stdout[2];
-	int pipe_stderr[2];
-	int pipe_stdin[2];
-
-	if (out && (pipe(pipe_stdout) < 0))
-	{
-		return -1;
-	}
-	if (err && (pipe(pipe_stderr) < 0))
-	{
-		return -1;
-	}
-	if (in && (pipe(pipe_stdin) < 0))
-	{
-		return -1;
-	}
-
-	pid_t pid = fork();
-	if (pid == -1)
-	{
-		return -1;
-	}
-	else if (pid == 0) // child
-	{
-		// redirect stdout to the write end of this pipe
-		if (out)
-		{
-			if (dup2(pipe_stdout[1], STDOUT_FILENO) == -1)
-			{
-				_exit(-1);
-			}
-			close(pipe_stdout[0]); // child doesn't need read end
-		}
-		// redirect stderr to the write end of this pipe
-		if (err)
-		{
-			if (dup2(pipe_stderr[1], STDERR_FILENO) == -1)
-			{
-				_exit(-1);
-			}
-			close(pipe_stderr[0]); // child doesn't need read end
-		}
-		// redirect stdin to the read end of this pipe
-		if (in)
-		{
-			if (dup2(pipe_stdin[0], STDIN_FILENO) == -1)
-			{
-				_exit(-1);
-			}
-			close(pipe_stdin[1]); // child doesn't need write end
-		}
-
-		wordexp_t p;
-		if (wordexp(cmd, &p, 0) != 0)
-		{
-			_exit(-1);
-		}
-	
-		// Child process could not be run (errno has more info)	
-		if (execvp(p.we_wordv[0], p.we_wordv) == -1)
-		{
-			_exit(-1);
-		}
-		_exit(1);
-	}
-	else // parent
-	{
-		if (out)
-		{
-			close(pipe_stdout[1]); // parent doesn't need write end
-			*out = fdopen(pipe_stdout[0], "r");
-		}
-		if (err)
-		{
-			close(pipe_stderr[1]); // parent doesn't need write end
-			*err = fdopen(pipe_stderr[0], "r");
-		}
-		if (in)
-		{
-			close(pipe_stdin[0]); // parent doesn't need read end
-			*in = fdopen(pipe_stdin[1], "w");
-		}
-		return pid;
-	}
-}
-
-
-/*
- * Creates a font parameter string that can be used when running lemonbar.
- * If the given font is not set, fontstr() will return an empty string.
- * In any case, the string returnd is malloc'd, so remember to free it.
- */
-char *fontstr(const char *font)
-{
-	char *str = NULL;
-
-	if (font)
-	{
-		size_t len = strlen(font) + 6;
-		str = malloc(len);
-		snprintf(str, len, "-f \"%s\"", font);
-	}
-	else
-	{
-		str = malloc(1);
-		str[0] = '\0';
-	}
-	return str;
-}
-
-/*
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
 int open_bar(scd_lemon_s *b)
 {
-	if (b == NULL)
-	{
-		fprintf(stderr, "huh?\n");
-	}
-
 	char w[8]; // TODO hardcoded value
 	char h[8];
 
 	snprintf(w, 8, "%d", b->w);
 	snprintf(h, 8, "%d", b->h);
 
-	char *block_font = fontstr(b->block_font);
-	char *label_font = fontstr(b->label_font);
-	char *affix_font = fontstr(b->affix_font);
+	char *block_font = optstr('f', b->block_font);
+	char *label_font = optstr('f', b->label_font);
+	char *affix_font = optstr('f', b->affix_font);
+	char *name_str = optstr('n', b->name);
 
 	size_t buf_len = 26; // TODO hardcoded value
 	buf_len += strlen(b->bin);
-	buf_len += b->name ? strlen(b->name) : 0;
+	buf_len += strlen(name_str);
 	buf_len += strlen(block_font);
 	buf_len += strlen(label_font);
 	buf_len += strlen(affix_font);
-	buf_len += (16 + 16 + 27 + 4 + 4 + 4); // TODO hardcoded value
+	buf_len += (16 + 16 + 27 + 4 + 4); // TODO hardcoded value
 
-	fprintf(stderr, "okay\n");
 	char bar_cmd[buf_len];
 	snprintf(bar_cmd, buf_len,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s%s%s", // 25+1
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s", // 25+1
 		b->bin, // strlen
 		(b->w > 0) ? w : "", // max 8
 		(b->h > 0) ? h : "", // max 8
@@ -267,14 +124,13 @@ int open_bar(scd_lemon_s *b)
 		block_font, // strlen
 		label_font, // strlen
 		affix_font, // strlen
-		(b->name) ? "-n\"" : "",   // max 3
-		(b->name) ? b->name : "", // strlen
-		(b->name) ? "\"" : ""      // max 1
+		name_str    // strlen
 	);
 
 	free(block_font);
 	free(label_font);
 	free(affix_font);
+	free(name_str);
 
 	fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 
@@ -525,7 +381,7 @@ int run_block(scd_block_s *b, size_t result_length)
 	open_block(b);
 	if (b->fd == NULL)
 	{
-		fprintf(stderr, "Block is dead: `%s`", b->name);
+		fprintf(stderr, "Block is dead: `%s`\n", b->name);
 		close_block(b); // In case it has a PID already    TODO does this make sense?
 		b->enabled = 0; // Prevent future attempts to open TODO does this make sense?
 		return -1;
@@ -625,13 +481,13 @@ char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 		buf_len += strlen(result);
 	}
 
-	const char *fg = colorstr(NULL, block->fg, NULL);
-	const char *bg = colorstr(bar->block_bg, block->bg, NULL);
-	const char *lc = colorstr(NULL, block->lc, NULL);
-	const char *label_fg = colorstr(bar->label_fg, block->label_fg, fg);
-	const char *label_bg = colorstr(bar->label_bg, block->label_bg, bg);
-	const char *affix_fg = colorstr(bar->affix_fg, block->affix_fg, fg);
-	const char *affix_bg = colorstr(bar->affix_bg, block->affix_bg, bg);
+	const char *fg = strsel(block->fg, NULL, NULL);
+	const char *bg = strsel(block->bg, bar->block_bg, NULL);
+	const char *lc = strsel(block->lc, NULL, NULL);
+	const char *label_fg = strsel(block->label_fg, bar->label_fg, fg);
+	const char *label_bg = strsel(block->label_bg, bar->label_bg, bg);
+	const char *affix_fg = strsel(block->affix_fg, bar->affix_fg, fg);
+	const char *affix_bg = strsel(block->affix_bg, bar->affix_bg, bg);
         const int offset = (block->offset >= 0) ? block->offset : bar->offset;	
 	const int ol = block->ol ? 1 : (bar->ol ? 1 : 0);
 	const int ul = block->ul ? 1 : (bar->ul ? 1 : 0);
@@ -1323,35 +1179,6 @@ int run_trigger(scd_spark_s *t)
 }
 
 /*
- * Run the given command, which we want to do when the user triggers 
- * an action of a clickable area that has a command associated with it.
- * Returns the pid of the spawned process or -1 if running it failed.
- */
-pid_t run_cmd(const char *cmd)
-{
-	// Return early if cmd is NULL or empty
-	if (cmd == NULL || !strlen(cmd))
-	{
-		return -1;
-	}
-
-	// Try to parse the command (expand symbols like . and ~ etc)
-	wordexp_t p;
-	if (wordexp(cmd, &p, 0) != 0)
-	{
-		return -1;
-	}
-	
-	// Spawn a new child process with the given command
-	pid_t pid;
-	int res = posix_spawnp(&pid, p.we_wordv[0], NULL, NULL, p.we_wordv, environ);
-	wordfree(&p);
-	
-	// Return the child's PID on success, -1 on failure
-	return (res == 0 ? pid : -1);
-}
-
-/*
  * Takes a string that might represent an action that was registered with one 
  * of the blocks and tries to find the associated block. If found, the command
  * associated with the action will be executed.
@@ -1503,19 +1330,19 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to register SIGPIPE handler\n");
 	}
 
-	fprintf(stderr, "I'm alive #1\n");
+	/*
+	 * SUCCADE STATE
+	 */
+
+	scd_state_s state = { 0 };
 
 	/*
 	 * PARSE COMMAND LINE ARGUMENTS
 	 */
 
-	scd_state_s state = { 0 };
 	scd_prefs_s prefs = { 0 };
-	
 	state.prefs = &prefs;
 	parse_args(argc, argv, state.prefs);
-
-	fprintf(stderr, "I'm alive #2\n");
 
 	/*
 	 * PRINT HELP AND EXIT, IF REQUESTED
@@ -1534,15 +1361,14 @@ int main(int argc, char **argv)
 	char *display = getenv("DISPLAY");
 	if (!display)
 	{
-		fprintf(stderr, "DISPLAY environment variable not set\n");
+		fprintf(stderr, "DISPLAY environment variable not set, aborting.\n");
 		return EXIT_FAILURE;
 	}
 	if (!strstr(display, ":"))
 	{
-		fprintf(stderr, "DISPLAY environment variable seems invalid\n");
+		fprintf(stderr, "DISPLAY environment variable invalid, aborting.\n");
 		return EXIT_FAILURE;
 	}
-	fprintf(stderr, "DISPLAY env var:\n\t%s\n", display);
 
 	/*
 	 * DIRECTORIES
@@ -1565,7 +1391,6 @@ int main(int argc, char **argv)
 	 */
 
 	scd_lemon_s lemonbar = { 0 };
-	// lemonbar.name = state.prefs->binary ? state.prefs->binary : BAR_PROCESS;
 	init_bar(&lemonbar);
 	
 	// Add references to the bar and blocks structs to the config struct
@@ -1577,7 +1402,17 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	fprintf(stderr, "I'm alive #1\n");
+	// If no `bin` option was present in the config, set it to the default
+	if (lemonbar.bin == NULL)
+	{
+		lemonbar.bin = strdup(DEFAULT_LEMON_BIN);
+	}
+
+	// If no `name` option was present in the config, set it to the default
+	if (lemonbar.name == NULL)
+	{
+		lemonbar.name = strdup(DEFAULT_LEMON_NAME);
+	}
 
 	if (open_bar(&lemonbar) == -1)
 	{
@@ -1621,7 +1456,7 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * BAR TRIGGER - triggers when lemonbar spits something to stdout/stderr
+	 * BAR SPARK - fires when lemonbar spits something to stdout/stderr
 	 */
 	
 	scd_spark_s bartrig = { 0 };
@@ -1629,37 +1464,25 @@ int main(int argc, char **argv)
 	bartrig.lemon = &lemonbar;
 	
 	/*
-	 * TRIGGERS - trigger when their respective commands produce output
+	 * BLOCK SPARKS - fire when their respective commands produce output
 	 */
 
-	//scd_spark_s *triggers;
-	//size_t num_triggers = create_triggers(&triggers, state.blocks, state.num_blocks);
 	size_t num_triggers = create_sparks(&state);
 	scd_spark_s *triggers = state.sparks;
 
 	// Debug-print all triggers that we found
 	if (DEBUG)
 	{
-		fprintf(stderr, "Triggers found: (%zu total)\n\t", num_triggers);
-		for (size_t i = 0; i < num_triggers; ++i)
+		fprintf(stderr, "Sparks found: (%zu total)\n\t", state.num_sparks);
+		for (size_t i = 0; i < state.num_sparks; ++i)
 		{
 			fprintf(stderr, "'%s' ", triggers[i].cmd);
 		}
 		fprintf(stderr, "\n");
 	}
 
-	size_t num_triggers_opened = open_triggers(triggers, num_triggers);
-
-	// Debug-print all triggers that we opened
-	if (DEBUG)
-	{
-		fprintf(stderr, "Triggeres opened: (%zu total)\n\t", num_triggers_opened);
-		for (size_t i = 0; i < num_triggers; ++i)
-		{
-			fprintf(stderr, "'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
-		}
-		fprintf(stderr, "\n");
-	}
+	size_t num_triggers_opened = open_triggers(triggers, state.num_sparks);
+	if (DEBUG) { fprintf(stderr, "Triggered opened: %zu)\n", num_triggers_opened); }
 
 	/* 
 	 * EVENTS - register our triggers with the system so we'll be notified

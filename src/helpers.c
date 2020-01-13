@@ -105,20 +105,47 @@ char *escape(const char *str, const char e, size_t *diff)
 }
 
 /*
- * Returns the second string, if not empty or NULL, otherwise the first.
- * If both are empty or NULL, the fallback is returned.
+ * Returns the first string, unless it is empty or NULL, in which the same 
+ * check is performed on the second string and it will be returned. If the 
+ * second string is also NULL or empty, the third string will be returned
+ * without any further tests.
  */
-const char *colorstr(const char *standard, const char *override,  const char *fallback)
+const char *strsel(const char *str1, const char *str2,  const char *str3)
 {
-	if (override && strlen(override))
+	if (str1 && strlen(str1))
 	{
-		return override;
+		return str1;
 	}
-	if (standard && strlen(standard))
+	if (str2 && strlen(str2))
 	{
-		return standard;
+		return str2;
 	}
-	return fallback;
+	return str3;
+}
+
+/*
+ * Creates a string suitable for use as a command line option, where the given 
+ * character `o` will be used for the switch/option and the given string `arg`
+ * will be the argument for that option. If the given `arg` string is NULL, an 
+ * empty string is returned. In any case, the returned string is dynamically 
+ * allocated, so remember to free it at some point.
+ */
+char *optstr(char o, const char *arg)
+{
+	char *str = NULL;
+
+	if (arg)
+	{
+		size_t len = strlen(arg) + 6;
+		str = malloc(len);
+		snprintf(str, len, "-%c \"%s\"", o, arg);
+	}
+	else
+	{
+		str = malloc(1);
+		str[0] = '\0';
+	}
+	return str;
 }
 
 /*

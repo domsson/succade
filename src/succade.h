@@ -3,9 +3,12 @@
 
 #define DEBUG 0 
 #define NAME "succade"
-#define BAR_PROCESS "lemonbar"
+
 #define BUFFER_SIZE 2048
 #define BLOCK_NAME_MAX 64
+
+#define DEFAULT_LEMON_BIN  "lemonbar"
+#define DEFAULT_LEMON_NAME "succade_lemonbar"
 
 struct succade_lemon;
 struct succade_block;
@@ -21,8 +24,8 @@ typedef struct succade_state scd_state_s;
 
 struct succade_lemon
 {
-	char *name;            // Name of the bar/process
-	char *bin;             // Binary for launching bar
+	char *name;            // Name of the bar (will be used as window title)
+	char *bin;             // Binary for launching bar (default: `lemonbar`)
 	pid_t pid;             // Process ID of the bar 
 	FILE *fd_in;           // File descriptor for writing to bar
 	FILE *fd_out;          // File descriptor for reading from bar
@@ -55,7 +58,6 @@ struct succade_lemon
 struct succade_block
 {
 	char *name;            // Name of the block 
-	char *cfg;             // Full path to config file (name.ini)
 	char *bin;             // Command/binary/script to run 
 	pid_t pid;             // Process ID of this block's process
 	FILE *fd;              // File descriptor as returned by popen()
