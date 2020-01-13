@@ -674,30 +674,8 @@ int feed_bar(scd_lemon_s *bar, scd_block_s *blocks, size_t num_blocks,
 }
 
 /*
- * Quickly scan the 'format' string and return the number of block names in it.
+ * TODO add comment, possibly refactor some
  */
-int scan_blocks(const char *format)
-{
-	int in_a_block = 0;
-	size_t num_blocks = 0;
-	size_t format_len = strlen(format) + 1;
-	for (size_t i = 0; i < format_len; ++i)
-	{
-		switch (format[i])
-		{
-			case '|':
-			case ' ':
-			case '\0':
-				num_blocks += in_a_block ? 1 : 0;
-				in_a_block = 0;
-				break;
-			default:
-				in_a_block = 1;	
-		}
-	}
-	return num_blocks;
-}
-
 size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 {
 	if (format == NULL)
@@ -745,263 +723,8 @@ size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 }
 
 /*
-static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
-{
-	scd_lemon_s *bar = (scd_lemon_s*) b;
-	if (equals(name, "name"))
-	{
-		bar->name = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "bin"))
-	{
-		bar->bin = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "fg") || equals(name, "foreground"))
-	{
-		bar->fg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "bg") || equals(name, "background"))
-	{
-		bar->bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "lc") || equals(name, "line"))
-	{
-		bar->lc = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "line-width"))
-	{
-		bar->lw = atoi(value);
-		return 1;
-	}
-	if (equals(name, "ol") || equals(name, "overline"))
-	{
-		bar->ol = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "ul") || equals(name, "underline"))
-	{
-		bar->ul = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "h") || equals(name, "height"))
-	{
-		bar->h = atoi(value);
-		return 1;
-	}
-	if (equals(name, "w") || equals(name, "width"))
-	{
-		bar->w = atoi(value);
-		return 1;
-	}
-	if (equals(name, "x"))
-	{
-		bar->x = atoi(value);
-		return 1;
-	}
-	if (equals(name, "y"))
-	{
-		bar->y = atoi(value);
-		return 1;
-	}
-	if (equals(name, "dock"))
-	{
-		bar->bottom = equals(value, "bottom");
-		return 1;
-	}
-	if (equals(name, "force"))
-	{
-		bar->force = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "offset") || equals(name, "block-offset"))
-	{
-		bar->offset = atoi(value);
-		return 1;
-	}
-	if (equals(name, "prefix") || equals(name, "block-prefix"))
-	{
-		bar->prefix = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "suffix") || equals(name, "block-suffix"))
-	{
-		bar->suffix = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "format") || equals(name, "blocks"))
-	{
-		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "font") || equals(name, "block-font"))
-	{
-		bar->block_font = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "label-font"))
-	{
-		bar->label_font = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "affix-font"))
-	{
-		bar->affix_font = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "block-background") || equals(name, "block-bg"))
-	{
-		bar->block_bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "label-background") || equals(name, "label-bg"))
-	{
-		bar->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "label-foreground") || equals(name, "label-fg"))
-	{
-		bar->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "affix-background") || equals(name, "affix-bg"))
-	{
-		bar->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "affix-foreground") || equals(name, "affix-fg"))
-	{
-		bar->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	return 0; // unknown section/name, error
-}
-
-static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
-{
-	scd_block_s *block = (scd_block_s*) b;
-	if (equals(name, "bin"))
-	{
-		block->bin = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "fg") || equals(name, "foreground"))
-	{
-		block->fg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "bg") || equals(name, "background"))
-	{
-		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "label-background") || equals(name, "label-bg"))
-	{
-		block->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "label-foreground") || equals(name, "label-fg"))
-	{
-		block->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "affix-background") || equals(name, "affix-bg"))
-	{
-		block->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "affix-foreground") || equals(name, "affix-fg"))
-	{
-		block->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "lc") || equals(name, "line"))
-	{
-		block->lc = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "ol") || equals(name, "overline"))
-	{
-		block->ol = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "ul") || equals(name, "underline"))
-	{
-		block->ul = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "live"))
-	{
-		block->live = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "pad") || equals(name, "padding"))
-	{
-		block->padding = atoi(value);
-		return 1;
-	}
-	if (equals(name, "offset"))
-	{
-		block->offset = atoi(value);
-		return 1;
-	}
-	if (equals(name, "label"))
-	{
-		block->label = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "reload"))
-	{
-		if (is_quoted(value)) // String means trigger!
-		{
-			block->trigger = unquote(value);
-			block->reload = 0.0;
-		}
-		else
-		{
-			block->reload = atof(value);
-		}
-		return 1;
-	}
-	if (equals(name, "trigger"))
-	{
-		block->trigger = is_quoted(value) ? unquote(value) : strdup(value);
-		block->reload = 0.0;
-		return 1;
-	}
-	if (equals(name, "mouse-left"))
-	{
-		block->cmd_lmb = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "mouse-middle"))
-	{
-		block->cmd_mmb = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "mouse-right"))
-	{
-		block->cmd_rmb = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "scroll-up"))
-	{
-		block->cmd_sup = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	if (equals(name, "scroll-down"))
-	{
-		block->cmd_sdn = is_quoted(value) ? unquote(value) : strdup(value);
-		return 1;
-	}
-	return 0; // unknown section/name or error
-}
-*/
-
+ * Finds and returns the block with the given `name` -- or NULL.
+ */
 scd_block_s *get_block(const scd_state_s *state, const char *name)
 {
 	// Iterate over all existing blocks and check for a name match
@@ -1044,6 +767,19 @@ scd_block_s *add_block(scd_state_s *state, const char *name)
 	return &state->blocks[current];
 }
 
+/*
+ * This callback function will be called by ini_parse() whenever it read a new 
+ * name-value-pair from the given INI config file. The job of this function is
+ * to figure out if the configuration option was for the bar itself or one of 
+ * the blocks, then forward to the appropriate ini handler accordingly. 
+ * Additionally, this function will create a new block in case the given config 
+ * option refers to a block that doesn't exist yet.
+ * TODO ^- read that last sentence... I don't much like this design.
+ *         Separation of concerns and shit, you know? But I don't see how else
+ *         we can do it at the moment, as there is no guarantee that the bar's
+ *         'format' option will be read before any of the other sections; we 
+ *         have tested that already.  
+ */
 int cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
 	scd_state_s *state = (scd_state_s*) data;
@@ -1063,11 +799,9 @@ int cfg_handler(void *data, const char *section, const char *name, const char *v
 	// Call the block config handler for any other section
 	else
 	{
-		fprintf(stderr, "Calling block config handler for %s\n", section);
 		scd_block_s *block = add_block(state, section);
 		if (block == NULL)
 		{
-			fprintf(stderr, "Could not create block %s - out of memory?\n", section);
 			return 0;
 		}
 		return block_ini_handler(block, section, name, value);
@@ -1138,7 +872,7 @@ size_t create_sparks(scd_state_s *state)
  * in the corresponding block's input field. Previous lines will be discarded.
  * Returns the number of lines read from the trigger's file descriptor.
  */
-int run_trigger(scd_spark_s *t)
+size_t run_spark(scd_spark_s *t)
 {
 	if (t->fd == NULL)
 	{
@@ -1586,7 +1320,7 @@ int main(int argc, char **argv)
 		{
 			if (triggers[i].ready)
 			{
-				run_trigger(&triggers[i]);
+				run_spark(&triggers[i]);
 			}
 		}
 
