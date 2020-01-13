@@ -435,7 +435,7 @@ void close_trigger(scd_spark_s *t)
 		kill(t->pid, SIGTERM); // Politely ask to terminate
 	}
 	// If bar is set, then fd is a copy and will be closed elsewhere
-	if (t->bar)
+	if (t->lemon)
 	{
 		return;
 	}
@@ -478,8 +478,8 @@ void free_trigger(scd_spark_s *t)
 	free(t->cmd);
 	t->cmd = NULL;
 
-	t->b = NULL;
-	t->bar = NULL;
+	t->block = NULL;
+	t->lemon = NULL;
 }
 
 /*
@@ -1236,7 +1236,7 @@ size_t create_sparks(scd_state_s *state)
 	state->sparks = malloc(sizeof(scd_spark_s) * state->num_blocks);
 
 	// Go through all blocks, create sparks as appropriate
-	size_t num_sparks_created = 0;
+	size_t num_sparks = 0;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
 		// Trigger disabled blocks
@@ -1248,27 +1248,29 @@ size_t create_sparks(scd_state_s *state)
 		// Block that's triggered by another program's output
 		if (state->blocks[i].trigger)
 		{
-			state->sparks[i] = (scd_spark_s) { 0 };
-			state->sparks[i].cmd = strdup(state->blocks[i].trigger);
-			state->sparks[i].b   = &state->blocks[i];
-			num_sparks_created += 1;
+			state->sparks[num_sparks] = (scd_spark_s) { 0 };
+			state->sparks[num_sparks].cmd = strdup(state->blocks[i].trigger);
+			state->sparks[num_sparks].block = &state->blocks[i];
+			num_sparks += 1;
 			continue;
 		}
 
 		// Block that triggers itself ('live' block)
 		if (state->blocks[i].live)
 		{
-			state->sparks[i] = (scd_spark_s) { 0 };
-			state->sparks[i].cmd = strdup(state->blocks[i].bin);
-			state->sparks[i].b   = &state->blocks[i];
-			num_sparks_created += 1;
+			state->sparks[num_sparks] = (scd_spark_s) { 0 };
+			state->sparks[num_sparks].cmd = strdup(state->blocks[i].bin);
+			state->sparks[num_sparks].block = &state->blocks[i];
+			num_sparks += 1;
 			continue;
 		}
 	}
 
+
 	// Resize to whatever amount of memory we actually needed
-	state->sparks = realloc(state->sparks, sizeof(scd_spark_s) * num_sparks_created);
-	return num_sparks_created;
+	state->sparks = realloc(state->sparks, sizeof(scd_spark_s) * num_sparks);
+	state->num_sparks = num_sparks;
+	return num_sparks;
 }
 
 /*
@@ -1294,26 +1296,26 @@ int run_trigger(scd_spark_s *t)
 	if (num_lines)
 	{
 		// For live blocks, this will be the actual output
-		if (t->b->live)
+		if (t->block->live)
 		{
-			if (t->b->result != NULL)
+			if (t->block->result != NULL)
 			{
-				free(t->b->result);
-				t->b->result = NULL;
+				free(t->block->result);
+				t->block->result = NULL;
 			}
-			t->b->result = strdup(res);
+			t->block->result = strdup(res);
 			// Remove '\n'
-			t->b->result[strcspn(t->b->result, "\n")] = 0;
+			t->block->result[strcspn(t->block->result, "\n")] = 0;
 		}
 		// For regular blocks, this will be input for the block
 		else
 		{
-			if (t->b->input != NULL)
+			if (t->block->input != NULL)
 			{
-				free(t->b->input);
-				t->b->input = NULL;
+				free(t->block->input);
+				t->block->input = NULL;
 			}
-			t->b->input = strdup(res);
+			t->block->input = strdup(res);
 		}
 	}
 	
@@ -1623,8 +1625,8 @@ int main(int argc, char **argv)
 	 */
 	
 	scd_spark_s bartrig = { 0 };
-	bartrig.fd  =  lemonbar.fd_out;
-	bartrig.bar = &lemonbar;
+	bartrig.fd = lemonbar.fd_out;
+	bartrig.lemon = &lemonbar;
 	
 	/*
 	 * TRIGGERS - trigger when their respective commands produce output

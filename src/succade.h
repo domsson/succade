@@ -92,8 +92,8 @@ struct succade_spark
 	char *cmd;             // Command to run
 	pid_t pid;             // Process ID of trigger command
 	FILE *fd;              // File descriptor as returned by popen()
-	scd_block_s *b;        // Associated block
-	scd_lemon_s *bar;      // Associated bar (special use case...)
+	scd_block_s *block;    // Associated block
+	scd_lemon_s *lemon;    // Associated bar (special use case...)
 	unsigned ready : 1;    // fd has new data available for reading
 };
 
