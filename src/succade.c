@@ -13,6 +13,7 @@
 #include "ini.h"
 #include "succade.h"
 #include "options.c"
+#include "helpers.c"
 //#include "execute.c" (or "process.c"?)
 
 #define DEBUG 0 
@@ -88,51 +89,6 @@ void free_block(scd_block_s *block)
 	free(block->cmd_sdn);
 	free(block->input);
 	free(block->result);
-}
-
-/*
- * Returns 1 if both input strings are equal, otherwise 0.
- */
-int equals(const char *str1, const char *str2)
-{
-	return strcmp(str1, str2) == 0;
-}
-
-/*
- * Returns 1 if the input string is quoted, otherwise 0.
- */
-int is_quoted(const char *str)
-{
-	size_t len = strlen(str); // Length without null terminator
-	if (len < 2) return 0;    // We need at least two quotes (empty string)
-	char first = str[0];
-	char last  = str[len - 1];
-	if (first == '\'' && last == '\'') return 1; // Single-quoted string
-	if (first == '"'  && last == '"')  return 1; // Double-quoted string
-	return 0;
-}
-
-/*
- * Returns a pointer to a string that is the same as the input string, 
- * minus the enclosing quotation chars (either single or double quotes).
- * The pointer is allocated with malloc(), the caller needs to free it.
- */
-char *unquote(const char *str)
-{
-	char *trimmed = NULL;
-	size_t len = strlen(str);
-	if (len < 2) // Prevent zero-length allocation
-	{
-		trimmed = malloc(1); // Make space for null terminator
-		trimmed[0] = '\0';   // Add the null terminator
-	}
-	else
-	{
-		trimmed = malloc(len-2+1);        // No quotes, null terminator
-		strncpy(trimmed, &str[1], len-2); // Copy everything in between
-		trimmed[len-2] = '\0';            // Add the null terminator
-	}
-	return trimmed;
 }
 
 /*
@@ -596,66 +552,6 @@ int run_block(scd_block_s *b, size_t result_length)
 }
 
 /*
- * Escapes % characters in the given string by prepending another % in front of them,
- * effectively doubling all %. The result is returned as a malloc'd string, so it is 
- * upon the caller to free the result at some point. If `diff` is not NULL, escape() 
- * will set it to the number of % chars found in `str`, effectively giving the 
- * difference in size between `str` and the result.
- */
-char *escape(const char *str, size_t *diff)
-{
-	int n = 0; // number of % chars
-	char c = 0; // current char
-	int i = 0;
-	while ((c = str[i]) != '\0')
-	{
-		if (c == '%')
-		{
-			++n;
-		}
-		++i;
-	}
-	if (diff)
-	{
-		*diff = n;
-	}
-
-	char *escstr = malloc(i + n + 1);
-	int k = 0;
-	for (int j = 0; j < i; ++j)
-	{
-		if (str[j] == '%')
-		{
-			escstr[k++] = '%';
-			escstr[k++] = '%';
-		}
-		else
-		{
-			escstr[k++] = str[j];
-		}
-	}
-	escstr[k] = '\0';
-	return escstr;
-}
-
-/*
- * Returns the second string, if not empty or NULL, otherwise the first.
- * If both are empty or NULL, the fallback is returned.
- */
-const char *colorstr(const char *standard, const char *override,  const char *fallback)
-{
-	if (override && strlen(override))
-	{
-		return override;
-	}
-	if (standard && strlen(standard))
-	{
-		return standard;
-	}
-	return fallback;
-}
-
-/*
  * Given a block, it returns a pointer to a string that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
  * label and suffix. The string is malloc'd and should be free'd by the caller.
@@ -708,7 +604,7 @@ char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 	}
 
 	size_t diff;
-	char *result = escape(block->result, &diff);
+	char *result = escape(block->result, '%', &diff);
 	int padding = block->padding + diff;
 
 	size_t buf_len;
@@ -920,29 +816,6 @@ int feed_bar(scd_lemon_s *bar, scd_block_s *blocks, size_t num_blocks,
 		free(lemonbar_str);
 	}
 	return num_blocks_executed;
-}
-
-/*
- * Concatenates the given directory, file name and file extension strings
- * to a complete path. The fileext argument is optional, it can be set to NULL.
- * Returns a pointer to the concatenated string, allocated via malloc().
- */
-char *filepath(const char *dir, const char *filename, const char *fileext)
-{
-	if (fileext != NULL)
-	{
-		size_t path_len = strlen(dir) + strlen(filename) + strlen(fileext) + 3;
-		char *path = malloc(path_len);
-		snprintf(path, path_len, "%s/%s.%s", dir, filename, fileext);
-		return path;
-	}
-	else
-	{
-		size_t path_len = strlen(dir) + strlen(filename) + 2;
-		char *path = malloc(path_len);
-		snprintf(path, path_len, "%s/%s", dir, filename);
-		return path;
-	}
 }
 
 /*
@@ -1351,112 +1224,51 @@ int load_config(scd_state_s *state)
 	return (ini_parse(state->prefs->config, cfg_handler, state) < 0) ? -1 : 0;
 }
 
-size_t create_triggers(scd_spark_s **triggers, scd_block_s *blocks, size_t num_blocks)
+size_t create_sparks(scd_state_s *state)
 {
-	if (num_blocks == 0)
+	// No need for sparks if there aren't any blocks
+	if (state->num_blocks == 0)
 	{
-		*triggers = NULL;
 		return 0;
 	}
 
-	// There can't be more triggers than blocks, so we'll start with that
-	*triggers = malloc(num_blocks * sizeof(scd_spark_s));
-	size_t num_triggers_created = 0;
-	for (size_t i = 0; i < num_blocks; ++i)
+	// Use number of blocks as initial size 
+	state->sparks = malloc(sizeof(scd_spark_s) * state->num_blocks);
+
+	// Go through all blocks, create sparks as appropriate
+	size_t num_sparks_created = 0;
+	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		// Skip disabled blocks
-		if (!blocks[i].enabled)
+		// Trigger disabled blocks
+		if (!state->blocks[i].enabled)
 		{
 			continue;
 		}
 
-		// Is it a block triggered by another program/script?
-		if (blocks[i].trigger)
+		// Block that's triggered by another program's output
+		if (state->blocks[i].trigger)
 		{
-			scd_spark_s t = { 0 };
-			t.cmd = strdup(blocks[i].trigger);
-			t.b = &blocks[i];
-
-			(*triggers)[num_triggers_created++] = t;
+			state->sparks[i] = (scd_spark_s) { 0 };
+			state->sparks[i].cmd = strdup(state->blocks[i].trigger);
+			state->sparks[i].b   = &state->blocks[i];
+			num_sparks_created += 1;
 			continue;
 		}
-		
-		// Is it a block triggered by itself? ("Live" block)
-		if (blocks[i].live && blocks[i].bin)
-		{
-			scd_spark_s t = { 0 };
-			t.cmd = strdup(blocks[i].bin);
-			t.b = &blocks[i];
 
-			(*triggers)[num_triggers_created++] = t;
+		// Block that triggers itself ('live' block)
+		if (state->blocks[i].live)
+		{
+			state->sparks[i] = (scd_spark_s) { 0 };
+			state->sparks[i].cmd = strdup(state->blocks[i].bin);
+			state->sparks[i].b   = &state->blocks[i];
+			num_sparks_created += 1;
 			continue;
 		}
 	}
 
-	// Now we can possibly downsize the memory to what we've actually used
-	*triggers = realloc(*triggers, num_triggers_created * sizeof(scd_spark_s));
-	return num_triggers_created;
-}
-
-/*
- * Returns a pointer to a string that holds the config dir we want to use.
- * This does not check if the dir actually exists. You need to check still.
- * The string is allocated with malloc() and needs to be freed by the caller.
- */
-char *config_dir(const char *name)
-{
-	char *home = getenv("HOME");
-	char *cfg_home = getenv("XDF_CONFIG_HOME");
-	char *cfg_dir = NULL;
-	size_t cfg_dir_len;
-	if (cfg_home == NULL)
-	{
-		cfg_dir_len = strlen(home) + strlen(".config") + strlen(name) + 3;
-		cfg_dir = malloc(cfg_dir_len);
-		snprintf(cfg_dir, cfg_dir_len, "%s/%s/%s", home, ".config", name);
-	}
-	else
-	{
-		cfg_dir_len = strlen(cfg_home) + strlen(name) + 2;
-		cfg_dir = malloc(cfg_dir_len);
-		snprintf(cfg_dir, cfg_dir_len, "%s/%s", cfg_home, name);
-	}
-	return cfg_dir;
-}
-
-/*
- * Given a file name (base name including extension, if any, but without path),
- * this function concatenates the configuration directory path with the file 
- * name and returns it as a malloc'd string that the caller has to free. 
- * No checks are performed to verify whether the file actually exists and/or 
- * can be read; if required, the caller has to take care of this.
- * The configuration directory is determined via config_dir().
- */
-char *config_path(const char *cfg_file)
-{
-	char  *cfg_dir      = config_dir(NAME);
-	size_t cfg_dir_len  = strlen(cfg_dir);
-	size_t cfg_file_len = strlen(cfg_file);
-	size_t cfg_path_len = cfg_dir_len + cfg_file_len + 2;
-	char  *cfg_path     = malloc(sizeof(char) * cfg_path_len);
-
-	snprintf(cfg_path, cfg_path_len, "%s/%s", cfg_dir, cfg_file);
-	free(cfg_dir);
-
-	return cfg_path;
-}
-
-double get_time()
-{
-	clockid_t cid = CLOCK_MONOTONIC;
-	// TODO the next line is cool, as CLOCK_MONOTONIC is not
-	// present on all systems, where CLOCK_REALTIME is, however
-	// I don't want to call sysconf() with every single iteration
-	// of the main loop, so let's do this ONCE and remember...
-	//clockid_t cid = (sysconf(_SC_MONOTONIC_CLOCK) > 0) ? CLOCK_MONOTONIC : CLOCK_REALTIME;
-	struct timespec ts;
-	clock_gettime(cid, &ts);
-	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
+	// Resize to whatever amount of memory we actually needed
+	state->sparks = realloc(state->sparks, sizeof(scd_spark_s) * num_sparks_created);
+	return num_sparks_created;
 }
 
 /*
@@ -1615,7 +1427,6 @@ void sigint_handler(int sig)
 	running = 0;
 	handled = sig;
 }
-
 
 void found_block_handler(const char *name, int align, int n, void *data)
 {
@@ -1819,8 +1630,10 @@ int main(int argc, char **argv)
 	 * TRIGGERS - trigger when their respective commands produce output
 	 */
 
-	scd_spark_s *triggers;
-	size_t num_triggers = create_triggers(&triggers, state.blocks, state.num_blocks);
+	//scd_spark_s *triggers;
+	//size_t num_triggers = create_triggers(&triggers, state.blocks, state.num_blocks);
+	size_t num_triggers = create_sparks(&state);
+	scd_spark_s *triggers = state.sparks;
 
 	// Debug-print all triggers that we found
 	if (DEBUG)
