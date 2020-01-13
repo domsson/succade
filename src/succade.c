@@ -546,8 +546,13 @@ char get_align(const int align)
  * Combines the results of all given blocks into a single string that can be fed
  * to Lemonbar. Returns a pointer to the string, allocated with malloc().
  */
-char *barstr(const scd_lemon_s *bar, const scd_block_s *blocks, size_t num_blocks)
+char *barstr(const scd_state_s *state)
 {
+	// For convenience...
+	const scd_lemon_s *bar = state->lemon;
+	const scd_block_s *blocks = state->blocks;
+	size_t num_blocks = state->num_blocks;
+
 	// Short blocks like temperatur, volume or battery info will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
 	size_t bar_str_len = 256 * num_blocks; // TODO hardcoded value
@@ -602,6 +607,9 @@ char *barstr(const scd_lemon_s *bar, const scd_block_s *blocks, size_t num_block
 	return bar_str;
 }
 
+/*
+ * TODO add comment, possibly some refactoring
+ */
 size_t feed_bar(scd_state_s *state, double delta, double tolerance, double *next)
 {
 
@@ -670,7 +678,7 @@ size_t feed_bar(scd_state_s *state, double delta, double tolerance, double *next
 
 	if (num_blocks_executed)
 	{
-		char *lemonbar_str = barstr(bar, blocks, num_blocks);
+		char *lemonbar_str = barstr(state);
 		if (DEBUG) { fprintf(stderr, "%s", lemonbar_str); }
 		fputs(lemonbar_str, bar->fd_in);
 		free(lemonbar_str);
