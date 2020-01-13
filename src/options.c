@@ -1,26 +1,23 @@
 #include <unistd.h>
 #include "succade.h"
 
-void parse_args(int argc, char **argv, struct succade_config *cfg)
+void parse_args(int argc, char **argv, scd_prefs_s *prefs)
 {
 	// Get arguments, if any
 	opterr = 0;
 	int o;
-	while ((o = getopt(argc, argv, "b:c:eh")) != -1)
+	while ((o = getopt(argc, argv, "c:eh")) != -1)
 	{
 		switch (o)
 		{
-			case 'b': // bar/binary (custom bar binary)
-				cfg->binary = optarg;
-				break;
 			case 'c': // config (custom config file location)
-				cfg->config = optarg;
+				prefs->config = optarg;
 				break;
 			case 'e': // empty (run bar even if no blocks present)
-				cfg->empty = 1;
+				prefs->empty = 1;
 				break;
 			case 'h': // help (show help)
-				cfg->help = 1;
+				prefs->help = 1;
 				break;
 		}
 	}

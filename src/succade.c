@@ -12,7 +12,8 @@
 #include <sys/prctl.h>
 #include "ini.h"
 #include "succade.h"
-#include "args.c"
+#include "options.c"
+//#include "execute.c" (or "process.c"?)
 
 #define DEBUG 0 
 #define NAME "succade"
@@ -24,153 +25,69 @@ extern char **environ;         // Required to pass the env to child cmds
 static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
 
-struct bar
-{
-	char *name;            // Name of the bar/process
-	pid_t pid;             // Process ID of the bar 
-	FILE *fd_in;           // File descriptor for writing to bar
-	FILE *fd_out;          // File descriptor for reading from bar
-	char *fg;              // Foreground color
-	char *bg;              // Background color
-	char *lc;              // Overline/underline color
-	char *prefix;          // Prepend this to every block's result
-	char *suffix;          // Append this to every block's result
-	unsigned ol : 1;       // Draw overline for all blocks?
-	unsigned ul : 1;       // Draw underline for all blocks?
-	size_t lw : 8;         // Overline/underline width in px
-	size_t w : 16;         // Width of the bar
-	size_t h : 16;         // Height of the bar
-	size_t x : 16;         // x-position of the bar
-	size_t y : 16;         // y-position of the bar
-	unsigned bottom : 1;   // Position bar at bottom of screen?
-	unsigned force : 1;    // Force docking?
-	int offset : 16;       // Offset between any two blocks 
-	char *format;          // List and position of blocks
-	char *block_font;      // The default font to use (slot 1)
-	char *label_font;      // Font used for the label (slot 2)
-	char *affix_font;      // Font used for prefix/suffix (slot 3)
-	char *block_bg;        // Background color for all blocks
-	char *label_fg;        // Foreground color for all labels
-	char *label_bg;        // Background color for all labels
-	char *affix_fg;        // Foreground color for all affixes
-	char *affix_bg;        // Background color for all affixes
-};
-
-struct block
-{
-	char *name;            // Name of the block 
-	char *cfg;             // Full path to config file (name.ini)
-	char *bin;             // Command/binary/script to run 
-	pid_t pid;             // Process ID of this block's process
-	FILE *fd;              // File descriptor as returned by popen()
-	char *fg;              // Foreground color
-	char *bg;              // Background color
-	char *label_fg;        // Foreground color for the label
-	char *label_bg;        // Background color for the label
-	char *affix_fg;        // Foreground color for the affixes
-	char *affix_bg;        // Background color for the affixes
-	char *lc;              // Overline/underline color
-	unsigned ol : 1;       // Draw overline?
-	unsigned ul : 1;       // Draw underline?
-	size_t padding : 8;    // Minimum width of result in chars
-	int offset : 16;       // Offset to next block in px
-	unsigned align;        // -1, 0, 1 (left, center, right)
-	char *label;           // Prefixes the result string
-	char *trigger;         // Run block based on this cmd
-	char *cmd_lmb;         // Command to run on left mouse click
-	char *cmd_mmb;         // Command to run on middle mouse click
-	char *cmd_rmb;         // Command to run on right mouse click
-	char *cmd_sup;         // Command to run on scroll up
-	char *cmd_sdn;         // Command to run on scroll down
-	unsigned live : 1;     // This block is its own trigger
-	unsigned used : 1;     // Has this block been run at least once?
-	double reload;         // Interval between runs 
-	double waited;         // Time the block hasn't been run
-	char *input;           // Recent output of the associated trigger
-	char *result;          // Output of the most recent block run
-	unsigned enabled : 1;  // Block specified in bar's format string?
-};
-
-struct trigger
-{
-	char *cmd;             // Command to run
-	pid_t pid;             // Process ID of trigger command
-	FILE *fd;              // File descriptor as returned by popen()
-	struct block *b;       // Associated block
-	struct bar *bar;       // Associated bar (special use case...)
-	unsigned ready : 1;    // fd has new data available for reading
-};
-
-struct block_container
-{
-	struct block *blocks;
-	size_t count;
-};
-
-typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
-
 /*
  * Init the given bar struct to a well defined state using sensible defaults.
  */
-void init_bar(struct bar *b)
+
+void init_bar(scd_lemon_s *lemon)
 {
-	b->lw = 1;
+	lemon->lw = 1;
 }
 
 /*
  * Init the given block struct to a well defined state using sensible defaults.
  */
-void init_block(struct block *b)
+void init_block(scd_block_s *block)
 {
-	b->offset = -1;
-	b->reload = 5.0;
+	block->offset = -1;
+	block->reload = 5.0;
 }
 
 /*
  * Frees all members of the given bar that need freeing.
  */
-void free_bar(struct bar *b)
+void free_bar(scd_lemon_s *lemon)
 {
-	free(b->fg);
-	free(b->bg);
-	free(b->lc);
-	free(b->prefix);
-	free(b->suffix);
-	free(b->format);
-	free(b->block_font);
-	free(b->label_font);
-	free(b->affix_font);
-	free(b->block_bg);
-	free(b->label_fg);
-	free(b->label_bg);
-	free(b->affix_fg);
-	free(b->affix_bg);
+	free(lemon->fg);
+	free(lemon->bg);
+	free(lemon->lc);
+	free(lemon->prefix);
+	free(lemon->suffix);
+	free(lemon->format);
+	free(lemon->block_font);
+	free(lemon->label_font);
+	free(lemon->affix_font);
+	free(lemon->block_bg);
+	free(lemon->label_fg);
+	free(lemon->label_bg);
+	free(lemon->affix_fg);
+	free(lemon->affix_bg);
 }
 
 /*
  * Frees all members of the given block that need freeing.
  */
-void free_block(struct block *b)
+void free_block(scd_block_s *block)
 {
-	free(b->name);
-	free(b->cfg);
-	free(b->bin);
-	free(b->fg);
-	free(b->bg);
-	free(b->lc);
-	free(b->label_fg);
-	free(b->label_bg);
-	free(b->affix_fg);
-	free(b->affix_bg);
-	free(b->label);
-	free(b->trigger);
-	free(b->cmd_lmb);
-	free(b->cmd_mmb);
-	free(b->cmd_rmb);
-	free(b->cmd_sup);
-	free(b->cmd_sdn);
-	free(b->input);
-	free(b->result);
+	free(block->name);
+	free(block->cfg);
+	free(block->bin);
+	free(block->fg);
+	free(block->bg);
+	free(block->lc);
+	free(block->label_fg);
+	free(block->label_bg);
+	free(block->affix_fg);
+	free(block->affix_bg);
+	free(block->label);
+	free(block->trigger);
+	free(block->cmd_lmb);
+	free(block->cmd_mmb);
+	free(block->cmd_rmb);
+	free(block->cmd_sup);
+	free(block->cmd_sdn);
+	free(block->input);
+	free(block->result);
 }
 
 /*
@@ -351,8 +268,13 @@ char *fontstr(const char *font)
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
-int open_bar(struct bar *b)
+int open_bar(scd_lemon_s *b)
 {
+	if (b == NULL)
+	{
+		fprintf(stderr, "huh?\n");
+	}
+
 	char w[8]; // TODO hardcoded value
 	char h[8];
 
@@ -363,17 +285,19 @@ int open_bar(struct bar *b)
 	char *label_font = fontstr(b->label_font);
 	char *affix_font = fontstr(b->affix_font);
 
-	size_t buf_len = 25; // TODO hardcoded value
-	buf_len += strlen(b->name);
+	size_t buf_len = 26; // TODO hardcoded value
+	buf_len += strlen(b->bin);
+	buf_len += b->name ? strlen(b->name) : 0;
 	buf_len += strlen(block_font);
 	buf_len += strlen(label_font);
 	buf_len += strlen(affix_font);
-	buf_len += (16 + 16 + 27 + 4 + 4); // TODO hardcoded value
+	buf_len += (16 + 16 + 27 + 4 + 4 + 4); // TODO hardcoded value
 
+	fprintf(stderr, "okay\n");
 	char bar_cmd[buf_len];
 	snprintf(bar_cmd, buf_len,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s", // 24+1
-		b->name, // strlen
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s%s%s", // 25+1
+		b->bin, // strlen
 		(b->w > 0) ? w : "", // max 8
 		(b->h > 0) ? h : "", // max 8
 		b->x, // max 8
@@ -386,7 +310,10 @@ int open_bar(struct bar *b)
 		(b->force)  ? "-d" : "", // max 2
 		block_font, // strlen
 		label_font, // strlen
-		affix_font  // strlen
+		affix_font, // strlen
+		(b->name) ? "-n\"" : "",   // max 3
+		(b->name) ? b->name : "", // strlen
+		(b->name) ? "\"" : ""      // max 1
 	);
 
 	free(block_font);
@@ -411,7 +338,7 @@ int open_bar(struct bar *b)
  * Returns 0 on success, -1 if block could not be executed.
  * TODO: Should this function check if the block is already open?
  */
-int open_block(struct block *b)
+int open_block(scd_block_s *b)
 {
 	if (b->pid != -1)
 	{
@@ -456,10 +383,10 @@ int open_block(struct block *b)
  * Returns the number of blocks that were successfully opened.
  * TODO currently not in use, can we trash it?
  */
-int open_blocks(struct block *blocks, int num_blocks)
+int open_blocks(scd_block_s *blocks, size_t num_blocks)
 {
 	int blocks_opened;
-	for (int i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		blocks_opened += (open_block(&blocks[i]) == 0) ? 1 : 0;
 	}
@@ -470,7 +397,7 @@ int open_blocks(struct block *blocks, int num_blocks)
  * Closes the given bar by killing the process, closing its file descriptors
  * and setting them to NULL after.
  */
-void close_bar(struct bar *b)
+void close_bar(scd_lemon_s *b)
 {
 	if (b->pid > 1)
 	{
@@ -493,7 +420,7 @@ void close_bar(struct bar *b)
  * Closes the given block by killing the process, closing its file descriptor
  * and settings them to NULL after.
  */
-void close_block(struct block *b)
+void close_block(scd_block_s *b)
 {
 	if (b->pid > 1)
 	{
@@ -510,15 +437,15 @@ void close_block(struct block *b)
 /*
  * Convenience function: simply runs close_block() for all blocks.
  */
-void close_blocks(struct block *blocks, int num_blocks)
+void close_blocks(scd_block_s *blocks, size_t num_blocks)
 {
-	for (int i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		close_block(&blocks[i]);
 	}
 }
 
-int open_trigger(struct trigger *t)
+int open_trigger(scd_spark_s *t)
 {
 	if (t->cmd == NULL)
 	{
@@ -544,7 +471,7 @@ int open_trigger(struct trigger *t)
  * and sending a SIGTERM to the trigger command.
  * Also sets the file descriptor to NULL.
  */
-void close_trigger(struct trigger *t)
+void close_trigger(scd_spark_s *t)
 {
 	// Is the trigger's command still running?
 	if (t->pid > 1)
@@ -569,10 +496,10 @@ void close_trigger(struct trigger *t)
  * Convenience function: simply opens all given triggers.
  * Returns the number of successfully opened triggers.
  */ 
-int open_triggers(struct trigger *triggers, int num_triggers)
+size_t open_triggers(scd_spark_s *triggers, size_t num_triggers)
 {
-	int num_triggers_opened = 0;
-	for (int i = 0; i < num_triggers; ++i)
+	size_t num_triggers_opened = 0;
+	for (size_t i = 0; i < num_triggers; ++i)
 	{
 		num_triggers_opened += (open_trigger(&triggers[i]) == 0) ? 1 : 0;
 	}
@@ -582,15 +509,15 @@ int open_triggers(struct trigger *triggers, int num_triggers)
 /*
  * Convenience function: simply closes all given triggers.
  */
-void close_triggers(struct trigger *triggers, int num_triggers)
+void close_triggers(scd_spark_s *triggers, size_t num_triggers)
 {
-	for (int i=0; i<num_triggers; ++i)
+	for (size_t i = 0; i < num_triggers; ++i)
 	{
 		close_trigger(&triggers[i]);
 	}
 }
 
-void free_trigger(struct trigger *t)
+void free_trigger(scd_spark_s *t)
 {
 	free(t->cmd);
 	t->cmd = NULL;
@@ -602,9 +529,9 @@ void free_trigger(struct trigger *t)
 /*
  * Convenience function: simply frees all given blocks.
  */
-void free_blocks(struct block *blocks, int num_blocks)
+void free_blocks(scd_block_s *blocks, size_t num_blocks)
 {
-	for (int i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		free_block(&blocks[i]);
 	}
@@ -613,9 +540,9 @@ void free_blocks(struct block *blocks, int num_blocks)
 /*
  * Convenience function: simply frees all given triggers.
  */
-void free_triggers(struct trigger *triggers, int num_triggers)
+void free_triggers(scd_spark_s *triggers, size_t num_triggers)
 {
-	for (int i = 0; i < num_triggers; ++i)
+	for (size_t i = 0; i < num_triggers; ++i)
 	{
 		free_trigger(&triggers[i]);
 	}
@@ -629,7 +556,7 @@ void free_triggers(struct trigger *triggers, int num_triggers)
  * Returns 0 on success, -1 if the block could not be run or its output could
  * not be fetched.
  */
-int run_block(struct block *b, size_t result_length)
+int run_block(scd_block_s *b, size_t result_length)
 {
 	if (b->live)
 	{
@@ -693,8 +620,8 @@ char *escape(const char *str, size_t *diff)
 		*diff = n;
 	}
 
-	char *escstr = malloc(i+n+1);
-	int k=0;
+	char *escstr = malloc(i + n + 1);
+	int k = 0;
 	for (int j = 0; j < i; ++j)
 	{
 		if (str[j] == '%')
@@ -737,7 +664,7 @@ const char *colorstr(const char *standard, const char *override,  const char *fa
  * string this function is putting together, otherwise truncation will happen.
  * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
-char *blockstr(const struct bar *bar, const struct block *block, size_t len)
+char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 {
 	char action_start[(5 * strlen(block->name)) + 56]; // ... + (5 * 11) + 1
 	action_start[0] = 0;
@@ -868,7 +795,7 @@ char get_align(const int align)
  * Combines the results of all given blocks into a single string that can be fed
  * to Lemonbar. Returns a pointer to the string, allocated with malloc().
  */
-char *barstr(const struct bar *bar, const struct block *blocks, size_t num_blocks)
+char *barstr(const scd_lemon_s *bar, const scd_block_s *blocks, size_t num_blocks)
 {
 	// Short blocks like temperatur, volume or battery info will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
@@ -924,7 +851,7 @@ char *barstr(const struct bar *bar, const struct block *blocks, size_t num_block
 	return bar_str;
 }
 
-int feed_bar(struct bar *bar, struct block *blocks, size_t num_blocks, 
+int feed_bar(scd_lemon_s *bar, scd_block_s *blocks, size_t num_blocks, 
 		double delta, double tolerance, double *next)
 {
 	// Can't pipe to bar if its file descriptor isn't available
@@ -1091,10 +1018,15 @@ size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 
 static int bar_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
-	struct bar *bar = (struct bar*) b;
+	scd_lemon_s *bar = (scd_lemon_s*) b;
 	if (equals(name, "name"))
 	{
-		bar->name = strdup(value);
+		bar->name = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "bin"))
+	{
+		bar->bin = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
@@ -1222,7 +1154,7 @@ static int bar_ini_handler(void *b, const char *section, const char *name, const
 
 static int block_ini_handler(void *b, const char *section, const char *name, const char *value)
 {
-	struct block *block = (struct block*) b;
+	scd_block_s *block = (scd_block_s*) b;
 	if (equals(name, "bin"))
 	{
 		block->bin = is_quoted(value) ? unquote(value) : strdup(value);
@@ -1340,15 +1272,15 @@ static int block_ini_handler(void *b, const char *section, const char *name, con
 	return 0; // unknown section/name or error
 }
 
-struct block *get_block(struct block_container *bc, const char *name)
+scd_block_s *get_block(scd_block_s *blocks, size_t num_blocks, const char *name)
 {
 	// Iterate over all existing blocks and check for a name match
-	for (size_t i = 0; i < bc->count; ++i)
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		// If names match, return a pointer to this block
-		if (strcmp(bc->blocks[i].name, name) == 0)
+		if (strcmp(blocks[i].name, name) == 0)
 		{
-			return &bc->blocks[i];
+			return &blocks[i];
 		}
 	}
 	return NULL;
@@ -1359,33 +1291,31 @@ struct block *get_block(struct block_container *bc, const char *name)
  * block container, unless there is already a block with that name in there. 
  * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
-struct block *add_block(struct block_container *bc, const char *name)
+scd_block_s *add_block(scd_state_s *state, const char *name)
 {
 	// See if there is an existing block by this name (and return, if so)
-	struct block *eb = get_block(bc, name);
+	scd_block_s *eb = get_block(state->blocks, state->num_blocks, name);
 	if (eb)
 	{
 		return eb;
 	}
 
 	// Resize the block container to be able to hold one more block
-	bc->count += 1;
-	bc->blocks = realloc(bc->blocks, sizeof(struct block) * bc->count);
+	int current = state->num_blocks;
+	state->num_blocks += 1;
+	state->blocks = realloc(state->blocks, sizeof(scd_block_s) * state->num_blocks);
 	
-	// Create the block, setting its name
-	struct block b = { 0 };
-	init_block(&b);
-	b.name = strdup(name);
+	// Create the block, setting its name and default values
+	state->blocks[current] = (scd_block_s) { .name = strdup(name) };
+	init_block(&state->blocks[current]);
 
-	// Add the block to the block container and return a pointer to it	
-	size_t new_count = bc->count - 1;
-	bc->blocks[new_count] = b;
-	return &bc->blocks[new_count];
+	// Return a pointer to the new block
+	return &state->blocks[current];
 }
 
-int cfg_handler(void *cfg, const char *section, const char *name, const char *value)
+int cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
-	struct succade_config *config = (struct succade_config*) cfg;
+	scd_state_s *state = (scd_state_s*) data;
 
 	// Return early if no section given (user/config error)
 	if (section[0] == '\0')
@@ -1395,13 +1325,13 @@ int cfg_handler(void *cfg, const char *section, const char *name, const char *va
 	// Call the bar config handler for the special section "bar"
 	if (strcmp(section, "bar") == 0)
 	{
-		return bar_ini_handler(config->bar, section, name, value);
+		return bar_ini_handler(state->lemon, section, name, value);
 	}
 	// Call the block config handler for any other section
 	else
 	{
 		fprintf(stderr, "Calling block config handler for %s\n", section);
-		struct block *block = add_block(config->blocks, section);
+		scd_block_s *block = add_block(state, section);
 		if (block == NULL)
 		{
 			fprintf(stderr, "Could not create block %s - out of memory?\n", section);
@@ -1416,16 +1346,12 @@ int cfg_handler(void *cfg, const char *section, const char *name, const char *va
  * by setting its properties according to the values read from the config file.
  * Returns 0 on success, -1 if the config file could not be found or read.
  */
-int load_config(const char *cfg_path, struct succade_config *cfg)
+int load_config(scd_state_s *state)
 {
-	if (ini_parse(cfg_path, cfg_handler, cfg) < 0)
-	{
-		return -1;
-	}
-	return 0;
+	return (ini_parse(state->prefs->config, cfg_handler, state) < 0) ? -1 : 0;
 }
 
-int create_triggers(struct trigger **triggers, struct block *blocks, int num_blocks)
+size_t create_triggers(scd_spark_s **triggers, scd_block_s *blocks, size_t num_blocks)
 {
 	if (num_blocks == 0)
 	{
@@ -1433,9 +1359,10 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 		return 0;
 	}
 
-	*triggers = malloc(num_blocks * sizeof(struct trigger));
-	int num_triggers_created = 0;
-	for (int i = 0; i < num_blocks; ++i)
+	// There can't be more triggers than blocks, so we'll start with that
+	*triggers = malloc(num_blocks * sizeof(scd_spark_s));
+	size_t num_triggers_created = 0;
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		// Skip disabled blocks
 		if (!blocks[i].enabled)
@@ -1446,7 +1373,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 		// Is it a block triggered by another program/script?
 		if (blocks[i].trigger)
 		{
-			struct trigger t = { 0 };
+			scd_spark_s t = { 0 };
 			t.cmd = strdup(blocks[i].trigger);
 			t.b = &blocks[i];
 
@@ -1457,7 +1384,7 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 		// Is it a block triggered by itself? ("Live" block)
 		if (blocks[i].live && blocks[i].bin)
 		{
-			struct trigger t = { 0 };
+			scd_spark_s t = { 0 };
 			t.cmd = strdup(blocks[i].bin);
 			t.b = &blocks[i];
 
@@ -1466,7 +1393,8 @@ int create_triggers(struct trigger **triggers, struct block *blocks, int num_blo
 		}
 	}
 
-	*triggers = realloc(*triggers, num_triggers_created * sizeof(struct trigger));
+	// Now we can possibly downsize the memory to what we've actually used
+	*triggers = realloc(*triggers, num_triggers_created * sizeof(scd_spark_s));
 	return num_triggers_created;
 }
 
@@ -1536,7 +1464,7 @@ double get_time()
  * in the corresponding block's input field. Previous lines will be discarded.
  * Returns the number of lines read from the trigger's file descriptor.
  */
-int run_trigger(struct trigger *t)
+int run_trigger(scd_spark_s *t)
 {
 	if (t->fd == NULL)
 	{
@@ -1616,7 +1544,7 @@ pid_t run_cmd(const char *cmd)
  * Returns 0 on success, -1 if the string was not a recognized action command
  * or the block that the action belongs to could not be found.
  */
-int process_action(const char *action, struct block *blocks, int num_blocks)
+int process_action(const char *action, scd_block_s *blocks, size_t num_blocks)
 {
 	size_t len = strlen(action);
 	if (len < 5)
@@ -1692,10 +1620,10 @@ void sigint_handler(int sig)
 void found_block_handler(const char *name, int align, int n, void *data)
 {
 	// 'Unpack' the data
-	struct block_container *bc = (struct block_container*) data;
+	scd_state_s *state = (scd_state_s*) data;
 	
 	// Find or add the block with the given name
-	struct block *block = add_block(bc, name);
+	scd_block_s *block = add_block(state, name);
 	
 	// Mark the block as enabled 
 	block->enabled = 1;
@@ -1711,8 +1639,6 @@ void help(const char *invocation)
 	fprintf(stderr, "\t%s [OPTIONS...]\n", invocation);
 	fprintf(stderr, "\n");
 	fprintf(stderr, "OPTIONS\n");
-	fprintf(stderr, "\t-b BAR_BINARY\n");
-	fprintf(stderr, "\t\tSpecify the bar binary to use.\n");
 	fprintf(stderr, "\t-e\n");
 	fprintf(stderr, "\t\tRun bar even if it is empty (no blocks).\n");
 	fprintf(stderr, "\t-h\n");
@@ -1764,18 +1690,25 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to register SIGPIPE handler\n");
 	}
 
+	fprintf(stderr, "I'm alive #1\n");
+
 	/*
 	 * PARSE COMMAND LINE ARGUMENTS
 	 */
 
-	struct succade_config cfg = { 0 };
-	parse_args(argc, argv, &cfg);
+	scd_state_s state = { 0 };
+	scd_prefs_s prefs = { 0 };
+	
+	state.prefs = &prefs;
+	parse_args(argc, argv, state.prefs);
+
+	fprintf(stderr, "I'm alive #2\n");
 
 	/*
 	 * PRINT HELP AND EXIT, IF REQUESTED
 	 */
 
-	if (cfg.help)
+	if (prefs.help)
 	{
 		help(argv[0]);
 		return EXIT_SUCCESS;
@@ -1803,7 +1736,7 @@ int main(int argc, char **argv)
 	 */
 
 	// If no custom config file given, set it to the default
-	if (cfg.config == NULL)
+	if (prefs.config == NULL)
 	{
 		// TODO If we get this string from args, we don't need to free
 		//      it but if we get it via config_path(), then we DO need 
@@ -1811,29 +1744,27 @@ int main(int argc, char **argv)
 		//      to know where it came from. Should we simply strdup() 
 		//      everything that comes in via args, so that we get some
 		//      consistency? That would waste some memory though...
-		cfg.config = config_path("succaderc");
+		prefs.config = config_path("succaderc");
 	}
 
 	/*
 	 * BAR & BLOCKS
 	 */
 
-	struct bar lemonbar = { 0 };
-	lemonbar.name = cfg.binary ? cfg.binary : BAR_PROCESS;
+	scd_lemon_s lemonbar = { 0 };
+	// lemonbar.name = state.prefs->binary ? state.prefs->binary : BAR_PROCESS;
 	init_bar(&lemonbar);
 	
-	// Create a block container, so we can hand that around later on
-	struct block_container bc = { 0 };
-
 	// Add references to the bar and blocks structs to the config struct
-	cfg.bar    = &lemonbar;
-	cfg.blocks = &bc;
+	state.lemon = &lemonbar;
 
-	if (load_config(cfg.config, &cfg) == -1)
+	if (load_config(&state) == -1)
 	{
-		fprintf(stderr, "Failed to load config file: %s\n", cfg.config);
+		fprintf(stderr, "Failed to load config file: %s\n", prefs.config);
 		return EXIT_FAILURE;
 	}
+
+	fprintf(stderr, "I'm alive #1\n");
 
 	if (open_bar(&lemonbar) == -1)
 	{
@@ -1842,35 +1773,35 @@ int main(int argc, char **argv)
 	}
 
 	// Parse the format string and call found_block_handler for every block
-	size_t num_blocks_parsed = parse_format_cb(lemonbar.format, found_block_handler, &bc);
+	size_t num_blocks_parsed = parse_format_cb(lemonbar.format, found_block_handler, &state);
 
 	// Check how many blocks we _actually_ have (some might not have been
 	// specified in the bar's 'format' string, yet had config sections)
 	// and debug-print them at the same time
 	size_t num_blocks_enabled = 0;
-	fprintf(stderr, "Blocks found: (%zu total)\n\t", bc.count);
-	for (size_t i = 0; i < bc.count; ++i)
+	fprintf(stderr, "Blocks found: (%zu total)\n\t", state.num_blocks);
+	for (size_t i = 0; i < state.num_blocks; ++i)
 	{
-		num_blocks_enabled += bc.blocks[i].enabled;
-		fprintf(stderr, "%s ", bc.blocks[i].name);
+		num_blocks_enabled += state.blocks[i].enabled;
+		fprintf(stderr, "%s ", state.blocks[i].name);
 	}
 	fprintf(stderr, "\n");
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu, enabled = %zu\n", 
-			num_blocks_parsed, bc.count, num_blocks_enabled);
+			num_blocks_parsed, state.num_blocks, num_blocks_enabled);
 
 	if (DEBUG)
 	{
-		fprintf(stderr, "Blocks found: (%zu total)\n\t", bc.count);
-		for (int i = 0; i < bc.count; ++i)
+		fprintf(stderr, "Blocks found: (%zu total)\n\t", state.num_blocks);
+		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
-			fprintf(stderr, "%s ", bc.blocks[i].name);
+			fprintf(stderr, "%s ", state.blocks[i].name);
 		}
 		fprintf(stderr, "\n");
 	}
 
 	// Exit if no blocks could be loaded and 'empty' option isn't present
-	if (num_blocks_enabled == 0 && cfg.empty == 0)
+	if (num_blocks_enabled == 0 && prefs.empty == 0)
 	{
 		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
 		return EXIT_FAILURE;
@@ -1880,7 +1811,7 @@ int main(int argc, char **argv)
 	 * BAR TRIGGER - triggers when lemonbar spits something to stdout/stderr
 	 */
 	
-	struct trigger bartrig = { 0 };
+	scd_spark_s bartrig = { 0 };
 	bartrig.fd  =  lemonbar.fd_out;
 	bartrig.bar = &lemonbar;
 	
@@ -1888,14 +1819,14 @@ int main(int argc, char **argv)
 	 * TRIGGERS - trigger when their respective commands produce output
 	 */
 
-	struct trigger *triggers;
-	size_t num_triggers = create_triggers(&triggers, bc.blocks, bc.count);
+	scd_spark_s *triggers;
+	size_t num_triggers = create_triggers(&triggers, state.blocks, state.num_blocks);
 
 	// Debug-print all triggers that we found
 	if (DEBUG)
 	{
 		fprintf(stderr, "Triggers found: (%zu total)\n\t", num_triggers);
-		for (int i = 0; i < num_triggers; ++i)
+		for (size_t i = 0; i < num_triggers; ++i)
 		{
 			fprintf(stderr, "'%s' ", triggers[i].cmd);
 		}
@@ -1908,7 +1839,7 @@ int main(int argc, char **argv)
 	if (DEBUG)
 	{
 		fprintf(stderr, "Triggeres opened: (%zu total)\n\t", num_triggers_opened);
-		for (int i=0; i<num_triggers; ++i)
+		for (size_t i = 0; i < num_triggers; ++i)
 		{
 			fprintf(stderr, "'%s' ", triggers[i].cmd ? triggers[i].cmd : "");
 		}
@@ -1985,9 +1916,9 @@ int main(int argc, char **argv)
 		{
 			if (tev[i].events & EPOLLIN)
 			{
-				((struct trigger*) tev[i].data.ptr)->ready = 1;
+				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
 
-				struct trigger *t = tev[i].data.ptr;
+				scd_spark_s *t = tev[i].data.ptr;
 				fprintf(stderr, "Trigger `%s` has activity!\n", t->cmd);
 			}
 		}	
@@ -2011,7 +1942,7 @@ int main(int argc, char **argv)
 		// Let's process bar's output, if any
 		if (strlen(bar_output))
 		{
-			if (process_action(bar_output, bc.blocks, bc.count) < 0)
+			if (process_action(bar_output, state.blocks, state.num_blocks) < 0)
 			{
 				// It wasn't a recognized command, so chances are
 				// that is was some debug/error output of bar.
@@ -2022,7 +1953,7 @@ int main(int argc, char **argv)
 		}
 
 		// Let's update bar! TODO hardcoded value (tolerance = 0.01)
-		feed_bar(&lemonbar, bc.blocks, bc.count, delta, 0.1, &wait);
+		feed_bar(&lemonbar, state.blocks, state.num_blocks, delta, 0.1, &wait);
 	}
 
 	/*
@@ -2047,11 +1978,11 @@ int main(int argc, char **argv)
 	free_trigger(&bartrig);
 
 	// Close blocks
-	close_blocks(bc.blocks, bc.count);
+	close_blocks(state.blocks, state.num_blocks);
 
-	free_blocks(bc.blocks, bc.count);
+	free_blocks(state.blocks, state.num_blocks);
 
-	free(bc.blocks);
+	free(state.blocks);
 
 	// Close bar
 	close_bar(&lemonbar);
@@ -2062,3 +1993,4 @@ int main(int argc, char **argv)
 
 	return EXIT_SUCCESS;
 }
+

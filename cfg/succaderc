@@ -1,4 +1,6 @@
 [bar]
+bin = "lemonbar"
+name = "testbar"
 # format is required, it lists the blocks to display
 format = "dt | lol"
 # dock defines bar's position: 'top' or 'bottom'
