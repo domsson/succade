@@ -189,21 +189,6 @@ int open_block(scd_block_s *b)
 }
 
 /*
- * Convenience function: simply runs open_block() for all blocks.
- * Returns the number of blocks that were successfully opened.
- * TODO currently not in use, can we trash it?
- */
-int open_blocks(scd_block_s *blocks, size_t num_blocks)
-{
-	int blocks_opened;
-	for (size_t i = 0; i < num_blocks; ++i)
-	{
-		blocks_opened += (open_block(&blocks[i]) == 0) ? 1 : 0;
-	}
-	return blocks_opened;
-}
-
-/*
  * Closes the given bar by killing the process, closing its file descriptors
  * and setting them to NULL after.
  */
@@ -1264,7 +1249,7 @@ int main(int argc, char **argv)
 
 	if (epctl_result)
 	{
-		fprintf(stderr, "%d spark events could not be registered\n", -1 * epctl_result);
+		fprintf(stderr, "%d trigger events could not be registered\n", -1 * epctl_result);
 	}
 
 	// Now let's also add the bar trigger
