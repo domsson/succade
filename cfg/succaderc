@@ -2,7 +2,7 @@
 bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
-format = "| dt | temp"
+format = "vol | dt | temp"
 # dock defines bar's position: 'top' or 'bottom'
 dock = bottom
 # height of the bar in pixel
@@ -37,7 +37,17 @@ live=true
 mouse-left=xclock
 
 [temp]
-bin="~/.config/succade/blocks/temp"
+offset=-8
+;bin="~/.config/succade/blocks/temp"
 label=" "
 padding=5
 reload=8
+
+[vol]
+bin="~/.config/succade/blocks/volume"
+label="VOL " 
+trigger="stdbuf -oL /usr/sbin/alsactl monitor"
+padding=5
+mouse-left="amixer set Master toggle"
+scroll-up="amixer set Master 5%+"
+scroll-down="amixer set Master 5%-"

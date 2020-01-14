@@ -4,6 +4,8 @@
 #include <fcntl.h>     // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <float.h>     // DBL_MAX
 #include <sys/epoll.h> // epoll_wait(), ... 
+#include <sys/types.h> // pid_t
+#include <sys/wait.h>  // waitpid()
 #include "ini.h"       // https://github.com/benhoyt/inih
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
@@ -13,6 +15,7 @@
 
 static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
+static volatile int sigchld;   // SIGCHLD has been received, please handle
 
 /*
  * Init the given bar struct to a well defined state using sensible defaults.
@@ -375,21 +378,27 @@ int run_block(scd_block_s *b, size_t result_length)
 		close_block(b); // In case it has a PID already    TODO does this make sense?
 		return -1;
 	}
+		
+	// TODO maybe use getline() instead? It allocates a suitable buffer!
+	//b->result = malloc(result_length);
+	char *result = malloc(result_length);
+	//if (fgets(b->result, result_length, b->fd) == NULL)
+	if (fgets(result, result_length, b->fd) == NULL)
+	{
+		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->name);
+		close_block(b);
+		return -1;
+	}
+
 	if (b->result != NULL)
 	{
 		free(b->result);
 		b->result = NULL;
 	}
 	
-	// TODO maybe use getline() instead? It allocates a suitable buffer!
-	b->result = malloc(result_length);
-	if (fgets(b->result, result_length, b->fd) == NULL)
-	{
-		fprintf(stderr, "Unable to fetch input from block: `%s`", b->name);
-		close_block(b);
-		return -1;
-	}
-	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
+	//b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
+	result[strcspn(result, "\n")] = 0; // Remove '\n'
+	b->result = result;
 
 	// Update the block's state accordingly
 	b->used = 1;     // Mark this block as having run at least once
@@ -399,7 +408,7 @@ int run_block(scd_block_s *b, size_t result_length)
 	free(b->input);
 	b->input = NULL;
 
-	// Close the block (unless it is a live block? We should rething this)
+	// Close the block (unless it is a live block? We should rethink this)
 	close_block(b);
 	return 0;
 }
@@ -551,7 +560,7 @@ char *barstr(const scd_state_s *state)
 	const scd_block_s *blocks = state->blocks;
 	size_t num_blocks = state->num_blocks;
 
-	// Short blocks like temperatur, volume or battery info will usually use 
+	// Short blocks like temperature, volume or battery, will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
 	size_t bar_str_len = 256 * num_blocks; // TODO hardcoded value
 	char *bar_str = malloc(bar_str_len);
@@ -562,12 +571,14 @@ char *barstr(const scd_state_s *state)
 
 	for (int i = 0; i < num_blocks; ++i)
 	{
-		// TODO just quick hack to get this working
+		// TODO just quick hack to get this working, this shouldn't be required here!
+		/*
 		if (blocks[i].bin == NULL)
 		{
 			fprintf(stderr, "Block binary not given for '%s', skipping\n", blocks[i].name);
 			continue;
 		}
+		*/
 
 		// Live blocks might not have a result available
 		if (blocks[i].result == NULL)
@@ -672,9 +683,12 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 }
 
 /*
- * TODO add comment, possibly refactor some
+ * Parses the format string for the bar, which should contain block names 
+ * separated by whitespace and, optionally, up to two vertical bars to indicate 
+ * alignment of blocks. For every block name found, the callback function `cb` 
+ * will be run. Returns the number of block names found.
  */
-size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
+size_t parse_format(const char *format, create_block_callback cb, void *data)
 {
 	if (format == NULL)
 	{
@@ -1026,6 +1040,26 @@ void sigint_handler(int sig)
 	handled = sig;
 }
 
+void sigchld_handler(int sig)
+{
+	sigchld = waitpid(-1, NULL, WNOHANG);
+}
+
+void reap_child(scd_state_s *state, pid_t pid)
+{
+	fprintf(stderr, "Child died: PID = %d\n", pid);
+
+	for (size_t i = 0; i < state->num_blocks; ++i)
+	{
+		if (state->blocks[i].pid != pid)
+		{
+			continue;
+		}
+
+		close_block(&state->blocks[i]);
+	}
+}
+
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
 void help(const char *invocation)
 {
@@ -1057,7 +1091,8 @@ int main(int argc, char **argv)
 	//      example those that failed the `execvp()` call from 
 	//      within `fork()` in `popen_noshell()`... not sure.
 	struct sigaction sa_chld = {
-		.sa_handler = SIG_IGN
+	//	.sa_handler = SIG_IGN
+		.sa_handler = &sigchld_handler
 	};
 	if (sigaction(SIGCHLD, &sa_chld, NULL) == -1)
 	{
@@ -1185,11 +1220,11 @@ int main(int argc, char **argv)
 	 * BLOCKS
 	 */
 
-	// Parse the format string and call found_block_handler for every block
-	size_t num_blocks_parsed = parse_format_cb(lemonbar.format, found_block_handler, &state);
+	// Create blocks by parsing the format string
+	size_t parsed = parse_format(lemonbar.format, found_block_handler, &state);
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
-			num_blocks_parsed, state.num_blocks);
+			parsed, state.num_blocks);
 
 	// Exit if no blocks could be loaded and 'empty' option isn't present
 	if (state.num_blocks == 0 && prefs.empty == 0)
@@ -1204,11 +1239,14 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	for (size_t i = 0; i < state.num_blocks; ++i)
+	if (DEBUG)
 	{
-		fprintf(stderr, "Block #%zu: %s -> %s\n", i, 
-				state.blocks[i].name,
-				state.blocks[i].bin);
+		for (size_t i = 0; i < state.num_blocks; ++i)
+		{
+			fprintf(stderr, "Block #%zu: %s -> %s\n", i, 
+					state.blocks[i].name,
+					state.blocks[i].bin);
+		}
 	}
 
 	/*
@@ -1294,6 +1332,13 @@ int main(int argc, char **argv)
 		now    = get_time();
 		delta  = now - before;
 		before = now;
+
+		fprintf(stderr, "> wait = %f\n", wait);
+		if (sigchld)
+		{
+			reap_child(&state, sigchld);
+			sigchld = 0;
+		}
 		
 		// Wait for trigger input - at least bartrig is always present
 		int num_events = epoll_wait(epfd, tev, max_events, wait * MILLISEC_PER_SEC);
