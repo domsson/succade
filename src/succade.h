@@ -90,7 +90,6 @@ struct succade_block
 	double waited;         // Time the block hasn't been run
 	char *input;           // Recent output of the associated trigger
 	char *result;          // Output of the most recent block run
-	unsigned enabled : 1;  // Block specified in bar's format string?
 };
 
 struct succade_spark
