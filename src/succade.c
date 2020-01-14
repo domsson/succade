@@ -150,7 +150,7 @@ int open_bar(scd_lemon_s *b)
  */
 int open_block(scd_block_s *b)
 {
-	if (b->pid != -1)
+	if (b->pid > 0)
 	{
 		fprintf(stderr, "Not opening block as it is already open: %s\n", b->name);
 		return -1;

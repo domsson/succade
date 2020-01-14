@@ -2,7 +2,7 @@
 bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
-format = "dt | lol"
+format = "| dt | temp"
 # dock defines bar's position: 'top' or 'bottom'
 dock = bottom
 # height of the bar in pixel
@@ -35,3 +35,8 @@ bin="~/.local/bin/candies/datetime -m"
 live=true
 mouse-left=xclock
 
+[temp]
+bin="~/.config/succade/blocks/temp"
+label="TMP "
+padding=5
+reload=8
