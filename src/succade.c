@@ -719,9 +719,6 @@ size_t parse_format_cb(const char *format, create_block_callback cb, void *data)
 		}
 	}
 
-	// We inform the callback one last time, but set name = NULL
-	//cb(NULL, 0, num_blocks, data);
-	
 	// Return the number of blocks found
 	return num_blocks;
 }
@@ -771,55 +768,70 @@ scd_block_s *add_block(scd_state_s *state, const char *name)
 	return &state->blocks[current];
 }
 
-/*
- * This callback function will be called by ini_parse() whenever it read a new 
- * name-value-pair from the given INI config file. The job of this function is
- * to figure out if the configuration option was for the bar itself or one of 
- * the blocks, then forward to the appropriate ini handler accordingly. 
- * Additionally, this function will create a new block in case the given config 
- * option refers to a block that doesn't exist yet.
- * TODO ^- read that last sentence... I don't much like this design.
- *         Separation of concerns and shit, you know? But I don't see how else
- *         we can do it at the moment, as there is no guarantee that the bar's
- *         'format' option will be read before any of the other sections; we 
- *         have tested that already.  
- */
-int cfg_handler(void *data, const char *section, const char *name, const char *value)
+int lemon_cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
 	scd_state_s *state = (scd_state_s*) data;
 
-	// No section means we assume this is for the bar itself then
-	if (section[0] == '\0')
+	// Only process if section is empty or specificially for bar
+	if (!section[0] || strcmp(section, state->prefs->section) == 0)
 	{
 		return lemon_ini_handler(state->lemon, section, name, value);
 	}
+	return 0;
+}
+
+int block_cfg_handler(void *data, const char *section, const char *name, const char *value)
+{
+	scd_state_s *state = (scd_state_s*) data;
 	
-	// Call the bar config handler for the special section "bar"
-	if (strcmp(section, "bar") == 0)
+	// Do not process if section is empty or specifically for bar
+	if (!section[0] || strcmp(section, state->prefs->section) == 0)
 	{
-		return lemon_ini_handler(state->lemon, section, name, value);
+		return 0;
 	}
-	
-	// Call the block config handler for any other section
-	else
+
+	// Find the block whose name fits the section name
+	scd_block_s *block = get_block(state, section);
+
+	// Indicate an issue if we couldn't find that block
+	if (block == NULL)
 	{
-		scd_block_s *block = add_block(state, section);
-		if (block == NULL)
-		{
-			return 0;
-		}
-		return block_ini_handler(block, section, name, value);
+		return 0;
 	}
+
+	// Process via the appropriate handler
+	return block_ini_handler(block, section, name, value);
 }
 
 /*
- * Tries to load the config file (succaderc) and then goes on to set up the bar (and blocks)
- * by setting its properties according to the values read from the config file.
- * Returns 0 on success, -1 if the config file could not be found or read.
+ * Load the config and parse the section for the bar, ignoring other sections.
+ * Returns 1 on success, 0 on failure (for example, file could not be read).
  */
-int load_config(scd_state_s *state)
+static int load_lemon_cfg(scd_state_s *s)
 {
-	return (ini_parse(state->prefs->config, cfg_handler, state) < 0) ? -1 : 0;
+	// Abort if config file path empty or NULL
+	if (!s->prefs->config || !s->prefs->config[0])
+	{
+		return 0;
+	}
+
+	// Fire up the INI parser
+	return (ini_parse(s->prefs->config, lemon_cfg_handler, s) < 0) ? -1 : 0;
+}
+
+/*
+ * Load the config and parse all section apart from the bar section.
+ * Returns 1 on success, 0 on failure (for example, file could not be read).
+ */
+static int load_block_cfg(scd_state_s *s)
+{
+	// Abort if config file path empty or NULL
+	if (!s->prefs->config || !s->prefs->config[0])
+	{
+		return 0;
+	}
+
+	return (ini_parse(s->prefs->config, block_cfg_handler, s) < 0) ? -1 : 0;
 }
 
 size_t create_sparks(scd_state_s *state)
@@ -863,7 +875,6 @@ size_t create_sparks(scd_state_s *state)
 			continue;
 		}
 	}
-
 
 	// Resize to whatever amount of memory we actually needed
 	state->sparks = realloc(state->sparks, sizeof(scd_spark_s) * num_sparks);
@@ -1041,6 +1052,8 @@ void help(const char *invocation)
 	fprintf(stderr, "\t\tRun bar even if it is empty (no blocks).\n");
 	fprintf(stderr, "\t-h\n");
 	fprintf(stderr, "\t\tPrint this help text and exit.\n");
+	fprintf(stderr, "\t-s\n");
+	fprintf(stderr, "\t\tINI section name for the bar.\n");
 }
 
 int main(int argc, char **argv)
@@ -1129,7 +1142,7 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * DIRECTORIES
+	 * PREFERENCES / COMMAND LINE OPTIONS / DEFAULTS
 	 */
 
 	// If no custom config file given, set it to the default
@@ -1144,17 +1157,21 @@ int main(int argc, char **argv)
 		prefs.config = config_path("succaderc");
 	}
 
+	// If no custom INI section for bar given, set it to default
+	if (prefs.section == NULL)
+	{
+		prefs.section = DEFAULT_LEMON_SECTION;
+	}
+
 	/*
-	 * BAR & BLOCKS
+	 * BAR
 	 */
 
 	scd_lemon_s lemonbar = { 0 };
 	init_lemon(&lemonbar);
-	
-	// Add references to the bar and blocks structs to the config struct
 	state.lemon = &lemonbar;
 
-	if (load_config(&state) == -1)
+	if (load_lemon_cfg(&state) == -1)
 	{
 		fprintf(stderr, "Failed to load config file: %s\n", prefs.config);
 		return EXIT_FAILURE;
@@ -1172,33 +1189,41 @@ int main(int argc, char **argv)
 		lemonbar.name = strdup(DEFAULT_LEMON_NAME);
 	}
 
-	// TODO hardcoded value for the buffer
+	// TODO hardcoded value for the buffer, also 512 would probably do just fine
 	if (open_lemon(&lemonbar, 1024) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", lemonbar.name);
 		return EXIT_FAILURE;
 	}
 
+	/*
+	 * BLOCKS
+	 */
+
 	// Parse the format string and call found_block_handler for every block
 	size_t num_blocks_parsed = parse_format_cb(lemonbar.format, found_block_handler, &state);
 
-	// Check how many blocks we _actually_ have (some might not have been
-	// specified in the bar's 'format' string, yet had config sections).
-	// ... also, debug-print them at the same time
-	size_t num_blocks_enabled = 0;
-	for (size_t i = 0; i < state.num_blocks; ++i)
-	{
-		num_blocks_enabled += state.blocks[i].enabled;
-	}
-
-	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu, enabled = %zu\n", 
-			num_blocks_parsed, state.num_blocks, num_blocks_enabled);
+	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
+			num_blocks_parsed, state.num_blocks);
 
 	// Exit if no blocks could be loaded and 'empty' option isn't present
-	if (num_blocks_enabled == 0 && prefs.empty == 0)
+	if (state.num_blocks == 0 && prefs.empty == 0)
 	{
 		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
 		return EXIT_FAILURE;
+	}
+
+	if (load_block_cfg(&state) == -1)
+	{
+		fprintf(stderr, "Failed to load config file: %s\n", prefs.config);
+		return EXIT_FAILURE;
+	}
+
+	for (size_t i = 0; i < state.num_blocks; ++i)
+	{
+		fprintf(stderr, "Block #%zu: %s -> %s\n", i, 
+				state.blocks[i].name,
+				state.blocks[i].bin);
 	}
 
 	/*

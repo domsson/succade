@@ -106,6 +106,7 @@ struct succade_spark
 struct succade_prefs
 {
 	char     *config;      // Full path to config file
+	char     *section;     // INI section name for the bar
 	unsigned  empty : 1;   // Run bar even if no blocks present?
 	unsigned  help  : 1;   // Show help text and exit?
 };
