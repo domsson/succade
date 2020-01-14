@@ -84,8 +84,9 @@ static void free_block(scd_block_s *block)
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
-int open_bar(scd_lemon_s *b)
+int open_bar(scd_lemon_s *b, size_t buf_len)
 {
+	// https://stackoverflow.com/questions/3919995/determining-sprintf-buffer-size-whats-the-standard
 	char w[8]; // TODO hardcoded value
 	char h[8];
 
@@ -97,17 +98,9 @@ int open_bar(scd_lemon_s *b)
 	char *affix_font = optstr('f', b->affix_font);
 	char *name_str   = optstr('n', b->name);
 
-	size_t buf_len = 26; // TODO hardcoded value
-	buf_len += strlen(b->bin);
-	buf_len += strlen(name_str);
-	buf_len += strlen(block_font);
-	buf_len += strlen(label_font);
-	buf_len += strlen(affix_font);
-	buf_len += (16 + 16 + 27 + 4 + 4); // TODO hardcoded value
-
 	char bar_cmd[buf_len];
 	snprintf(bar_cmd, buf_len,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s", // 25+1
+		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
 		b->bin, // strlen
 		(b->w > 0) ? w : "", // max 8
 		(b->h > 0) ? h : "", // max 8
@@ -150,42 +143,38 @@ int open_bar(scd_lemon_s *b)
  */
 int open_block(scd_block_s *b)
 {
+	// Check if block already has PID (likely already/still running)
 	if (b->pid > 0)
 	{
-		fprintf(stderr, "Not opening block as it is already open: %s\n", b->name);
+		fprintf(stderr, "Block already open: %s\n", b->name);
 		return -1;
 	}
 
-	// If no binary given, just use the block's name
-	if (b->bin == NULL)
-	{
-		b->bin = strdup(b->name);
-	}
+	// If no binary given, use the block's name
+	char *bin = b->bin ? b->bin : b->name;
 
+	// Construct the cmd string with or without input
 	char *cmd = NULL;
 	size_t cmd_len = 0;
 	if (b->input)
 	{
-		cmd_len = strlen(b->bin) + strlen(b->input) + 4;
+		cmd_len = strlen(bin) + strlen(b->input) + 4;
 		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s '%s'", b->bin, b->input);
+		snprintf(cmd, cmd_len, "%s '%s'", bin, b->input);
 	}
 	else
 	{
-		cmd_len = strlen(b->bin) + 1;
+		cmd_len = strlen(bin) + 1;
 		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s", b->bin);
+		snprintf(cmd, cmd_len, "%s", bin);
 	}
 
+	// Execute the block and retrieve its PID
 	b->pid = popen_noshell(cmd, &(b->fd), NULL, NULL);
-	if (b->pid == -1)
-	{
-		free(cmd);
-		return -1;
-	}
-
 	free(cmd);
-	return 0;
+
+	// Return 0 on success, -1 on error
+	return (b->pid == -1) ? -1 : 0;
 }
 
 /*
@@ -247,15 +236,15 @@ void close_block(scd_block_s *b)
 /*
  * Convenience function: simply runs close_block() for all blocks.
  */
-void close_blocks(scd_block_s *blocks, size_t num_blocks)
+void close_blocks(scd_state_s *state)
 {
-	for (size_t i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		close_block(&blocks[i]);
+		close_block(&state->blocks[i]);
 	}
 }
 
-int open_trigger(scd_spark_s *t)
+int open_spark(scd_spark_s *t)
 {
 	if (t->cmd == NULL)
 	{
@@ -281,7 +270,7 @@ int open_trigger(scd_spark_s *t)
  * and sending a SIGTERM to the trigger command.
  * Also sets the file descriptor to NULL.
  */
-void close_trigger(scd_spark_s *t)
+void close_spark(scd_spark_s *t)
 {
 	// Is the trigger's command still running?
 	if (t->pid > 1)
@@ -306,28 +295,28 @@ void close_trigger(scd_spark_s *t)
  * Convenience function: simply opens all given triggers.
  * Returns the number of successfully opened triggers.
  */ 
-size_t open_triggers(scd_spark_s *triggers, size_t num_triggers)
+size_t open_sparks(scd_state_s *state)
 {
-	size_t num_triggers_opened = 0;
-	for (size_t i = 0; i < num_triggers; ++i)
+	size_t num_sparks_opened = 0;
+	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		num_triggers_opened += (open_trigger(&triggers[i]) == 0) ? 1 : 0;
+		num_sparks_opened += (open_spark(&state->sparks[i]) == 0) ? 1 : 0;
 	}
-	return num_triggers_opened;
+	return num_sparks_opened;
 }
 
 /*
  * Convenience function: simply closes all given triggers.
  */
-void close_triggers(scd_spark_s *triggers, size_t num_triggers)
+void close_sparks(scd_state_s *state)
 {
-	for (size_t i = 0; i < num_triggers; ++i)
+	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		close_trigger(&triggers[i]);
+		close_spark(&state->sparks[i]);
 	}
 }
 
-void free_trigger(scd_spark_s *t)
+void free_spark(scd_spark_s *t)
 {
 	free(t->cmd);
 	t->cmd = NULL;
@@ -339,22 +328,22 @@ void free_trigger(scd_spark_s *t)
 /*
  * Convenience function: simply frees all given blocks.
  */
-void free_blocks(scd_block_s *blocks, size_t num_blocks)
+void free_blocks(scd_state_s *state)
 {
-	for (size_t i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		free_block(&blocks[i]);
+		free_block(&state->blocks[i]);
 	}
 }
 
 /*
  * Convenience function: simply frees all given triggers.
  */
-void free_triggers(scd_spark_s *triggers, size_t num_triggers)
+void free_sparks(scd_state_s *state)
 {
-	for (size_t i = 0; i < num_triggers; ++i)
+	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		free_trigger(&triggers[i]);
+		free_spark(&state->sparks[i]);
 	}
 }
 
@@ -389,6 +378,8 @@ int run_block(scd_block_s *b, size_t result_length)
 		free(b->result);
 		b->result = NULL;
 	}
+	
+	// TODO maybe use getline() instead? It allocates a suitable buffer!
 	b->result = malloc(result_length);
 	if (fgets(b->result, result_length, b->fd) == NULL)
 	{
@@ -397,10 +388,16 @@ int run_block(scd_block_s *b, size_t result_length)
 		return -1;
 	}
 	b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
-	b->used = 1; // Mark this block as having run at least once
+
+	// Update the block's state accordingly
+	b->used = 1;     // Mark this block as having run at least once
 	b->waited = 0.0; // This block was last run... now!
+
+	// Discard block's input, as it has now been processed
 	free(b->input);
-	b->input = NULL; // Discard input, as we've processed it now
+	b->input = NULL;
+
+	// Close the block (unless it is a live block? We should rething this)
 	close_block(b);
 	return 0;
 }
@@ -678,7 +675,6 @@ size_t feed_bar(scd_state_s *state, double delta, double tolerance, double *next
 	if (num_blocks_executed)
 	{
 		char *lemonbar_str = barstr(state);
-		if (DEBUG) { fprintf(stderr, "%s", lemonbar_str); }
 		fputs(lemonbar_str, bar->fd_in);
 		free(lemonbar_str);
 	}
@@ -1180,7 +1176,8 @@ int main(int argc, char **argv)
 		lemonbar.name = strdup(DEFAULT_LEMON_NAME);
 	}
 
-	if (open_bar(&lemonbar) == -1)
+	// TODO hardcoded value for the buffer
+	if (open_bar(&lemonbar, 4096) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", lemonbar.name);
 		return EXIT_FAILURE;
@@ -1190,29 +1187,16 @@ int main(int argc, char **argv)
 	size_t num_blocks_parsed = parse_format_cb(lemonbar.format, found_block_handler, &state);
 
 	// Check how many blocks we _actually_ have (some might not have been
-	// specified in the bar's 'format' string, yet had config sections)
-	// and debug-print them at the same time
+	// specified in the bar's 'format' string, yet had config sections).
+	// ... also, debug-print them at the same time
 	size_t num_blocks_enabled = 0;
-	fprintf(stderr, "Blocks found: (%zu total)\n\t", state.num_blocks);
 	for (size_t i = 0; i < state.num_blocks; ++i)
 	{
 		num_blocks_enabled += state.blocks[i].enabled;
-		fprintf(stderr, "%s ", state.blocks[i].name);
 	}
-	fprintf(stderr, "\n");
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu, enabled = %zu\n", 
 			num_blocks_parsed, state.num_blocks, num_blocks_enabled);
-
-	if (DEBUG)
-	{
-		fprintf(stderr, "Blocks found: (%zu total)\n\t", state.num_blocks);
-		for (size_t i = 0; i < state.num_blocks; ++i)
-		{
-			fprintf(stderr, "%s ", state.blocks[i].name);
-		}
-		fprintf(stderr, "\n");
-	}
 
 	// Exit if no blocks could be loaded and 'empty' option isn't present
 	if (num_blocks_enabled == 0 && prefs.empty == 0)
@@ -1222,36 +1206,28 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * BAR SPARK - fires when lemonbar spits something to stdout/stderr
+	 * SPARKS - fire when their respective commands produce output
 	 */
-	
+
+	// Create sparks for all blocks that want one
+	create_sparks(&state);
+
+	// Create a special spark for lemonbar
 	scd_spark_s bartrig = { 0 };
 	bartrig.fd = lemonbar.fd_out;
 	bartrig.lemon = &lemonbar;
+
+	size_t num_sparks_opened = open_sparks(&state);
 	
-	/*
-	 * BLOCK SPARKS - fire when their respective commands produce output
-	 */
-
-	size_t num_triggers = create_sparks(&state);
-	scd_spark_s *triggers = state.sparks;
-
-	// Debug-print all triggers that we found
+	// Debug-print all sparks that we found
 	if (DEBUG)
 	{
-		fprintf(stderr, "Sparks found: (%zu total)\n\t", state.num_sparks);
-		for (size_t i = 0; i < state.num_sparks; ++i)
-		{
-			fprintf(stderr, "'%s' ", triggers[i].cmd);
-		}
-		fprintf(stderr, "\n");
+		fprintf(stderr, "Number of sparks: parsed = %zu, opened = %zu\n", 
+				state.num_sparks, num_sparks_opened);
 	}
 
-	size_t num_triggers_opened = open_triggers(triggers, state.num_sparks);
-	if (DEBUG) { fprintf(stderr, "Triggered opened: %zu)\n", num_triggers_opened); }
-
 	/* 
-	 * EVENTS - register our triggers with the system so we'll be notified
+	 * EVENTS - register our sparks with the system so we'll be notified
 	 */
 
 	int epfd = epoll_create(1);
@@ -1263,21 +1239,21 @@ int main(int argc, char **argv)
 
 	// Let's first register all our triggers associated with blocks	 
 	int epctl_result = 0;
-	for (int i = 0; i < num_triggers; ++i)
+	for (int i = 0; i < state.num_sparks; ++i)
 	{
-		if (triggers[i].fd == NULL)
+		if (state.sparks[i].fd == NULL)
 		{
 			continue;
 		}
 		struct epoll_event eev = { 0 };
-		eev.data.ptr = &triggers[i];
+		eev.data.ptr = &state.sparks[i];
 		eev.events = EPOLLIN | EPOLLET;
-		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(triggers[i].fd), &eev);
+		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(state.sparks[i].fd), &eev);
 	}
 
 	if (epctl_result)
 	{
-		fprintf(stderr, "%d trigger events could not be registered\n", -1 * epctl_result);
+		fprintf(stderr, "%d spark events could not be registered\n", -1 * epctl_result);
 	}
 
 	// Now let's also add the bar trigger
@@ -1299,7 +1275,8 @@ int main(int argc, char **argv)
 	double delta;
 	double wait = 0.0; // Will later be set to suitable value by feed_bar()
 
-	struct epoll_event tev[num_triggers + 1];
+	int max_events = state.num_sparks + 1;
+	struct epoll_event tev[max_events];
 
 	char bar_output[BUFFER_SIZE];
 	bar_output[0] = '\0';
@@ -1313,7 +1290,7 @@ int main(int argc, char **argv)
 		before = now;
 		
 		// Wait for trigger input - at least bartrig is always present
-		int num_events = epoll_wait(epfd, tev, num_triggers + 1, wait * 1000);
+		int num_events = epoll_wait(epfd, tev, max_events, wait * MILLISEC_PER_SEC);
 
 		// Mark triggers that fired as ready to be read
 		for (int i = 0; i < num_events; ++i)
@@ -1323,16 +1300,16 @@ int main(int argc, char **argv)
 				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
 
 				scd_spark_s *t = tev[i].data.ptr;
-				fprintf(stderr, "Trigger `%s` has activity!\n", t->cmd);
+				fprintf(stderr, "Spark `%s` has activity!\n", t->cmd);
 			}
 		}	
 
 		// Fetch input from all marked triggers
-		for (int i = 0; i < num_triggers; ++i)
+		for (int i = 0; i < state.num_sparks; ++i)
 		{
-			if (triggers[i].ready)
+			if (state.sparks[i].ready)
 			{
-				run_spark(&triggers[i]);
+				run_spark(&state.sparks[i]);
 			}
 		}
 
@@ -1356,8 +1333,8 @@ int main(int argc, char **argv)
 			bar_output[0] = '\0';
 		}
 
-		// Let's update bar! TODO hardcoded value (tolerance = 0.01)
-		feed_bar(&state, delta, 0.1, &wait);
+		// Let's update bar! 
+		feed_bar(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
 	}
 
 	/*
@@ -1369,16 +1346,16 @@ int main(int argc, char **argv)
 
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
-	close_triggers(triggers, num_triggers);
-	free_triggers(triggers, num_triggers);
-	free(triggers);
+	close_sparks(&state);
+	free_sparks(&state);
+	free(state.sparks);
 	
-	close_trigger(&bartrig);
-	free_trigger(&bartrig);
+	close_spark(&bartrig);
+	free_spark(&bartrig);
 
 	// Close blocks
-	close_blocks(state.blocks, state.num_blocks);
-	free_blocks(state.blocks, state.num_blocks);
+	close_blocks(&state);
+	free_blocks(&state);
 	free(state.blocks);
 
 	// Close bar

@@ -1,11 +1,14 @@
 #ifndef SUCCADE_H
 #define SUCCADE_H
 
-#define DEBUG 0 
+#define DEBUG 1 
 #define NAME "succade"
 
 #define BUFFER_SIZE 2048
 #define BLOCK_NAME_MAX 64
+
+#define BLOCK_WAIT_TOLERANCE 0.1
+#define MILLISEC_PER_SEC     1000
 
 #define DEFAULT_LEMON_BIN     "lemonbar"
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"

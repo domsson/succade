@@ -29,6 +29,7 @@ suffix = " "
 offset = 8
 # default font to use
 font = 6x13
+label-font = "-wuncon-siji-medium-r-normal--10-100-75-75-c-80-iso10646-1"
 
 [dt]
 bin="~/.local/bin/candies/datetime -m"
@@ -37,6 +38,6 @@ mouse-left=xclock
 
 [temp]
 bin="~/.config/succade/blocks/temp"
-label="TMP "
+label=" "
 padding=5
 reload=8
