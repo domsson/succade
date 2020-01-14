@@ -192,6 +192,7 @@ int open_block(scd_block_s *b)
 
 	// Execute the block and retrieve its PID
 	b->pid = popen_noshell(cmd, &(b->fd), NULL, NULL);
+	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", b->name, b->pid, (b->fd==NULL?"dead":"okay"));
 	free(cmd);
 
 	// Return 0 on success, -1 on error
@@ -380,9 +381,7 @@ int run_block(scd_block_s *b, size_t result_length)
 	}
 		
 	// TODO maybe use getline() instead? It allocates a suitable buffer!
-	//b->result = malloc(result_length);
 	char *result = malloc(result_length);
-	//if (fgets(b->result, result_length, b->fd) == NULL)
 	if (fgets(result, result_length, b->fd) == NULL)
 	{
 		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->name);
@@ -396,9 +395,8 @@ int run_block(scd_block_s *b, size_t result_length)
 		b->result = NULL;
 	}
 	
-	//b->result[strcspn(b->result, "\n")] = 0; // Remove '\n'
 	result[strcspn(result, "\n")] = 0; // Remove '\n'
-	b->result = result;
+	b->result = result; // Copy pointer to result over
 
 	// Update the block's state accordingly
 	b->used = 1;     // Mark this block as having run at least once
@@ -1042,22 +1040,30 @@ void sigint_handler(int sig)
 
 void sigchld_handler(int sig)
 {
-	sigchld = waitpid(-1, NULL, WNOHANG);
+	sigchld = 1;
+	//sigchld = waitpid(-1, NULL, WNOHANG);
 }
 
-void reap_child(scd_state_s *state, pid_t pid)
+void reap_children(scd_state_s *state)
 {
-	fprintf(stderr, "Child died: PID = %d\n", pid);
-
-	for (size_t i = 0; i < state->num_blocks; ++i)
+	int pid = 0;
+	while((pid = waitpid(-1, NULL, WNOHANG)))
 	{
-		if (state->blocks[i].pid != pid)
+		fprintf(stderr, "This guy quit on us: %d\n", pid);
+		for (size_t i = 0; i < state->num_blocks; ++i)
 		{
-			continue;
+			fprintf(stderr, "Let's see >>> %d\n", state->blocks[i].pid);
+			if (state->blocks[i].pid != pid)
+			{
+				continue;
+			}
+			fprintf(stderr, "Closing this guy now!\n");
+			close_block(&state->blocks[i]);
 		}
-
-		close_block(&state->blocks[i]);
 	}
+
+	/*
+	*/
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
@@ -1336,7 +1342,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "> wait = %f\n", wait);
 		if (sigchld)
 		{
-			reap_child(&state, sigchld);
+			reap_children(&state);
 			sigchld = 0;
 		}
 		
