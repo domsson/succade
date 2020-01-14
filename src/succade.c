@@ -18,7 +18,7 @@ static volatile int handled;   // The last signal that has been handled
  * Init the given bar struct to a well defined state using sensible defaults.
  */
 
-static void init_bar(scd_lemon_s *lemon)
+static void init_lemon(scd_lemon_s *lemon)
 {
 	lemon->lw = 1;
 }
@@ -35,7 +35,7 @@ static void init_block(scd_block_s *block)
 /*
  * Frees all members of the given bar that need freeing.
  */
-static void free_bar(scd_lemon_s *lemon)
+static void free_lemon(scd_lemon_s *lemon)
 {
 	free(lemon->name);
 	free(lemon->bin);
@@ -207,7 +207,7 @@ int open_blocks(scd_block_s *blocks, size_t num_blocks)
  * Closes the given bar by killing the process, closing its file descriptors
  * and setting them to NULL after.
  */
-void close_bar(scd_lemon_s *b)
+void close_lemon(scd_lemon_s *b)
 {
 	if (b->pid > 1)
 	{
@@ -617,7 +617,7 @@ char *barstr(const scd_state_s *state)
 /*
  * TODO add comment, possibly some refactoring
  */
-size_t feed_bar(scd_state_s *state, double delta, double tolerance, double *next)
+size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *next)
 {
 
 	// Can't pipe to bar if its file descriptor isn't available
@@ -671,7 +671,7 @@ size_t feed_bar(scd_state_s *state, double delta, double tolerance, double *next
 
 		idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
 
-		// Possibly update the time until we should run feed_bar again
+		// Possibly update the time until we should run feed_lemon again
 		if (blocks[i].input == NULL && idle_left < until_next)
 		{
 			// If reload is 0, this block idles forever
@@ -1164,7 +1164,7 @@ int main(int argc, char **argv)
 	 */
 
 	scd_lemon_s lemonbar = { 0 };
-	init_bar(&lemonbar);
+	init_lemon(&lemonbar);
 	
 	// Add references to the bar and blocks structs to the config struct
 	state.lemon = &lemonbar;
@@ -1284,7 +1284,7 @@ int main(int argc, char **argv)
 	double now;
 	double before = get_time();
 	double delta;
-	double wait = 0.0; // Will later be set to suitable value by feed_bar()
+	double wait = 0.0; // Will later be set to suitable value by feed_lemon()
 
 	int max_events = state.num_sparks + 1;
 	struct epoll_event tev[max_events];
@@ -1345,7 +1345,7 @@ int main(int argc, char **argv)
 		}
 
 		// Let's update bar! 
-		feed_bar(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
+		feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
 	}
 
 	/*
@@ -1370,8 +1370,8 @@ int main(int argc, char **argv)
 	free(state.blocks);
 
 	// Close bar
-	close_bar(&lemonbar);
-	free_bar(&lemonbar);
+	close_lemon(&lemonbar);
+	free_lemon(&lemonbar);
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
 
