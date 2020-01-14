@@ -80,7 +80,14 @@ static void free_block(scd_block_s *block)
 	free(block->result);
 }
 
-char *lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
+/*
+ * Constructs the command string for running the bar, ready to be used with 
+ * popen_noshell() or similar, and places it in the provided buffer `buf`, 
+ * whose length is assumed to be `buf_len`. If the buffer size is not large 
+ * enough to hold the entire command string, truncation will occur. 
+ * Returns the strlen() of the constructed string.
+ */
+int lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
 {
 	// https://stackoverflow.com/questions/3919995/
 	char w[8]; // TODO hardcoded value
@@ -94,7 +101,7 @@ char *lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
 	char *affix_font = optstr('f', lemon->affix_font);
 	char *name_str   = optstr('n', lemon->name);
 
-	snprintf(buf, buf_len,
+	int cmd_len = snprintf(buf, buf_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
 		lemon->bin,                                    // strlen
 		(lemon->w > 0) ? w : "",                       // max 8
@@ -118,7 +125,7 @@ char *lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
 	free(affix_font);
 	free(name_str);
 
-	return buf;
+	return cmd_len;
 }
 
 /*
@@ -366,7 +373,6 @@ int run_block(scd_block_s *b, size_t result_length)
 	{
 		fprintf(stderr, "Block is dead: `%s`\n", b->name);
 		close_block(b); // In case it has a PID already    TODO does this make sense?
-		b->enabled = 0; // Prevent future attempts to open TODO does this make sense?
 		return -1;
 	}
 	if (b->result != NULL)
@@ -556,12 +562,6 @@ char *barstr(const scd_state_s *state)
 
 	for (int i = 0; i < num_blocks; ++i)
 	{
-		// Skip disabled blocks
-		if (!blocks[i].enabled)
-		{
-			continue;
-		}
-
 		// TODO just quick hack to get this working
 		if (blocks[i].bin == NULL)
 		{
@@ -622,12 +622,6 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 
 	for (size_t i = 0; i < num_blocks; ++i)
 	{
-		// Skip blocks that aren't enabled
-		if (!blocks[i].enabled)
-		{
-			continue;
-		}
-
 		// Skip live blocks, they will update based on their output
 		//if (blocks[i].live && blocks[i].result)
 		// ^-- why did we do the '&& block[i].result' thing?
@@ -849,12 +843,6 @@ size_t create_sparks(scd_state_s *state)
 	size_t num_sparks = 0;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		// Trigger disabled blocks
-		if (!state->blocks[i].enabled)
-		{
-			continue;
-		}
-
 		// Block that's triggered by another program's output
 		if (state->blocks[i].spark)
 		{
@@ -1024,9 +1012,6 @@ static void found_block_handler(const char *name, int align, int n, void *data)
 	// Find or add the block with the given name
 	scd_block_s *block = add_block(state, name);
 	
-	// Mark the block as enabled 
-	block->enabled = 1;
-
 	// Set the block's align to the given one
 	block->align = align;
 }
@@ -1102,30 +1087,6 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * SUCCADE STATE
-	 */
-
-	scd_state_s state = { 0 };
-
-	/*
-	 * PARSE COMMAND LINE ARGUMENTS
-	 */
-
-	scd_prefs_s prefs = { 0 };
-	state.prefs = &prefs;
-	parse_args(argc, argv, state.prefs);
-
-	/*
-	 * PRINT HELP AND EXIT, IF REQUESTED
-	 */
-
-	if (prefs.help)
-	{
-		help(argv[0]);
-		return EXIT_SUCCESS;
-	}
-
-	/*
 	 * CHECK IF X IS RUNNING
 	 */
 
@@ -1142,7 +1103,31 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * PREFERENCES / COMMAND LINE OPTIONS / DEFAULTS
+	 * PARSE COMMAND LINE ARGUMENTS
+	 */
+
+	scd_prefs_s prefs = { 0 };
+	parse_args(argc, argv, &prefs);
+
+	/*
+	 * PRINT HELP AND EXIT, IF REQUESTED
+	 */
+
+	if (prefs.help)
+	{
+		help(argv[0]);
+		return EXIT_SUCCESS;
+	}
+
+	/*
+	 * INITIALIZE SUCCADE STATE
+	 */
+
+	scd_state_s state = { 0 };
+	state.prefs = &prefs;
+
+	/*
+	 * PREFERENCES / DEFAULTS
 	 */
 
 	// If no custom config file given, set it to the default
