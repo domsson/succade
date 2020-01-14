@@ -80,42 +80,37 @@ static void free_block(scd_block_s *block)
 	free(block->result);
 }
 
-/*
- * Runs the bar process and opens file descriptors for reading and writing.
- * Returns 0 on success, -1 if bar could not be started.
- */
-int open_bar(scd_lemon_s *b, size_t buf_len)
+char *lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
 {
-	// https://stackoverflow.com/questions/3919995/determining-sprintf-buffer-size-whats-the-standard
+	// https://stackoverflow.com/questions/3919995/
 	char w[8]; // TODO hardcoded value
 	char h[8];
 
-	snprintf(w, 8, "%d", b->w);
-	snprintf(h, 8, "%d", b->h);
+	snprintf(w, 8, "%d", lemon->w);
+	snprintf(h, 8, "%d", lemon->h);
 
-	char *block_font = optstr('f', b->block_font);
-	char *label_font = optstr('f', b->label_font);
-	char *affix_font = optstr('f', b->affix_font);
-	char *name_str   = optstr('n', b->name);
+	char *block_font = optstr('f', lemon->block_font);
+	char *label_font = optstr('f', lemon->label_font);
+	char *affix_font = optstr('f', lemon->affix_font);
+	char *name_str   = optstr('n', lemon->name);
 
-	char bar_cmd[buf_len];
-	snprintf(bar_cmd, buf_len,
+	snprintf(buf, buf_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
-		b->bin, // strlen
-		(b->w > 0) ? w : "", // max 8
-		(b->h > 0) ? h : "", // max 8
-		b->x, // max 8
-		b->y, // max 8
-		(b->fg && strlen(b->fg)) ? b->fg : "-", // strlen, max 9
-		(b->bg && strlen(b->bg)) ? b->bg : "-", // strlen, max 9
-		(b->lc && strlen(b->lc)) ? b->lc : "-",	// strlen, max 9
-		b->lw, // max 4
-		(b->bottom) ? "-b" : "", // max 2
-		(b->force)  ? "-d" : "", // max 2
-		block_font, // strlen
-		label_font, // strlen
-		affix_font, // strlen
-		name_str    // strlen
+		lemon->bin,                                    // strlen
+		(lemon->w > 0) ? w : "",                       // max 8
+		(lemon->h > 0) ? h : "",                       // max 8
+		lemon->x,                                      // max 8
+		lemon->y,                                      // max 8
+		(lemon->fg && lemon->fg[0]) ? lemon->fg : "-", // strlen, max 9
+		(lemon->bg && lemon->bg[0]) ? lemon->bg : "-", // strlen, max 9
+		(lemon->lc && lemon->lc[0]) ? lemon->lc : "-", // strlen, max 9
+		lemon->lw,                                     // max 4
+		(lemon->bottom) ? "-b" : "",                   // max 2
+		(lemon->force)  ? "-d" : "",                   // max 2
+		block_font,                                    // strlen
+		label_font,                                    // strlen
+		affix_font,                                    // strlen
+		name_str                                       // strlen
 	);
 
 	free(block_font);
@@ -123,15 +118,31 @@ int open_bar(scd_lemon_s *b, size_t buf_len)
 	free(affix_font);
 	free(name_str);
 
-	fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
+	return buf;
+}
 
-	b->pid = popen_noshell(bar_cmd, &(b->fd_out), NULL, &(b->fd_in));
-	if (b->pid == -1)
+/*
+ * Runs the bar process and opens file descriptors for reading and writing.
+ * Returns 0 on success, -1 if bar could not be started.
+ */
+int open_lemon(scd_lemon_s *lemon, size_t buf_len)
+{
+	char bar_cmd[buf_len];
+	bar_cmd[0] = '\0';
+	lemon_cmd(lemon, bar_cmd, buf_len);
+
+	if (DEBUG)
+	{
+		fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
+	}
+
+	lemon->pid = popen_noshell(bar_cmd, &(lemon->fd_out), NULL, &(lemon->fd_in));
+	if (lemon->pid == -1)
 	{
 		return -1;
 	}
-	setlinebuf(b->fd_out);
-	setlinebuf(b->fd_in);
+	setlinebuf(lemon->fd_out);
+	setlinebuf(lemon->fd_in);
 
 	return 0;
 }
@@ -1177,7 +1188,7 @@ int main(int argc, char **argv)
 	}
 
 	// TODO hardcoded value for the buffer
-	if (open_bar(&lemonbar, 4096) == -1)
+	if (open_lemon(&lemonbar, 1024) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", lemonbar.name);
 		return EXIT_FAILURE;
