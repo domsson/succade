@@ -14,17 +14,28 @@
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"
 #define DEFAULT_LEMON_SECTION "bar"
 
+enum succade_event_type
+{
+	LEMON,
+	BLOCK,
+	SPARK
+};
+
+typedef enum succade_event_type scd_event_type_e;
+
 struct succade_lemon;
 struct succade_block;
 struct succade_spark;
 struct succade_prefs;
 struct succade_state;
+struct succade_event;
 
 typedef struct succade_lemon scd_lemon_s;
 typedef struct succade_block scd_block_s;
 typedef struct succade_spark scd_spark_s;
 typedef struct succade_prefs scd_prefs_s;
 typedef struct succade_state scd_state_s;
+typedef struct succade_event scd_event_s;
 
 struct succade_lemon
 {
@@ -118,6 +129,13 @@ struct succade_state
 	scd_spark_s *sparks;   // Reference to spark array (prev. 'trigger')
 	size_t num_blocks;     // Number of blocks in block array
 	size_t num_sparks;     // Number of sparks in spark array
+};
+
+struct succade_event
+{
+	scd_state_s *state;    // Ptr to the state
+	scd_event_type_e type; // Type of data
+	void *data;            // Ptr to lemon, a block or a spark
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);

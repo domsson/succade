@@ -231,7 +231,7 @@ void close_block(scd_block_s *b)
 	if (b->pid > 1)
 	{
 		kill(b->pid, SIGTERM);
-		b->pid = 0;
+		//b->pid = 0; // TODO revert this, probably, just for testing!
 	}
 	if (b->fd != NULL)
 	{
@@ -385,6 +385,8 @@ int run_block(scd_block_s *b, size_t result_length)
 	if (fgets(result, result_length, b->fd) == NULL)
 	{
 		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->name);
+		if (feof(b->fd))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->name);
+		if (ferror(b->fd)) fprintf(stderr, "Reading from block failed (err): %s\n", b->name);
 		close_block(b);
 		return -1;
 	}
@@ -674,6 +676,7 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 	if (num_blocks_executed)
 	{
 		char *lemonbar_str = barstr(state);
+		// TODO add error handling (EOF => bar dead?)
 		fputs(lemonbar_str, bar->fd_in);
 		free(lemonbar_str);
 	}
@@ -895,7 +898,7 @@ size_t run_spark(scd_spark_s *t)
 	}
 
 	char res[BUFFER_SIZE];
-	int num_lines = 0;
+	size_t num_lines = 0;
 
 	while (fgets(res, BUFFER_SIZE, t->fd) != NULL)
 	{
@@ -1059,6 +1062,7 @@ void reap_children(scd_state_s *state)
 			}
 			fprintf(stderr, "Closing this guy now!\n");
 			close_block(&state->blocks[i]);
+			state->blocks[i].pid = 0;
 		}
 	}
 
