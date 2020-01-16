@@ -21,7 +21,15 @@ enum succade_event_type
 	SPARK
 };
 
-typedef enum succade_event_type scd_event_type_e;
+enum succade_fd_type
+{
+	IN,
+	OUT,
+	ERR
+};
+
+typedef enum succade_event_type scd_ev_type_e;
+typedef enum succade_fd_type    scd_fd_type_e;
 
 struct succade_lemon;
 struct succade_block;
@@ -129,12 +137,14 @@ struct succade_state
 	scd_spark_s *sparks;   // Reference to spark array (prev. 'trigger')
 	size_t num_blocks;     // Number of blocks in block array
 	size_t num_sparks;     // Number of sparks in spark array
+	//int epfd;              // epoll file descriptor
 };
 
 struct succade_event
 {
-	scd_state_s *state;    // Ptr to the state
-	scd_event_type_e type; // Type of data
+	//scd_state_s *state;    // Ptr to the state, just in case
+	scd_fd_type_e fd_type; // stdin, stdout, stderr?
+	scd_ev_type_e ev_type; // Type of data
 	void *data;            // Ptr to lemon, a block or a spark
 };
 

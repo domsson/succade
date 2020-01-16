@@ -1055,12 +1055,11 @@ void reap_children(scd_state_s *state)
 		fprintf(stderr, "This guy quit on us: %d\n", pid);
 		for (size_t i = 0; i < state->num_blocks; ++i)
 		{
-			fprintf(stderr, "Let's see >>> %d\n", state->blocks[i].pid);
 			if (state->blocks[i].pid != pid)
 			{
 				continue;
 			}
-			fprintf(stderr, "Closing this guy now!\n");
+			fprintf(stderr, "waitpid(): %s (pid=%d) dead\n", state->blocks[i].name, state->blocks[i].pid);
 			close_block(&state->blocks[i]);
 			state->blocks[i].pid = 0;
 		}
