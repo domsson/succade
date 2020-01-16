@@ -1358,9 +1358,20 @@ int main(int argc, char **argv)
 			if (tev[i].events & EPOLLIN)
 			{
 				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
-
 				scd_spark_s *t = tev[i].data.ptr;
 				fprintf(stderr, "Spark `%s` has activity!\n", t->cmd);
+			}
+			if (tev[i].events & EPOLLERR)
+			{
+				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
+				scd_spark_s *t = tev[i].data.ptr;
+				fprintf(stderr, "Spark `%s` has an error!\n", t->cmd);
+			}
+			if (tev[i].events & EPOLLHUP)
+			{
+				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
+				scd_spark_s *t = tev[i].data.ptr;
+				fprintf(stderr, "Spark `%s` has a hangup!\n", t->cmd);
 			}
 		}	
 

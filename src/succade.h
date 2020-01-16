@@ -21,6 +21,10 @@ enum succade_event_type
 	SPARK
 };
 
+/*
+one of the answers mention that STDIN_FILENO is a macro defined in <unistd.h>. At least for a POSIX compliant system, it's not just "almost certainly 0"; it's required to be defined as 0. Similarly, STDOUT_FILENO is 1 and STDERR_FILENO is 2.
+*/
+
 enum succade_fd_type
 {
 	IN,
@@ -50,8 +54,9 @@ struct succade_lemon
 	char *name;            // Name of the bar (will be used as window title)
 	char *bin;             // Binary for launching bar (default: `lemonbar`)
 	pid_t pid;             // Process ID of the bar 
-	FILE *fd_in;           // File descriptor for writing to bar
-	FILE *fd_out;          // File descriptor for reading from bar
+	FILE *fd_in;           // File descriptor for writing to bar   (stdin)
+	FILE *fd_out;          // File descriptor for reading from bar (stdout)
+	FILE *fd_err;          // File descriptor for reading from bar (stderr)
 	char *fg;              // Foreground color
 	char *bg;              // Background color
 	char *lc;              // Overline/underline color
@@ -137,7 +142,7 @@ struct succade_state
 	scd_spark_s *sparks;   // Reference to spark array (prev. 'trigger')
 	size_t num_blocks;     // Number of blocks in block array
 	size_t num_sparks;     // Number of sparks in spark array
-	//int epfd;              // epoll file descriptor
+	int epfd;              // epoll file descriptor
 };
 
 struct succade_event
