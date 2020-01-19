@@ -2,7 +2,7 @@
 bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
-format = "vol | dt | temp"
+format = "desktop | dt | temp"
 # dock defines bar's position: 'top' or 'bottom'
 dock = bottom
 # height of the bar in pixel
@@ -43,11 +43,9 @@ label=" "
 padding=5
 reload=8
 
-[vol]
-bin="~/.config/succade/blocks/volume"
-label="VOL " 
-trigger="stdbuf -oL /usr/sbin/alsactl monitor"
+[desktop]
+bin="bspc query -D -d focused --names"
+label="DSK " 
+trigger="bspc subscribe"
 padding=5
-mouse-left="amixer set Master toggle"
-scroll-up="amixer set Master 5%+"
-scroll-down="amixer set Master 5%-"
+

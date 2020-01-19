@@ -265,21 +265,21 @@ void close_blocks(scd_state_s *state)
 	}
 }
 
-int open_spark(scd_spark_s *t)
+int open_spark(scd_spark_s *s)
 {
-	if (t->cmd == NULL)
+	if (s->cmd == NULL)
 	{
 		return -1;
 	}
 	
-	t->pid = popen_noshell(t->cmd, &(t->fp[FD_OUT]), NULL, NULL);
-	if (t->pid == -1)
+	s->pid = popen_noshell(s->cmd, &(s->fp[FD_OUT]), NULL, NULL);
+	if (s->pid == -1)
 	{
 		return -1;
 	}
 
-	setlinebuf(t->fp[FD_OUT]); // TODO add error handling
-	int fd = fileno(t->fp[FD_OUT]);
+	setlinebuf(s->fp[FD_OUT]); // TODO add error handling
+	int fd = fileno(s->fp[FD_OUT]);
 	int flags = fcntl(fd, F_GETFL, 0); // TODO add error handling
 	flags |= O_NONBLOCK;
 	fcntl(fd, F_SETFL, flags); // TODO add error handling
@@ -900,7 +900,7 @@ int register_event(scd_state_s *state, scd_event_s *ev)
 	//}
 
 	struct epoll_event eev = { 0 };
-	eev.data.ptr = ev->data;
+	eev.data.ptr = ev;
 	eev.events = (ev->fd_type == FD_IN ? EPOLLOUT : EPOLLIN) | EPOLLET;
 
 	if (epoll_ctl(state->epfd, EPOLL_CTL_ADD, ev->fd, &eev) == 0)
@@ -1042,15 +1042,9 @@ size_t create_sparks(scd_state_s *state)
 	}
 
 	// Use number of blocks as initial size 
-	state->sparks = malloc(sizeof(scd_spark_s) * (state->num_blocks + 1));
+	state->sparks = malloc(sizeof(scd_spark_s) * state->num_blocks);
 	size_t num_sparks = 0;
 	
-	// Create LEMON spark
-	state->sparks[num_sparks] = (scd_spark_s) { 0 };
-	state->sparks[num_sparks].fp[FD_OUT] = state->lemon->fp[FD_OUT];
-	state->sparks[num_sparks].lemon = state->lemon;
-	++num_sparks;
-
 	// Go through all blocks, create sparks as appropriate
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
@@ -1449,13 +1443,15 @@ int main(int argc, char **argv)
 	 * SPARKS - fire when their respective commands produce output
 	 */
 
-	// Create sparks for all blocks that want one
+	// Create sparks for all blocks that have a trigger command
 	create_sparks(&state);
 
 	// Create a special spark for lemonbar
+	/*
 	scd_spark_s bartrig = { 0 };
 	bartrig.fp[FD_OUT] = lemonbar.fp[FD_OUT];
 	bartrig.lemon = &lemonbar;
+	*/
 
 	size_t num_sparks_opened = open_sparks(&state);
 	
@@ -1528,27 +1524,50 @@ int main(int argc, char **argv)
 		// Mark triggers that fired as ready to be read
 		for (int i = 0; i < num_events; ++i)
 		{
+			scd_event_s *ev = tev[i].data.ptr;
+
 			if (tev[i].events & EPOLLIN)
 			{
-				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
-				scd_spark_s *t = tev[i].data.ptr;
-				fprintf(stderr, "Spark `%s` has activity!\n", t->cmd);
+				fprintf(stderr, "*** EPOLLIN\n");
+				ev->dirty = 1;
 			}
 			if (tev[i].events & EPOLLERR)
 			{
-				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
-				scd_spark_s *t = tev[i].data.ptr;
-				fprintf(stderr, "Spark `%s` has an error!\n", t->cmd);
+				fprintf(stderr, "*** EPOLLERR\n");
+				ev->dirty = 1;
 			}
 			if (tev[i].events & EPOLLHUP)
 			{
-				((scd_spark_s*) tev[i].data.ptr)->ready = 1;
-				scd_spark_s *t = tev[i].data.ptr;
-				fprintf(stderr, "Spark `%s` has a hangup!\n", t->cmd);
+				fprintf(stderr, "*** EPOLLHUP\n");
+				ev->dirty = 1;
+			}
+		}
+
+		for (size_t i = 0; i < state.num_events; ++i)
+		{
+			if (state.events[i].dirty)
+			{
+				//handle_event(&state.events[i]);
+				switch (state.events[i].ev_type)
+				{
+					case EV_LEMON:
+						fprintf(stderr, "*** LEMON EVENT (plz handle)\n");
+						break;
+					case EV_BLOCK:
+						fprintf(stderr, "*** BLOCK EVENT (plz handle)\n");
+						break;
+					case EV_SPARK:
+						fprintf(stderr, "*** SPARK EVENT (plz handle)\n");
+						break;
+					default:
+						fprintf(stderr, "*** ????? EVENT (plz help)\n");
+					
+				}
 			}
 		}	
 
 		// Fetch input from all marked triggers
+		/*
 		for (int i = 0; i < state.num_sparks; ++i)
 		{
 			if (state.sparks[i].ready)
@@ -1556,14 +1575,18 @@ int main(int argc, char **argv)
 				run_spark(&state.sparks[i]);
 			}
 		}
+		*/
 
+		/*
 		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
 			fgets(bar_output, BUFFER_SIZE, lemonbar.fp[FD_OUT]);
 			bartrig.ready = 0;
 		}
+		*/
 
+		/*
 		// Let's process bar's output, if any
 		if (strlen(bar_output))
 		{
@@ -1576,6 +1599,7 @@ int main(int argc, char **argv)
 			}
 			bar_output[0] = '\0';
 		}
+		*/
 
 		// Let's update bar! 
 		feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
@@ -1594,8 +1618,10 @@ int main(int argc, char **argv)
 	free_sparks(&state);
 	free(state.sparks);
 	
+	/*
 	close_spark(&bartrig);
 	free_spark(&bartrig);
+	*/
 
 	// Close blocks
 	close_blocks(&state);

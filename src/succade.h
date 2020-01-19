@@ -155,6 +155,7 @@ struct succade_event
 	void *data;              // Ptr to lemon, a block or a spark
 	int fd;                  // File descriptor of data->fp[0], [1] or [2]
 	unsigned registered : 1; // Registered with epoll?
+	unsigned dirty : 1;      // Unhandled activity has occurred
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
