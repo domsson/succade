@@ -225,7 +225,7 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	{
 		if (is_quoted(value)) // String means trigger!
 		{
-			block->spark = unquote(value);
+			block->trigger = unquote(value);
 			block->reload = 0.0;
 		}
 		else
@@ -236,7 +236,7 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "trigger"))
 	{
-		block->spark = is_quoted(value) ? unquote(value) : strdup(value);
+		block->trigger = is_quoted(value) ? unquote(value) : strdup(value);
 		block->reload = 0.0;
 		return 1;
 	}

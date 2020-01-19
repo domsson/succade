@@ -6,6 +6,7 @@
 #include <sys/epoll.h> // epoll_wait(), ... 
 #include <sys/types.h> // pid_t
 #include <sys/wait.h>  // waitpid()
+#include <errno.h>     // errno
 #include "ini.h"       // https://github.com/benhoyt/inih
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
@@ -24,6 +25,9 @@ static volatile int sigchld;   // SIGCHLD has been received, please handle
 static void init_lemon(scd_lemon_s *lemon)
 {
 	lemon->lw = 1;
+	lemon->fp[FD_IN]  = NULL;
+	lemon->fp[FD_OUT] = NULL;
+	lemon->fp[FD_ERR] = NULL;
 }
 
 /*
@@ -33,6 +37,16 @@ static void init_block(scd_block_s *block)
 {
 	block->offset = -1;
 	block->reload = 5.0;
+	block->fp[0] = NULL;
+	block->fp[1] = NULL;
+	block->fp[2] = NULL;
+}
+
+static void init_spark(scd_spark_s *spark)
+{
+	spark->fp[FD_IN]  = NULL;
+	spark->fp[FD_OUT] = NULL;
+	spark->fp[FD_ERR] = NULL;
 }
 
 /*
@@ -73,7 +87,7 @@ static void free_block(scd_block_s *block)
 	free(block->affix_fg);
 	free(block->affix_bg);
 	free(block->label);
-	free(block->spark);
+	free(block->trigger);
 	free(block->cmd_lmb);
 	free(block->cmd_mmb);
 	free(block->cmd_rmb);
@@ -146,13 +160,13 @@ int open_lemon(scd_lemon_s *lemon, size_t buf_len)
 		fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 	}
 
-	lemon->pid = popen_noshell(bar_cmd, &(lemon->fd_out), NULL, &(lemon->fd_in));
+	lemon->pid = popen_noshell(bar_cmd, &(lemon->fp[FD_OUT]), NULL, &(lemon->fp[FD_IN]));
 	if (lemon->pid == -1)
 	{
 		return -1;
 	}
-	setlinebuf(lemon->fd_out);
-	setlinebuf(lemon->fd_in);
+	setlinebuf(lemon->fp[FD_OUT]);
+	setlinebuf(lemon->fp[FD_IN]);
 
 	return 0;
 }
@@ -191,8 +205,8 @@ int open_block(scd_block_s *b)
 	}
 
 	// Execute the block and retrieve its PID
-	b->pid = popen_noshell(cmd, &(b->fd), NULL, NULL);
-	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", b->name, b->pid, (b->fd==NULL?"dead":"okay"));
+	b->pid = popen_noshell(cmd, &(b->fp[FD_OUT]), NULL, NULL);
+	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", b->name, b->pid, (b->fp[FD_OUT]==NULL?"dead":"okay"));
 	free(cmd);
 
 	// Return 0 on success, -1 on error
@@ -210,15 +224,15 @@ void close_lemon(scd_lemon_s *b)
 		kill(b->pid, SIGKILL);
 		b->pid = 0;
 	}
-	if (b->fd_in != NULL)
+	if (b->fp[FD_IN] != NULL)
 	{
-		fclose(b->fd_in);
-		b->fd_in = NULL;
+		fclose(b->fp[FD_IN]);
+		b->fp[FD_IN] = NULL;
 	}
-	if (b->fd_out != NULL)
+	if (b->fp[FD_OUT] != NULL)
 	{
-		fclose(b->fd_out);
-		b->fd_out = NULL;
+		fclose(b->fp[FD_OUT]);
+		b->fp[FD_OUT] = NULL;
 	}
 }
 
@@ -233,10 +247,10 @@ void close_block(scd_block_s *b)
 		kill(b->pid, SIGTERM);
 		//b->pid = 0; // TODO revert this, probably, just for testing!
 	}
-	if (b->fd != NULL)
+	if (b->fp[FD_OUT] != NULL)
 	{
-		fclose(b->fd);
-		b->fd = NULL;
+		fclose(b->fp[FD_OUT]);
+		b->fp[FD_OUT] = NULL;
 	}
 }
 
@@ -258,17 +272,17 @@ int open_spark(scd_spark_s *t)
 		return -1;
 	}
 	
-	t->pid = popen_noshell(t->cmd, &(t->fd), NULL, NULL);
+	t->pid = popen_noshell(t->cmd, &(t->fp[FD_OUT]), NULL, NULL);
 	if (t->pid == -1)
 	{
 		return -1;
 	}
 
-	setlinebuf(t->fd); // TODO add error handling
-	int fn = fileno(t->fd);
-	int flags = fcntl(fn, F_GETFL, 0); // TODO add error handling
+	setlinebuf(t->fp[FD_OUT]); // TODO add error handling
+	int fd = fileno(t->fp[FD_OUT]);
+	int flags = fcntl(fd, F_GETFL, 0); // TODO add error handling
 	flags |= O_NONBLOCK;
-	fcntl(fn, F_SETFL, flags); // TODO add error handling
+	fcntl(fd, F_SETFL, flags); // TODO add error handling
 	return 0;
 }
 
@@ -290,10 +304,10 @@ void close_spark(scd_spark_s *t)
 		return;
 	}
 	// Looks like we should actually close/free this fd after all
-	if (t->fd)
+	if (t->fp[FD_OUT])
 	{
-		fclose(t->fd);
-		t->fd = NULL;
+		fclose(t->fp[FD_OUT]);
+		t->fp[FD_OUT] = NULL;
 		t->pid = 0;
 	}
 }
@@ -373,7 +387,7 @@ int run_block(scd_block_s *b, size_t result_length)
 	fprintf(stderr, "Attempting to open block `%s`\n", b->name);
 
 	open_block(b);
-	if (b->fd == NULL)
+	if (b->fp[FD_OUT] == NULL)
 	{
 		fprintf(stderr, "Block is dead: `%s`\n", b->name);
 		close_block(b); // In case it has a PID already    TODO does this make sense?
@@ -382,11 +396,11 @@ int run_block(scd_block_s *b, size_t result_length)
 		
 	// TODO maybe use getline() instead? It allocates a suitable buffer!
 	char *result = malloc(result_length);
-	if (fgets(result, result_length, b->fd) == NULL)
+	if (fgets(result, result_length, b->fp[FD_OUT]) == NULL)
 	{
 		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->name);
-		if (feof(b->fd))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->name);
-		if (ferror(b->fd)) fprintf(stderr, "Reading from block failed (err): %s\n", b->name);
+		if (feof(b->fp[FD_OUT]))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->name);
+		if (ferror(b->fp[FD_OUT])) fprintf(stderr, "Reading from block failed (err): %s\n", b->name);
 		close_block(b);
 		return -1;
 	}
@@ -617,7 +631,7 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 {
 
 	// Can't pipe to bar if its file descriptor isn't available
-	if (state->lemon->fd_in == NULL)
+	if (state->lemon->fp[FD_IN] == NULL)
 	{
 		return -1;
 	}
@@ -677,7 +691,7 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 	{
 		char *lemonbar_str = barstr(state);
 		// TODO add error handling (EOF => bar dead?)
-		fputs(lemonbar_str, bar->fd_in);
+		fputs(lemonbar_str, bar->fp[FD_IN]);
 		free(lemonbar_str);
 	}
 	return num_blocks_executed;
@@ -843,6 +857,182 @@ static int load_block_cfg(scd_state_s *s)
 	return (ini_parse(s->prefs->config, block_cfg_handler, s) < 0) ? -1 : 0;
 }
 
+/*
+ * Find the event for the given lemon/block/spark or NULL if not found.
+ */
+scd_event_s *get_event(scd_state_s *state, void *thing, scd_ev_type_e ev_type)
+{
+	for (size_t i = 0; i < state->num_events; ++i)
+	{
+		if (state->events[i].ev_type != ev_type)
+		{
+			continue;
+		}
+		if (state->events[i].data == thing)
+		{
+			return &state->events[i];
+		}
+	}
+	return NULL;
+}
+
+/*
+ * TODO We could theoretically use this function to register events that aren't 
+ *      part of the state's event array, as we don't perform any checks in this 
+ *      regard -- what can/should we do about this?
+ */
+int register_event(scd_state_s *state, scd_event_s *ev)
+{
+	if (ev == NULL)
+	{
+		return -1;
+	}
+
+	if (ev->fd < 0)
+	{
+		return -1;
+	}
+
+	// TODO (maybe)
+	//if (ev is not in state->events)
+	//{
+	//	return -1;
+	//}
+
+	struct epoll_event eev = { 0 };
+	eev.data.ptr = ev->data;
+	eev.events = (ev->fd_type == FD_IN ? EPOLLOUT : EPOLLIN) | EPOLLET;
+
+	if (epoll_ctl(state->epfd, EPOLL_CTL_ADD, ev->fd, &eev) == 0)
+	{
+		// Success
+		ev->registered = 1;
+		return 0;
+	}
+	if (errno == EEXIST)
+	{
+		// fd was already registered!
+		ev->registered = 1;
+	}
+	// Some other error
+	return -1;
+}
+
+/*
+ * 
+ */
+int unregister_event(scd_state_s *state, scd_event_s *ev)
+{
+	if (ev == NULL)
+	{
+		return -1;
+	}
+
+	if (ev->fd < 0)
+	{
+		return -1;
+	}
+
+	// TODO (maybe)
+	//if (ev is not in state->events)
+	//{
+	//	return -1;
+	//}
+	
+	if (epoll_ctl(state->epfd, EPOLL_CTL_DEL, ev->fd, NULL) == 0)
+	{
+		// Success!
+		ev->fd = -1;
+		ev->registered = 0;
+		return 0;
+	}
+	if (errno == EBADF)
+	{
+		// fd isn't valid
+		ev->fd = -1;
+		ev->registered = 0;
+	}
+	else if (errno == ENOENT)
+	{
+		// fd wasn't registered to begin with
+		ev->registered = 0;
+	}
+	// Some other error
+	return -1;
+}
+
+/*
+ * Register all events that have a valid file descriptor.
+ */
+size_t register_events(scd_state_s *state)
+{
+	size_t num_registered = 0;
+
+	for (size_t i = 0; i < state->num_events; ++i)
+	{
+		fprintf(stderr, "Registering for fd=%d (%d)\n", state->events[i].fd, state->events[i].ev_type);
+		int res = register_event(state, &state->events[i]);
+		num_registered += (res == 0);
+	}
+	return num_registered;
+}
+
+/*
+ *
+ */
+size_t create_events(scd_state_s *state)
+{
+	size_t max_events = state->num_blocks + state->num_sparks + 1;
+	state->events = malloc(sizeof(scd_event_s) * max_events);
+
+	size_t num_events = 0;
+
+	// Add LEMON
+	state->events[num_events] = (scd_event_s) { 0 };
+	state->events[num_events].ev_type = EV_LEMON;
+	state->events[num_events].fd_type = FD_OUT;
+	state->events[num_events].data    = state->lemon;
+	state->events[num_events].fd      = state->lemon->fp[FD_OUT] ?
+				fileno(state->lemon->fp[FD_OUT]) : -1;
+	num_events += 1;
+
+	// Add LIVE blocks
+	for (size_t i = 0; i < state->num_blocks; ++i)
+	{
+		if (!state->blocks[i].live)
+		{
+			continue;
+		}
+
+		fprintf(stderr, "Creating event for %s\n", state->blocks[i].name);
+		state->events[num_events] = (scd_event_s) { 0 };
+		state->events[num_events].ev_type = EV_BLOCK;
+		state->events[num_events].fd_type = FD_OUT;
+		state->events[num_events].data    = &state->blocks[i];
+		state->events[num_events].fd      = state->blocks[i].fp[FD_OUT] ?
+					fileno(state->blocks[i].fp[FD_OUT]) : -1;
+		num_events += 1;
+	}
+
+	// Add SPARKs
+	for (size_t i = 0; i < state->num_sparks; ++i)
+	{
+		fprintf(stderr, "Creating event for %s\n", state->sparks[i].cmd);
+		state->events[num_events] = (scd_event_s) { 0 };
+		state->events[num_events].ev_type = EV_SPARK;
+		state->events[num_events].fd_type = FD_OUT;
+		state->events[num_events].data    = &state->sparks[i];
+		state->events[num_events].fd      = state->sparks[i].fp[FD_OUT] ?
+					fileno(state->sparks[i].fp[FD_OUT]) : -1;
+		num_events += 1;
+	}
+	
+	// Resize to whatever amount of memory we actually needed
+	state->events = realloc(state->events, sizeof(scd_event_s) * num_events);
+	state->num_events = num_events;
+	return num_events;
+}
+
 size_t create_sparks(scd_state_s *state)
 {
 	// No need for sparks if there aren't any blocks
@@ -852,27 +1042,24 @@ size_t create_sparks(scd_state_s *state)
 	}
 
 	// Use number of blocks as initial size 
-	state->sparks = malloc(sizeof(scd_spark_s) * state->num_blocks);
+	state->sparks = malloc(sizeof(scd_spark_s) * (state->num_blocks + 1));
+	size_t num_sparks = 0;
+	
+	// Create LEMON spark
+	state->sparks[num_sparks] = (scd_spark_s) { 0 };
+	state->sparks[num_sparks].fp[FD_OUT] = state->lemon->fp[FD_OUT];
+	state->sparks[num_sparks].lemon = state->lemon;
+	++num_sparks;
 
 	// Go through all blocks, create sparks as appropriate
-	size_t num_sparks = 0;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
 		// Block that's triggered by another program's output
-		if (state->blocks[i].spark)
+		if (state->blocks[i].trigger)
 		{
 			state->sparks[num_sparks] = (scd_spark_s) { 0 };
-			state->sparks[num_sparks].cmd = strdup(state->blocks[i].spark);
-			state->sparks[num_sparks].block = &state->blocks[i];
-			num_sparks += 1;
-			continue;
-		}
-
-		// Block that triggers itself ('live' block)
-		if (state->blocks[i].live)
-		{
-			state->sparks[num_sparks] = (scd_spark_s) { 0 };
-			state->sparks[num_sparks].cmd = strdup(state->blocks[i].bin);
+			init_spark(&state->sparks[num_sparks]);
+			state->sparks[num_sparks].cmd = strdup(state->blocks[i].trigger);
 			state->sparks[num_sparks].block = &state->blocks[i];
 			num_sparks += 1;
 			continue;
@@ -892,7 +1079,7 @@ size_t create_sparks(scd_state_s *state)
  */
 size_t run_spark(scd_spark_s *t)
 {
-	if (t->fd == NULL)
+	if (t->fp[FD_OUT] == NULL)
 	{
 		return 0;
 	}
@@ -900,7 +1087,7 @@ size_t run_spark(scd_spark_s *t)
 	char res[BUFFER_SIZE];
 	size_t num_lines = 0;
 
-	while (fgets(res, BUFFER_SIZE, t->fd) != NULL)
+	while (fgets(res, BUFFER_SIZE, t->fp[FD_OUT]) != NULL)
 	{
 		++num_lines;
 	}
@@ -1267,7 +1454,7 @@ int main(int argc, char **argv)
 
 	// Create a special spark for lemonbar
 	scd_spark_s bartrig = { 0 };
-	bartrig.fd = lemonbar.fd_out;
+	bartrig.fp[FD_OUT] = lemonbar.fp[FD_OUT];
 	bartrig.lemon = &lemonbar;
 
 	size_t num_sparks_opened = open_sparks(&state);
@@ -1278,6 +1465,12 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Number of sparks: parsed = %zu, opened = %zu\n", 
 				state.num_sparks, num_sparks_opened);
 	}
+
+	/*
+	 * EVENTS - create event structs for all things that need 'em
+	 */
+
+	create_events(&state);
 
 	/* 
 	 * EVENTS - register our sparks with the system so we'll be notified
@@ -1290,33 +1483,13 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	// Let's first register all our triggers associated with blocks	 
-	int epctl_result = 0;
-	for (int i = 0; i < state.num_sparks; ++i)
+	state.epfd = epfd;
+	size_t num_events_registered = register_events(&state);
+	
+	if (DEBUG)
 	{
-		if (state.sparks[i].fd == NULL)
-		{
-			continue;
-		}
-		struct epoll_event eev = { 0 };
-		eev.data.ptr = &state.sparks[i];
-		eev.events = EPOLLIN | EPOLLET;
-		epctl_result += epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(state.sparks[i].fd), &eev);
-	}
-
-	if (epctl_result)
-	{
-		fprintf(stderr, "%d trigger events could not be registered\n", -1 * epctl_result);
-	}
-
-	// Now let's also add the bar trigger
-	struct epoll_event eev = { 0 };
-	eev.data.ptr = &bartrig;
-	eev.events = EPOLLIN | EPOLLET;
-
-	if (epoll_ctl(epfd, EPOLL_CTL_ADD, fileno(bartrig.fd), &eev))
-	{
-		fprintf(stderr, "Failed to register bar trigger - clickable areas will not work.\n");
+		fprintf(stderr, "Number of events: created = %zu, registered = %zu\n",
+				state.num_events, num_events_registered);
 	}
 
 	/*
@@ -1387,7 +1560,7 @@ int main(int argc, char **argv)
 		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
-			fgets(bar_output, BUFFER_SIZE, lemonbar.fd_out);
+			fgets(bar_output, BUFFER_SIZE, lemonbar.fp[FD_OUT]);
 			bartrig.ready = 0;
 		}
 

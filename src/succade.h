@@ -16,20 +16,23 @@
 
 enum succade_event_type
 {
-	LEMON,
-	BLOCK,
-	SPARK
+	EV_LEMON,
+	EV_BLOCK,
+	EV_SPARK
 };
 
 /*
-one of the answers mention that STDIN_FILENO is a macro defined in <unistd.h>. At least for a POSIX compliant system, it's not just "almost certainly 0"; it's required to be defined as 0. Similarly, STDOUT_FILENO is 1 and STDERR_FILENO is 2.
+   // TODO just use these instead?
+	STDIN_FILENO is a macro defined in <unistd.h>. At least for a POSIX 
+	compliant system, it's required to be defined as 0. Similarly, 
+	STDOUT_FILENO is 1 and STDERR_FILENO is 2.
 */
 
 enum succade_fd_type
 {
-	IN,
-	OUT,
-	ERR
+	FD_IN,
+	FD_OUT,
+	FD_ERR
 };
 
 typedef enum succade_event_type scd_ev_type_e;
@@ -54,9 +57,7 @@ struct succade_lemon
 	char *name;            // Name of the bar (will be used as window title)
 	char *bin;             // Binary for launching bar (default: `lemonbar`)
 	pid_t pid;             // Process ID of the bar 
-	FILE *fd_in;           // File descriptor for writing to bar   (stdin)
-	FILE *fd_out;          // File descriptor for reading from bar (stdout)
-	FILE *fd_err;          // File descriptor for reading from bar (stderr)
+	FILE *fp[3];           // File pointers (stdin, stdout, stderr)
 	char *fg;              // Foreground color
 	char *bg;              // Background color
 	char *lc;              // Overline/underline color
@@ -88,7 +89,7 @@ struct succade_block
 	char *name;            // Name of the block 
 	char *bin;             // Command/binary/script to run 
 	pid_t pid;             // Process ID of this block's process
-	FILE *fd;              // File descriptor as returned by popen()
+	FILE *fp[3];           // File pointers for stdin, stdout, stderr
 	char *fg;              // Foreground color
 	char *bg;              // Background color
 	char *label_fg;        // Foreground color for the label
@@ -102,7 +103,7 @@ struct succade_block
 	int offset : 16;       // Offset to next block in px
 	unsigned align;        // -1, 0, 1 (left, center, right)
 	char *label;           // Prefixes the result string
-	char *spark;           // Run block based on this cmd
+	char *trigger;         // Run block based on this cmd's output
 	char *cmd_lmb;         // Command to run on left mouse click
 	char *cmd_mmb;         // Command to run on middle mouse click
 	char *cmd_rmb;         // Command to run on right mouse click
@@ -120,7 +121,7 @@ struct succade_spark
 {
 	char *cmd;             // Command to run
 	pid_t pid;             // Process ID of trigger command
-	FILE *fd;              // File descriptor as returned by popen()
+	FILE *fp[3];           // File pointers for stdin, stdout, stderr
 	scd_block_s *block;    // Associated block
 	scd_lemon_s *lemon;    // Associated bar (special use case...)
 	unsigned ready : 1;    // fd has new data available for reading
@@ -140,17 +141,20 @@ struct succade_state
 	scd_lemon_s *lemon;    // Reference to lemon (prev. 'bar')
 	scd_block_s *blocks;   // Reference to block array
 	scd_spark_s *sparks;   // Reference to spark array (prev. 'trigger')
-	size_t num_blocks;     // Number of blocks in block array
-	size_t num_sparks;     // Number of sparks in spark array
+	scd_event_s *events;   // Reference to events array
+	size_t num_blocks;     // Number of blocks in blocks array
+	size_t num_sparks;     // Number of sparks in sparks array
+	size_t num_events;     // Number of events in events array
 	int epfd;              // epoll file descriptor
 };
 
 struct succade_event
 {
-	//scd_state_s *state;    // Ptr to the state, just in case
-	scd_fd_type_e fd_type; // stdin, stdout, stderr?
-	scd_ev_type_e ev_type; // Type of data
-	void *data;            // Ptr to lemon, a block or a spark
+	scd_fd_type_e fd_type;   // stdin, stdout, stderr?
+	scd_ev_type_e ev_type;   // Type of data
+	void *data;              // Ptr to lemon, a block or a spark
+	int fd;                  // File descriptor of data->fp[0], [1] or [2]
+	unsigned registered : 1; // Registered with epoll?
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
