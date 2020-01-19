@@ -2,7 +2,7 @@
 bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
-format = "desktop | dt | temp"
+format = "desktop | datetime | temp"
 # dock defines bar's position: 'top' or 'bottom'
 dock = bottom
 # height of the bar in pixel
@@ -31,21 +31,18 @@ offset = 8
 font = 6x13
 label-font = "-wuncon-siji-medium-r-normal--10-100-75-75-c-80-iso10646-1"
 
-[dt]
+[datetime]
 bin="~/.local/bin/candies/datetime -m"
 live=true
 mouse-left=xclock
 
 [temp]
-offset=-8
-;bin="~/.config/succade/blocks/temp"
+bin="~/.config/succade/blocks/temp"
 label=" "
 padding=5
 reload=8
 
 [desktop]
 bin="bspc query -D -d focused --names"
-label="DSK " 
 trigger="bspc subscribe"
-padding=5
 

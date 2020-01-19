@@ -1004,7 +1004,7 @@ size_t create_events(scd_state_s *state)
 			continue;
 		}
 
-		fprintf(stderr, "Creating event for %s\n", state->blocks[i].name);
+		fprintf(stderr, "Creating event for BLOCK %s\n", state->blocks[i].name);
 		state->events[num_events] = (scd_event_s) { 0 };
 		state->events[num_events].ev_type = EV_BLOCK;
 		state->events[num_events].fd_type = FD_OUT;
@@ -1017,7 +1017,7 @@ size_t create_events(scd_state_s *state)
 	// Add SPARKs
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		fprintf(stderr, "Creating event for %s\n", state->sparks[i].cmd);
+		fprintf(stderr, "Creating event for SPARK %s\n", state->sparks[i].cmd);
 		state->events[num_events] = (scd_event_s) { 0 };
 		state->events[num_events].ev_type = EV_SPARK;
 		state->events[num_events].fd_type = FD_OUT;
@@ -1443,23 +1443,24 @@ int main(int argc, char **argv)
 	 * SPARKS - fire when their respective commands produce output
 	 */
 
-	// Create sparks for all blocks that have a trigger command
 	create_sparks(&state);
-
-	// Create a special spark for lemonbar
-	/*
-	scd_spark_s bartrig = { 0 };
-	bartrig.fp[FD_OUT] = lemonbar.fp[FD_OUT];
-	bartrig.lemon = &lemonbar;
-	*/
-
 	size_t num_sparks_opened = open_sparks(&state);
 	
-	// Debug-print all sparks that we found
 	if (DEBUG)
 	{
 		fprintf(stderr, "Number of sparks: parsed = %zu, opened = %zu\n", 
 				state.num_sparks, num_sparks_opened);
+	}
+
+	/* 
+	 * EVENTS - create epoll instance and save it in the state
+	 */
+
+	state.epfd = epoll_create(1);
+	if (state.epfd < 0)
+	{
+		fprintf(stderr, "Could not create epoll file descriptor\n");
+		return EXIT_FAILURE;
 	}
 
 	/*
@@ -1468,18 +1469,10 @@ int main(int argc, char **argv)
 
 	create_events(&state);
 
-	/* 
-	 * EVENTS - register our sparks with the system so we'll be notified
+	/*
+	 * EVENTS - register events with a valid file descriptor
 	 */
 
-	int epfd = epoll_create(1);
-	if (epfd < 0)
-	{
-		fprintf(stderr, "Could not create epoll file descriptor\n");
-		return EXIT_FAILURE;
-	}
-
-	state.epfd = epfd;
 	size_t num_events_registered = register_events(&state);
 	
 	if (DEBUG)
@@ -1519,7 +1512,9 @@ int main(int argc, char **argv)
 		}
 		
 		// Wait for trigger input - at least bartrig is always present
-		int num_events = epoll_wait(epfd, tev, max_events, wait * MILLISEC_PER_SEC);
+		// First time we call it, wait is 0, which is nice, because it allows us to 
+		// start up all the blocks and shit without a delay
+		int num_events = epoll_wait(state.epfd, tev, max_events, wait * MILLISEC_PER_SEC);
 
 		// Mark triggers that fired as ready to be read
 		for (int i = 0; i < num_events; ++i)
@@ -1551,18 +1546,19 @@ int main(int argc, char **argv)
 				switch (state.events[i].ev_type)
 				{
 					case EV_LEMON:
-						fprintf(stderr, "*** LEMON EVENT (plz handle)\n");
+						fprintf(stderr, "*** LEMON EVENT\n");
 						break;
 					case EV_BLOCK:
-						fprintf(stderr, "*** BLOCK EVENT (plz handle)\n");
+						fprintf(stderr, "*** BLOCK EVENT\n");
 						break;
 					case EV_SPARK:
-						fprintf(stderr, "*** SPARK EVENT (plz handle)\n");
+						fprintf(stderr, "*** SPARK EVENT\n");
 						break;
 					default:
-						fprintf(stderr, "*** ????? EVENT (plz help)\n");
+						fprintf(stderr, "*** ????? EVENT\n");
 					
 				}
+				state.events[i].dirty = 0;
 			}
 		}	
 
@@ -1602,7 +1598,9 @@ int main(int argc, char **argv)
 		*/
 
 		// Let's update bar! 
-		feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
+		//feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
+		fputs("HELLO WORLD\n", state.lemon->fp[FD_IN]);
+		wait = 2;
 	}
 
 	/*
@@ -1610,7 +1608,7 @@ int main(int argc, char **argv)
 	 */
 
 	fprintf(stderr, "Performing clean-up ...\n");
-	close(epfd);
+	close(state.epfd);
 
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
