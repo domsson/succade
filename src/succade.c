@@ -36,10 +36,10 @@ static void init_lemon(scd_lemon_s *lemon)
 static void init_block(scd_block_s *block)
 {
 	block->offset = -1;
-	block->reload = 5.0;
-	block->fp[0] = NULL;
-	block->fp[1] = NULL;
-	block->fp[2] = NULL;
+	//block->reload = 5.0;
+	block->fp[FD_IN]  = NULL;
+	block->fp[FD_OUT] = NULL;
+	block->fp[FD_ERR] = NULL;
 }
 
 static void init_spark(scd_spark_s *spark)
@@ -1504,7 +1504,7 @@ int main(int argc, char **argv)
 		delta  = now - before;
 		before = now;
 
-		fprintf(stderr, "> wait = %f\n", wait);
+		fprintf(stderr, "> wait = %f, delta = %f\n", wait, delta);
 		if (sigchld)
 		{
 			reap_children(&state);
@@ -1516,7 +1516,7 @@ int main(int argc, char **argv)
 		// start up all the blocks and shit without a delay
 		int num_events = epoll_wait(state.epfd, tev, max_events, wait * MILLISEC_PER_SEC);
 
-		// Mark triggers that fired as ready to be read
+		// Mark all events with activity as dirty
 		for (int i = 0; i < num_events; ++i)
 		{
 			scd_event_s *ev = tev[i].data.ptr;
@@ -1529,15 +1529,16 @@ int main(int argc, char **argv)
 			if (tev[i].events & EPOLLERR)
 			{
 				fprintf(stderr, "*** EPOLLERR\n");
-				ev->dirty = 1;
+				// TODO deal with this... but how?
 			}
 			if (tev[i].events & EPOLLHUP)
 			{
 				fprintf(stderr, "*** EPOLLHUP\n");
-				ev->dirty = 1;
+				// TODO deal with this... but how?
 			}
 		}
 
+		// TODO Handle dirty events
 		for (size_t i = 0; i < state.num_events; ++i)
 		{
 			if (state.events[i].dirty)
@@ -1554,13 +1555,60 @@ int main(int argc, char **argv)
 					case EV_SPARK:
 						fprintf(stderr, "*** SPARK EVENT\n");
 						break;
-					default:
-						fprintf(stderr, "*** ????? EVENT\n");
-					
 				}
 				state.events[i].dirty = 0;
 			}
 		}	
+
+		// Handle BLOCKS
+		// TODO open blocks that aren't open yet
+		// TODO open sparks that aren't open yet
+		// TODO blocks can have a trigger AND reload, don't run them twice..
+		//      also, reload=0.0 alone doesn't mean STATIC, it could be a 
+		//      triggered one. we need some more elegant logic here! 
+		for (size_t i = 0; i < state.num_blocks; ++i)
+		{
+			// TIMED BLOCK
+			if (state.blocks[i].reload > 0.0)
+			{
+				// Update the time this block has waited
+				state.blocks[i].waited += delta;
+
+				// Block has never been run before, do it now!
+				if (state.blocks[i].used == 0)
+				{
+					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", state.blocks[i].name);
+					state.blocks[i].waited = 0.0;
+					continue;
+				}
+				if (state.blocks[i].waited >= state.blocks[i].reload)
+				{
+					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", state.blocks[i].name);
+					state.blocks[i].waited = 0.0;
+					continue;
+				}
+			}
+
+			// SPARKED BLOCK
+			if (state.blocks[i].trigger && state.blocks[i].input)
+			{
+				fprintf(stderr, "*** RUN SPARKED BLOCK: %s\n", state.blocks[i].name);
+				state.blocks[i].used = 1;
+				free(state.blocks[i].input);
+				state.blocks[i].input = NULL;
+			}
+
+			// STATIC BLOCK
+			else if (state.blocks[i].reload == 0.0)
+			{
+				if (state.blocks[i].used == 0)
+				{
+					fprintf(stderr, "*** RUN STATIC BLOCK: %s\n", state.blocks[i].name);
+					state.blocks[i].used = 1;
+					continue;
+				}
+			}
+		}
 
 		// Fetch input from all marked triggers
 		/*
