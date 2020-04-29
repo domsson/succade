@@ -1,7 +1,7 @@
 #include <unistd.h>    // getopt()
 #include "succade.h"   // scd_pref_s
 
-void parse_args(int argc, char **argv, scd_prefs_s *prefs)
+void parse_args(int argc, char **argv, prefs_s *prefs)
 {
 	// Get arguments, if any
 	opterr = 0;

@@ -205,15 +205,15 @@ char *config_dir(const char *name)
  * can be read; if required, the caller has to take care of this.
  * The configuration directory is determined via config_dir().
  */
-char *config_path(const char *cfg_file)
+char *config_path(const char *filename, const char *dirname)
 {
-	char  *cfg_dir      = config_dir(NAME);
+	char  *cfg_dir      = config_dir(dirname);
 	size_t cfg_dir_len  = strlen(cfg_dir);
-	size_t cfg_file_len = strlen(cfg_file);
+	size_t cfg_file_len = strlen(filename);
 	size_t cfg_path_len = cfg_dir_len + cfg_file_len + 2;
 	char  *cfg_path     = malloc(sizeof(char) * cfg_path_len);
 
-	snprintf(cfg_path, cfg_path_len, "%s/%s", cfg_dir, cfg_file);
+	snprintf(cfg_path, cfg_path_len, "%s/%s", cfg_dir, filename);
 	free(cfg_dir);
 
 	return cfg_path;

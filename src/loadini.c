@@ -6,138 +6,140 @@
 
 int lemon_ini_handler(void *data, const char *section, const char *name, const char *value)
 {
-	// Unpack the data, which should be a scd_lemon_s (struct succade_lemon)
-	scd_lemon_s *bar = (scd_lemon_s*) data;
+	// Unpack the data, which should be a lemon_s (struct succade_lemon)
+	lemon_s *lemon = (lemon_s*) data;
+	lemon_cfg_s *lc = &lemon->lemon_cfg;
+	block_cfg_s *bc = &lemon->block_cfg;
 
 	// Check for `name` and set the appropriate property
 	if (equals(name, "name"))
 	{
-		bar->name = is_quoted(value) ? unquote(value) : strdup(value);
+		lemon->name = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "bin"))
+	if (equals(name, "bin") || equals(name, "cmd") || equals(name, "command"))
 	{
-		bar->bin = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->bin = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
-		bar->fg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "bg") || equals(name, "background"))
 	{
-		bar->bg = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "lc") || equals(name, "line"))
 	{
-		bar->lc = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->lc = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "line-width"))
+	if (equals(name, "lw") || equals(name, "line-width"))
 	{
-		bar->lw = atoi(value);
+		lc->lw = atoi(value);
 		return 1;
 	}
 	if (equals(name, "ol") || equals(name, "overline"))
 	{
-		bar->ol = equals(value, "true");
+		bc->ol = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "ul") || equals(name, "underline"))
 	{
-		bar->ul = equals(value, "true");
+		bc->ul = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
 	{
-		bar->h = atoi(value);
+		lc->h = atoi(value);
 		return 1;
 	}
 	if (equals(name, "w") || equals(name, "width"))
 	{
-		bar->w = atoi(value);
+		lc->w = atoi(value);
 		return 1;
 	}
 	if (equals(name, "x"))
 	{
-		bar->x = atoi(value);
+		lc->x = atoi(value);
 		return 1;
 	}
 	if (equals(name, "y"))
 	{
-		bar->y = atoi(value);
+		lc->y = atoi(value);
 		return 1;
 	}
 	if (equals(name, "dock"))
 	{
-		bar->bottom = equals(value, "bottom");
+		lc->bottom = equals(value, "bottom");
 		return 1;
 	}
 	if (equals(name, "force"))
 	{
-		bar->force = equals(value, "true");
+		lc->force = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "offset") || equals(name, "block-offset"))
 	{
-		bar->offset = atoi(value);
+		bc->offset = atoi(value);
 		return 1;
 	}
 	if (equals(name, "prefix") || equals(name, "block-prefix"))
 	{
-		bar->prefix = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->prefix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "suffix") || equals(name, "block-suffix"))
 	{
-		bar->suffix = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->suffix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "format") || equals(name, "blocks"))
 	{
-		bar->format = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->format = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "font") || equals(name, "block-font"))
 	{
-		bar->block_font = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->block_font = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "label-font"))
 	{
-		bar->label_font = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->label_font = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "affix-font"))
 	{
-		bar->affix_font = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->affix_font = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "block-background") || equals(name, "block-bg"))
+	if (equals(name, "block-bg") || equals(name, "block-background"))
 	{
-		bar->block_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "label-background") || equals(name, "label-bg"))
+	if (equals(name, "label-bg") || equals(name, "label-background"))
 	{
-		bar->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "label-foreground") || equals(name, "label-fg"))
+	if (equals(name, "label-fg") || equals(name, "label-foreground"))
 	{
-		bar->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "affix-background") || equals(name, "affix-bg"))
+	if (equals(name, "affix-bg") || equals(name, "affix-background"))
 	{
-		bar->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "affix-foreground") || equals(name, "affix-fg"))
+	if (equals(name, "affix-fg") || equals(name, "affix-foreground"))
 	{
-		bar->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 
@@ -148,121 +150,139 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 int block_ini_handler(void *data, const char *section, const char *name, const char *value)
 {
 	// Unpack the data
-	scd_block_s *block = (scd_block_s*) data;
+	block_s *block = (block_s*) data;
+	block_cfg_s *bc = &block->block_cfg;
+	click_cfg_s *cc = &block->click_cfg;
 
 	// Check the `name` and do the thing
-	if (equals(name, "bin"))
+	if (equals(name, "bin") || equals(name, "cmd") || equals(name, "command"))
 	{
-		block->bin = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->bin = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
-		block->fg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "bg") || equals(name, "background"))
 	{
-		block->bg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "label-background") || equals(name, "label-bg"))
+	if (equals(name, "label-bg") || equals(name, "label-background"))
 	{
-		block->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->label_bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "label-foreground") || equals(name, "label-fg"))
+	if (equals(name, "label-fg") || equals(name, "label-foreground"))
 	{
-		block->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->label_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "affix-background") || equals(name, "affix-bg"))
+	if (equals(name, "affix-bg") || equals(name, "affix-background"))
 	{
-		block->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->affix_bg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
-	if (equals(name, "affix-foreground") || equals(name, "affix-fg"))
+	if (equals(name, "affix-fg") || equals(name, "affix-foreground"))
 	{
-		block->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->affix_fg = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "lc") || equals(name, "line"))
 	{
-		block->lc = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->lc = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "ol") || equals(name, "overline"))
 	{
-		block->ol = equals(value, "true");
+		bc->ol = equals(value, "true");
 		return 1;
 	}
 	if (equals(name, "ul") || equals(name, "underline"))
 	{
-		block->ul = equals(value, "true");
+		bc->ul = equals(value, "true");
 		return 1;
 	}
-	if (equals(name, "live"))
+	if (equals(name, "pad") || equals(name, "padding") || equals(name, "width"))
 	{
-		block->live = equals(value, "true");
-		return 1;
-	}
-	if (equals(name, "pad") || equals(name, "padding"))
-	{
-		block->padding = atoi(value);
+		bc->width = atoi(value);
 		return 1;
 	}
 	if (equals(name, "offset"))
 	{
-		block->offset = atoi(value);
+		bc->offset = atoi(value);
+		return 1;
+	}
+	if (equals(name, "prefix"))
+	{
+		bc->prefix = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "suffix"))
+	{
+		bc->suffix = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "label"))
 	{
-		block->label = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->label = is_quoted(value) ? unquote(value) : strdup(value);
+		return 1;
+	}
+	if (equals(name, "unit"))
+	{
+		bc->unit = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "reload"))
 	{
 		if (is_quoted(value)) // String means trigger!
 		{
-			block->trigger = unquote(value);
-			block->reload = 0.0;
+			bc->trigger = unquote(value);
+			bc->reload = 0.0;
 		}
 		else
 		{
-			block->reload = atof(value);
+			bc->reload = atof(value);
 		}
 		return 1;
 	}
 	if (equals(name, "trigger"))
 	{
-		block->trigger = is_quoted(value) ? unquote(value) : strdup(value);
-		block->reload = 0.0;
+		bc->trigger = is_quoted(value) ? unquote(value) : strdup(value);
+		bc->reload = 0.0;
+		return 1;
+	}
+	if (equals(name, "live"))
+	{
+		bc->live = equals(value, "true");
+		// TODO free/null trigger and reload?
 		return 1;
 	}
 	if (equals(name, "mouse-left"))
 	{
-		block->cmd_lmb = is_quoted(value) ? unquote(value) : strdup(value);
+		cc->lmb = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "mouse-middle"))
 	{
-		block->cmd_mmb = is_quoted(value) ? unquote(value) : strdup(value);
+		cc->mmb = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "mouse-right"))
 	{
-		block->cmd_rmb = is_quoted(value) ? unquote(value) : strdup(value);
+		cc->rmb = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "scroll-up"))
 	{
-		block->cmd_sup = is_quoted(value) ? unquote(value) : strdup(value);
+		cc->sup = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "scroll-down"))
 	{
-		block->cmd_sdn = is_quoted(value) ? unquote(value) : strdup(value);
+		cc->sdn = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 

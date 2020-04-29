@@ -22,38 +22,30 @@ static volatile int sigchld;   // SIGCHLD has been received, please handle
  * Init the given bar struct to a well defined state using sensible defaults.
  */
 
-static void init_lemon(scd_lemon_s *lemon)
+static void init_lemon(lemon_s *lemon)
 {
-	lemon->lw = 1;
-	lemon->fp[FD_IN]  = NULL;
-	lemon->fp[FD_OUT] = NULL;
-	lemon->fp[FD_ERR] = NULL;
+	lemon->lemon_cfg.lw = 1;
 }
 
 /*
  * Init the given block struct to a well defined state using sensible defaults.
  */
-static void init_block(scd_block_s *block)
+static void init_block(block_s *block)
 {
-	block->offset = -1;
-	//block->reload = 5.0;
-	block->fp[FD_IN]  = NULL;
-	block->fp[FD_OUT] = NULL;
-	block->fp[FD_ERR] = NULL;
+	block->block_cfg.offset = -1;
+	//block->block_cfg.reload = 5.0;
 }
 
-static void init_spark(scd_spark_s *spark)
+static void init_spark(spark_s *spark)
 {
-	spark->fp[FD_IN]  = NULL;
-	spark->fp[FD_OUT] = NULL;
-	spark->fp[FD_ERR] = NULL;
 }
 
 /*
  * Frees all members of the given bar that need freeing.
  */
-static void free_lemon(scd_lemon_s *lemon)
+static void free_lemon(lemon_s *lemon)
 {
+	/*
 	free(lemon->name);
 	free(lemon->bin);
 	free(lemon->fg);
@@ -70,13 +62,15 @@ static void free_lemon(scd_lemon_s *lemon)
 	free(lemon->label_bg);
 	free(lemon->affix_fg);
 	free(lemon->affix_bg);
+	*/
 }
 
 /*
  * Frees all members of the given block that need freeing.
  */
-static void free_block(scd_block_s *block)
+static void free_block(block_s *block)
 {
+	/*
 	free(block->name);
 	free(block->bin);
 	free(block->fg);
@@ -95,6 +89,7 @@ static void free_block(scd_block_s *block)
 	free(block->cmd_sdn);
 	free(block->input);
 	free(block->result);
+	*/
 }
 
 /*
@@ -104,37 +99,40 @@ static void free_block(scd_block_s *block)
  * enough to hold the entire command string, truncation will occur. 
  * Returns the strlen() of the constructed string.
  */
-int lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
+int lemon_cmd(lemon_s *lemon, char *buf, size_t buf_len)
 {
+	lemon_cfg_s *lcfg = &lemon->lemon_cfg;
+	block_cfg_s *bcfg = &lemon->block_cfg;
+
 	// https://stackoverflow.com/questions/3919995/
 	char w[8]; // TODO hardcoded value
 	char h[8];
 
-	snprintf(w, 8, "%d", lemon->w);
-	snprintf(h, 8, "%d", lemon->h);
+	snprintf(w, 8, "%d", lcfg->w);
+	snprintf(h, 8, "%d", lcfg->h);
 
-	char *block_font = optstr('f', lemon->block_font);
-	char *label_font = optstr('f', lemon->label_font);
-	char *affix_font = optstr('f', lemon->affix_font);
+	char *block_font = optstr('f', lcfg->block_font);
+	char *label_font = optstr('f', lcfg->label_font);
+	char *affix_font = optstr('f', lcfg->affix_font);
 	char *name_str   = optstr('n', lemon->name);
 
 	int cmd_len = snprintf(buf, buf_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
-		lemon->bin,                                    // strlen
-		(lemon->w > 0) ? w : "",                       // max 8
-		(lemon->h > 0) ? h : "",                       // max 8
-		lemon->x,                                      // max 8
-		lemon->y,                                      // max 8
-		(lemon->fg && lemon->fg[0]) ? lemon->fg : "-", // strlen, max 9
-		(lemon->bg && lemon->bg[0]) ? lemon->bg : "-", // strlen, max 9
-		(lemon->lc && lemon->lc[0]) ? lemon->lc : "-", // strlen, max 9
-		lemon->lw,                                     // max 4
-		(lemon->bottom) ? "-b" : "",                   // max 2
-		(lemon->force)  ? "-d" : "",                   // max 2
-		block_font,                                    // strlen
-		label_font,                                    // strlen
-		affix_font,                                    // strlen
-		name_str                                       // strlen
+		lcfg->bin,                                   // strlen
+		(lcfg->w > 0) ? w : "",                      // max 8
+		(lcfg->h > 0) ? h : "",                      // max 8
+		lcfg->x,                                     // max 8
+		lcfg->y,                                     // max 8
+		(bcfg->fg && bcfg->fg[0]) ? bcfg->fg : "-",  // strlen, max 9
+		(lcfg->bg && lcfg->bg[0]) ? lcfg->bg : "-",  // strlen, max 9
+		(bcfg->lc && bcfg->lc[0]) ? bcfg->lc : "-",  // strlen, max 9
+		lcfg->lw,                                    // max 4
+		(lcfg->bottom) ? "-b" : "",                  // max 2
+		(lcfg->force)  ? "-d" : "",                  // max 2
+		block_font,                                  // strlen
+		label_font,                                  // strlen
+		affix_font,                                  // strlen
+		name_str                                     // strlen
 	);
 
 	free(block_font);
@@ -149,8 +147,10 @@ int lemon_cmd(scd_lemon_s *lemon, char *buf, size_t buf_len)
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
-int open_lemon(scd_lemon_s *lemon, size_t buf_len)
+int open_lemon(lemon_s *lemon, size_t buf_len)
 {
+	child_s *child = &lemon->child;
+
 	char bar_cmd[buf_len];
 	bar_cmd[0] = '\0';
 	lemon_cmd(lemon, bar_cmd, buf_len);
@@ -160,13 +160,13 @@ int open_lemon(scd_lemon_s *lemon, size_t buf_len)
 		fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
 	}
 
-	lemon->pid = popen_noshell(bar_cmd, &(lemon->fp[FD_OUT]), NULL, &(lemon->fp[FD_IN]));
-	if (lemon->pid == -1)
+	child->pid = popen_noshell(bar_cmd, &(child->fp[FD_OUT]), NULL, &(child->fp[FD_IN]));
+	if (child->pid == -1)
 	{
 		return -1;
 	}
-	setlinebuf(lemon->fp[FD_OUT]);
-	setlinebuf(lemon->fp[FD_IN]);
+	setlinebuf(child->fp[FD_OUT]);
+	setlinebuf(child->fp[FD_IN]);
 
 	return 0;
 }
@@ -176,26 +176,28 @@ int open_lemon(scd_lemon_s *lemon, size_t buf_len)
  * Returns 0 on success, -1 if block could not be executed.
  * TODO: Should this function check if the block is already open?
  */
-int open_block(scd_block_s *b)
+int open_block(block_s *block)
 {
+	child_s *child = &block->child;
+
 	// Check if block already has PID (likely already/still running)
-	if (b->pid > 0)
+	if (child->pid > 0)
 	{
-		fprintf(stderr, "Block already open: %s\n", b->name);
+		fprintf(stderr, "Block already open: %s\n", block->name);
 		return -1;
 	}
 
 	// If no binary given, use the block's name
-	char *bin = b->bin ? b->bin : b->name;
+	char *bin = block->block_cfg.bin ? block->block_cfg.bin : block->name;
 
 	// Construct the cmd string with or without input
 	char *cmd = NULL;
 	size_t cmd_len = 0;
-	if (b->input)
+	if (child->input)
 	{
-		cmd_len = strlen(bin) + strlen(b->input) + 4;
+		cmd_len = strlen(bin) + strlen(child->input) + 4;
 		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s '%s'", bin, b->input);
+		snprintf(cmd, cmd_len, "%s '%s'", bin, child->input);
 	}
 	else
 	{
@@ -205,34 +207,36 @@ int open_block(scd_block_s *b)
 	}
 
 	// Execute the block and retrieve its PID
-	b->pid = popen_noshell(cmd, &(b->fp[FD_OUT]), NULL, NULL);
-	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", b->name, b->pid, (b->fp[FD_OUT]==NULL?"dead":"okay"));
+	child->pid = popen_noshell(cmd, &(child->fp[FD_OUT]), NULL, NULL);
+	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->name, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
 	free(cmd);
 
 	// Return 0 on success, -1 on error
-	return (b->pid == -1) ? -1 : 0;
+	return (child->pid == -1) ? -1 : 0;
 }
 
 /*
  * Closes the given bar by killing the process, closing its file descriptors
  * and setting them to NULL after.
  */
-void close_lemon(scd_lemon_s *b)
+void close_lemon(lemon_s *lemon)
 {
-	if (b->pid > 1)
+	child_s *child = &lemon->child;
+
+	if (child->pid > 1)
 	{
-		kill(b->pid, SIGKILL);
-		b->pid = 0;
+		kill(child->pid, SIGKILL);
+		child->pid = 0;
 	}
-	if (b->fp[FD_IN] != NULL)
+	if (child->fp[FD_IN] != NULL)
 	{
-		fclose(b->fp[FD_IN]);
-		b->fp[FD_IN] = NULL;
+		fclose(child->fp[FD_IN]);
+		child->fp[FD_IN] = NULL;
 	}
-	if (b->fp[FD_OUT] != NULL)
+	if (child->fp[FD_OUT] != NULL)
 	{
-		fclose(b->fp[FD_OUT]);
-		b->fp[FD_OUT] = NULL;
+		fclose(child->fp[FD_OUT]);
+		child->fp[FD_OUT] = NULL;
 	}
 }
 
@@ -240,24 +244,26 @@ void close_lemon(scd_lemon_s *b)
  * Closes the given block by killing the process, closing its file descriptor
  * and settings them to NULL after.
  */
-void close_block(scd_block_s *b)
+void close_block(block_s *block)
 {
-	if (b->pid > 1)
+	child_s *child = &block->child;
+
+	if (child->pid > 1)
 	{
-		kill(b->pid, SIGTERM);
+		kill(child->pid, SIGTERM);
 		//b->pid = 0; // TODO revert this, probably, just for testing!
 	}
-	if (b->fp[FD_OUT] != NULL)
+	if (child->fp[FD_OUT] != NULL)
 	{
-		fclose(b->fp[FD_OUT]);
-		b->fp[FD_OUT] = NULL;
+		fclose(child->fp[FD_OUT]);
+		child->fp[FD_OUT] = NULL;
 	}
 }
 
 /*
  * Convenience function: simply runs close_block() for all blocks.
  */
-void close_blocks(scd_state_s *state)
+void close_blocks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
@@ -265,21 +271,23 @@ void close_blocks(scd_state_s *state)
 	}
 }
 
-int open_spark(scd_spark_s *s)
+int open_spark(spark_s *spark)
 {
-	if (s->cmd == NULL)
+	child_s *child = &spark->child;
+
+	if (child->cmd == NULL)
 	{
 		return -1;
 	}
 	
-	s->pid = popen_noshell(s->cmd, &(s->fp[FD_OUT]), NULL, NULL);
-	if (s->pid == -1)
+	child->pid = popen_noshell(child->cmd, &(child->fp[FD_OUT]), NULL, NULL);
+	if (child->pid == -1)
 	{
 		return -1;
 	}
 
-	setlinebuf(s->fp[FD_OUT]); // TODO add error handling
-	int fd = fileno(s->fp[FD_OUT]);
+	setlinebuf(child->fp[FD_OUT]); // TODO add error handling
+	int fd = fileno(child->fp[FD_OUT]);
 	int flags = fcntl(fd, F_GETFL, 0); // TODO add error handling
 	flags |= O_NONBLOCK;
 	fcntl(fd, F_SETFL, flags); // TODO add error handling
@@ -291,24 +299,27 @@ int open_spark(scd_spark_s *s)
  * and sending a SIGTERM to the trigger command.
  * Also sets the file descriptor to NULL.
  */
-void close_spark(scd_spark_s *t)
+void close_spark(spark_s *spark)
 {
+	child_s *child = &spark->child;
+
 	// Is the trigger's command still running?
-	if (t->pid > 1)
+	if (child->pid > 1)
 	{
-		kill(t->pid, SIGTERM); // Politely ask to terminate
+		kill(child->pid, SIGTERM); // Politely ask to terminate
 	}
 	// If bar is set, then fd is a copy and will be closed elsewhere
-	if (t->lemon)
+	if (child->type == CHILD_LEMON) 
+	//if (child->lemon)
 	{
 		return;
 	}
 	// Looks like we should actually close/free this fd after all
-	if (t->fp[FD_OUT])
+	if (child->fp[FD_OUT])
 	{
-		fclose(t->fp[FD_OUT]);
-		t->fp[FD_OUT] = NULL;
-		t->pid = 0;
+		fclose(child->fp[FD_OUT]);
+		child->fp[FD_OUT] = NULL;
+		child->pid = 0;
 	}
 }
 
@@ -316,7 +327,7 @@ void close_spark(scd_spark_s *t)
  * Convenience function: simply opens all given triggers.
  * Returns the number of successfully opened triggers.
  */ 
-size_t open_sparks(scd_state_s *state)
+size_t open_sparks(state_s *state)
 {
 	size_t num_sparks_opened = 0;
 	for (size_t i = 0; i < state->num_sparks; ++i)
@@ -329,7 +340,7 @@ size_t open_sparks(scd_state_s *state)
 /*
  * Convenience function: simply closes all given triggers.
  */
-void close_sparks(scd_state_s *state)
+void close_sparks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
@@ -337,19 +348,22 @@ void close_sparks(scd_state_s *state)
 	}
 }
 
-void free_spark(scd_spark_s *t)
+void free_spark(spark_s *t)
 {
+	// TODO
+	/*
 	free(t->cmd);
 	t->cmd = NULL;
 
 	t->block = NULL;
 	t->lemon = NULL;
+	*/
 }
 
 /*
  * Convenience function: simply frees all given blocks.
  */
-void free_blocks(scd_state_s *state)
+void free_blocks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
@@ -360,7 +374,7 @@ void free_blocks(scd_state_s *state)
 /*
  * Convenience function: simply frees all given triggers.
  */
-void free_sparks(scd_state_s *state)
+void free_sparks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
@@ -376,9 +390,9 @@ void free_sparks(scd_state_s *state)
  * Returns 0 on success, -1 if the block could not be run or its output could
  * not be fetched.
  */
-int run_block(scd_block_s *b, size_t result_length)
+int run_block(block_s *b, size_t result_length)
 {
-	if (b->live)
+	if (b->type == BLOCK_LIVE)
 	{
 		fprintf(stderr, "Block is live: `%s`\n", b->name);
 		return -1;
@@ -387,7 +401,7 @@ int run_block(scd_block_s *b, size_t result_length)
 	fprintf(stderr, "Attempting to open block `%s`\n", b->name);
 
 	open_block(b);
-	if (b->fp[FD_OUT] == NULL)
+	if (b->child.fp[FD_OUT] == NULL)
 	{
 		fprintf(stderr, "Block is dead: `%s`\n", b->name);
 		close_block(b); // In case it has a PID already    TODO does this make sense?
@@ -396,31 +410,32 @@ int run_block(scd_block_s *b, size_t result_length)
 		
 	// TODO maybe use getline() instead? It allocates a suitable buffer!
 	char *result = malloc(result_length);
-	if (fgets(result, result_length, b->fp[FD_OUT]) == NULL)
+	if (fgets(result, result_length, b->child.fp[FD_OUT]) == NULL)
 	{
 		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->name);
-		if (feof(b->fp[FD_OUT]))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->name);
-		if (ferror(b->fp[FD_OUT])) fprintf(stderr, "Reading from block failed (err): %s\n", b->name);
+		if (feof(b->child.fp[FD_OUT]))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->name);
+		if (ferror(b->child.fp[FD_OUT])) fprintf(stderr, "Reading from block failed (err): %s\n", b->name);
 		close_block(b);
 		return -1;
 	}
 
-	if (b->result != NULL)
+	if (b->child.output != NULL)
 	{
-		free(b->result);
-		b->result = NULL;
+		free(b->child.output);
+		b->child.output = NULL;
 	}
 	
 	result[strcspn(result, "\n")] = 0; // Remove '\n'
-	b->result = result; // Copy pointer to result over
+	b->child.output = result; // Copy pointer to result over
 
 	// Update the block's state accordingly
-	b->used = 1;     // Mark this block as having run at least once
-	b->waited = 0.0; // This block was last run... now!
+	//b->used = 1;     // Mark this block as having run at least once
+	//b->waited = 0.0; // This block was last run... now!
+	b->child.last = get_time();
 
 	// Discard block's input, as it has now been processed
-	free(b->input);
-	b->input = NULL;
+	free(b->child.input);
+	b->child.input = NULL;
 
 	// Close the block (unless it is a live block? We should rethink this)
 	close_block(b);
@@ -436,42 +451,42 @@ int run_block(scd_block_s *b, size_t result_length)
  * string this function is putting together, otherwise truncation will happen.
  * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
-char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
+char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 {
 	char action_start[(5 * strlen(block->name)) + 56]; // ... + (5 * 11) + 1
 	action_start[0] = 0;
 	char action_end[21]; // (5 * 4) + 1
 	action_end[0] = 0;
 
-	if (block->cmd_lmb)
+	if (block->click_cfg.lmb)
 	{
 		strcat(action_start, "%{A1:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->cmd_mmb)
+	if (block->click_cfg.mmb)
 	{
 		strcat(action_start, "%{A2:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->cmd_rmb)
+	if (block->click_cfg.rmb)
 	{
 		strcat(action_start, "%{A3:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->cmd_sup)
+	if (block->click_cfg.sup)
 	{
 		strcat(action_start, "%{A4:");
 		strcat(action_start, block->name);
 		strcat(action_start, "_sup:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->cmd_sdn)
+	if (block->click_cfg.sdn)
 	{
 		strcat(action_start, "%{A5:");
 		strcat(action_start, block->name);
@@ -480,8 +495,8 @@ char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 	}
 
 	size_t diff;
-	char *result = escape(block->result, '%', &diff);
-	int padding = block->padding + diff;
+	char *result = escape(block->child.output, '%', &diff);
+	int padding = block->block_cfg.width + diff;
 
 	size_t buf_len;
 
@@ -495,22 +510,22 @@ char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 		// Required buffer mainly depends on the result and name of a block
 		buf_len = 239; // format str = 100, known stuff = 138, '\0' = 1
 		buf_len += strlen(action_start);
-		buf_len += bar->prefix ? strlen(bar->prefix) : 0;
-		buf_len += bar->suffix ? strlen(bar->suffix) : 0;
-		buf_len += block->label ? strlen(block->label) : 0;
+		buf_len += bar->block_cfg.prefix ? strlen(bar->block_cfg.prefix) : 0;
+		buf_len += bar->block_cfg.suffix ? strlen(bar->block_cfg.suffix) : 0;
+		buf_len += block->block_cfg.label ? strlen(block->block_cfg.label) : 0;
 		buf_len += strlen(result);
 	}
 
-	const char *fg = strsel(block->fg, NULL, NULL);
-	const char *bg = strsel(block->bg, bar->block_bg, NULL);
-	const char *lc = strsel(block->lc, NULL, NULL);
-	const char *label_fg = strsel(block->label_fg, bar->label_fg, fg);
-	const char *label_bg = strsel(block->label_bg, bar->label_bg, bg);
-	const char *affix_fg = strsel(block->affix_fg, bar->affix_fg, fg);
-	const char *affix_bg = strsel(block->affix_bg, bar->affix_bg, bg);
-        const int offset = (block->offset >= 0) ? block->offset : bar->offset;	
-	const int ol = block->ol ? 1 : (bar->ol ? 1 : 0);
-	const int ul = block->ul ? 1 : (bar->ul ? 1 : 0);
+	const char *fg = strsel(block->block_cfg.fg, NULL, NULL);
+	const char *bg = strsel(block->block_cfg.bg, bar->block_cfg.bg, NULL);
+	const char *lc = strsel(block->block_cfg.lc, NULL, NULL);
+	const char *label_fg = strsel(block->block_cfg.label_fg, bar->block_cfg.label_fg, fg);
+	const char *label_bg = strsel(block->block_cfg.label_bg, bar->block_cfg.label_bg, bg);
+	const char *affix_fg = strsel(block->block_cfg.affix_fg, bar->block_cfg.affix_fg, fg);
+	const char *affix_bg = strsel(block->block_cfg.affix_bg, bar->block_cfg.affix_bg, bg);
+        const int offset = (block->block_cfg.offset >= 0) ? block->block_cfg.offset : bar->block_cfg.offset;	
+	const int ol = block->block_cfg.ol ? 1 : (bar->block_cfg.ol ? 1 : 0);
+	const int ul = block->block_cfg.ul ? 1 : (bar->block_cfg.ul ? 1 : 0);
 
 	char *str = malloc(buf_len);
 	snprintf(str, buf_len,
@@ -531,11 +546,11 @@ char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 		// Prefix
 		affix_fg ? affix_fg : "-",                        // strlen, max 9
 		affix_bg ? affix_bg : "-",		          // strlen, max 9
-		bar->prefix ? bar->prefix : "",                   // strlen
+		bar->block_cfg.prefix ? bar->block_cfg.prefix : "",    // strlen
 		// Label
 		label_fg ? label_fg : "-",                        // strlen, max 9
 		label_bg ? label_bg : "-",                        // strlen, max 9
-		block->label ? block->label : "",                 // strlen
+		block->block_cfg.label ? block->block_cfg.label : "",  // strlen
 		// Block
 		fg ? fg : "-",                                    // strlen, max 9
 		bg ? bg : "-",                                    // strlen, max 9
@@ -544,7 +559,7 @@ char *blockstr(const scd_lemon_s *bar, const scd_block_s *block, size_t len)
 		// Suffix
 		affix_fg ? affix_fg : "-",                        // strlen, max 9
 		affix_bg ? affix_bg : "-",                        // strlen, max 9
-		bar->suffix ? bar->suffix : "",                   // strlen
+		bar->block_cfg.suffix ? bar->block_cfg.suffix : "",    // strlen
 		// End
 		action_end                                        // 5*4
 	);
@@ -567,11 +582,11 @@ char get_align(const int align)
  * Combines the results of all given blocks into a single string that can be fed
  * to Lemonbar. Returns a pointer to the string, allocated with malloc().
  */
-char *barstr(const scd_state_s *state)
+char *barstr(const state_s *state)
 {
 	// For convenience...
-	const scd_lemon_s *bar = state->lemon;
-	const scd_block_s *blocks = state->blocks;
+	const lemon_s *bar = state->lemon;
+	const block_s *blocks = state->blocks;
 	size_t num_blocks = state->num_blocks;
 
 	// Short blocks like temperature, volume or battery, will usually use 
@@ -583,8 +598,10 @@ char *barstr(const scd_state_s *state)
 	char align[5];
 	int last_align = -1;
 
+	const block_s *block = NULL;
 	for (int i = 0; i < num_blocks; ++i)
 	{
+		block = &blocks[i];
 		// TODO just quick hack to get this working, this shouldn't be required here!
 		/*
 		if (blocks[i].bin == NULL)
@@ -595,16 +612,16 @@ char *barstr(const scd_state_s *state)
 		*/
 
 		// Live blocks might not have a result available
-		if (blocks[i].result == NULL)
+		if (block->child.output == NULL)
 		{
 			continue;
 		}
 
-		char *block_str = blockstr(bar, &blocks[i], 0);
+		char *block_str = blockstr(bar, block, 0);
 		size_t block_str_len = strlen(block_str);
-		if (blocks[i].align != last_align)
+		if (block->block_cfg.align != last_align)
 		{
-			last_align = blocks[i].align;
+			last_align = block->block_cfg.align;
 			snprintf(align, 5, "%%{%c}", get_align(last_align));
 			strcat(bar_str, align);
 		}
@@ -627,30 +644,34 @@ char *barstr(const scd_state_s *state)
 /*
  * TODO add comment, possibly some refactoring
  */
-size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *next)
+size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
 {
 
 	// Can't pipe to bar if its file descriptor isn't available
-	if (state->lemon->fp[FD_IN] == NULL)
+	if (state->lemon->child.fp[FD_IN] == NULL)
 	{
 		return -1;
 	}
 	
 	// For convenience...
-	scd_lemon_s *bar = state->lemon;
-	scd_block_s *blocks = state->blocks;
+	lemon_s *bar = state->lemon;
+	block_s *blocks = state->blocks;
 	size_t num_blocks = state->num_blocks;
 
 	size_t num_blocks_executed = 0;	
 	double until_next = DBL_MAX;
 	double idle_left;
 
+	block_s *block = NULL;
+	double waited = 0.0;
 	for (size_t i = 0; i < num_blocks; ++i)
 	{
+		block = &blocks[i];
+
 		// Skip live blocks, they will update based on their output
 		//if (blocks[i].live && blocks[i].result)
 		// ^-- why did we do the '&& block[i].result' thing?
-		if (blocks[i].live)
+		if (block->type == BLOCK_LIVE)
 		{
 			// However, we count them as executed block so that
 			// we actually end up updating the bar further down
@@ -659,27 +680,31 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 		}
 
 		// Updated the time this block hasn't been run
-		blocks[i].waited += delta;
+		//blocks[i].waited += delta;
+		waited = get_time() - block->child.last;
 
 		// Calc how long until this block should be run
-		idle_left = blocks[i].reload - blocks[i].waited;
+		//idle_left = blocks[i].reload - blocks[i].waited;
+		idle_left = block->block_cfg.reload - waited;
 
 		// Block was never run before OR block has input waiting OR
 		// it's time to run this block according to it's reload option
-		if (!blocks[i].used || blocks[i].input || 
-				(blocks[i].reload > 0.0 && idle_left < tolerance))
+		if (block->child.last == 0.0 || block->child.input || 
+				(block->block_cfg.reload > 0.0 && idle_left < tolerance))
 		{
 			num_blocks_executed += 
-				(run_block(&blocks[i], BUFFER_SIZE) == 0) ? 1 : 0;
+				(run_block(block, BUFFER_SIZE) == 0) ? 1 : 0;
 		}
 
-		idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
+		//idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
+		waited = get_time() - block->child.last;
+		idle_left = block->block_cfg.reload - waited;
 
 		// Possibly update the time until we should run feed_lemon again
-		if (blocks[i].input == NULL && idle_left < until_next)
+		if (block->child.input == NULL && idle_left < until_next)
 		{
 			// If reload is 0, this block idles forever
-			if (blocks[i].reload > 0.0)
+			if (block->block_cfg.reload > 0.0)
 			{
 				until_next = (idle_left > 0.0) ? idle_left : 0.0;
 			}
@@ -691,7 +716,7 @@ size_t feed_lemon(scd_state_s *state, double delta, double tolerance, double *ne
 	{
 		char *lemonbar_str = barstr(state);
 		// TODO add error handling (EOF => bar dead?)
-		fputs(lemonbar_str, bar->fp[FD_IN]);
+		fputs(lemonbar_str, bar->child.fp[FD_IN]);
 		free(lemonbar_str);
 	}
 	return num_blocks_executed;
@@ -749,7 +774,7 @@ size_t parse_format(const char *format, create_block_callback cb, void *data)
 /*
  * Finds and returns the block with the given `name` -- or NULL.
  */
-scd_block_s *get_block(const scd_state_s *state, const char *name)
+block_s *get_block(const state_s *state, const char *name)
 {
 	// Iterate over all existing blocks and check for a name match
 	for (size_t i = 0; i < state->num_blocks; ++i)
@@ -768,11 +793,11 @@ scd_block_s *get_block(const scd_state_s *state, const char *name)
  * block container, unless there is already a block with that name in there. 
  * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
-scd_block_s *add_block(scd_state_s *state, const char *name)
+block_s *add_block(state_s *state, const char *name)
 {
 	// See if there is an existing block by this name (and return, if so)
-	//scd_block_s *eb = get_block(state->blocks, state->num_blocks, name);
-	scd_block_s *eb = get_block(state, name);
+	//block_s *eb = get_block(state->blocks, state->num_blocks, name);
+	block_s *eb = get_block(state, name);
 	if (eb)
 	{
 		return eb;
@@ -781,10 +806,10 @@ scd_block_s *add_block(scd_state_s *state, const char *name)
 	// Resize the block container to be able to hold one more block
 	int current = state->num_blocks;
 	state->num_blocks += 1;
-	state->blocks = realloc(state->blocks, sizeof(scd_block_s) * state->num_blocks);
+	state->blocks = realloc(state->blocks, sizeof(block_s) * state->num_blocks);
 	
 	// Create the block, setting its name and default values
-	state->blocks[current] = (scd_block_s) { .name = strdup(name) };
+	state->blocks[current] = (block_s) { .name = strdup(name) };
 	init_block(&state->blocks[current]);
 
 	// Return a pointer to the new block
@@ -793,7 +818,7 @@ scd_block_s *add_block(scd_state_s *state, const char *name)
 
 int lemon_cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
-	scd_state_s *state = (scd_state_s*) data;
+	state_s *state = (state_s*) data;
 
 	// Only process if section is empty or specificially for bar
 	if (!section[0] || strcmp(section, state->prefs->section) == 0)
@@ -805,7 +830,7 @@ int lemon_cfg_handler(void *data, const char *section, const char *name, const c
 
 int block_cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
-	scd_state_s *state = (scd_state_s*) data;
+	state_s *state = (state_s*) data;
 	
 	// Do not process if section is empty or specifically for bar
 	if (!section[0] || strcmp(section, state->prefs->section) == 0)
@@ -814,7 +839,7 @@ int block_cfg_handler(void *data, const char *section, const char *name, const c
 	}
 
 	// Find the block whose name fits the section name
-	scd_block_s *block = get_block(state, section);
+	block_s *block = get_block(state, section);
 
 	// Indicate an issue if we couldn't find that block
 	if (block == NULL)
@@ -830,7 +855,7 @@ int block_cfg_handler(void *data, const char *section, const char *name, const c
  * Load the config and parse the section for the bar, ignoring other sections.
  * Returns 1 on success, 0 on failure (for example, file could not be read).
  */
-static int load_lemon_cfg(scd_state_s *s)
+static int load_lemon_cfg(state_s *s)
 {
 	// Abort if config file path empty or NULL
 	if (!s->prefs->config || !s->prefs->config[0])
@@ -846,7 +871,7 @@ static int load_lemon_cfg(scd_state_s *s)
  * Load the config and parse all section apart from the bar section.
  * Returns 1 on success, 0 on failure (for example, file could not be read).
  */
-static int load_block_cfg(scd_state_s *s)
+static int load_block_cfg(state_s *s)
 {
 	// Abort if config file path empty or NULL
 	if (!s->prefs->config || !s->prefs->config[0])
@@ -860,7 +885,7 @@ static int load_block_cfg(scd_state_s *s)
 /*
  * Find the event for the given lemon/block/spark or NULL if not found.
  */
-scd_event_s *get_event(scd_state_s *state, void *thing, scd_ev_type_e ev_type)
+event_s *get_event(state_s *state, void *thing, child_type_e ev_type)
 {
 	for (size_t i = 0; i < state->num_events; ++i)
 	{
@@ -881,7 +906,7 @@ scd_event_s *get_event(scd_state_s *state, void *thing, scd_ev_type_e ev_type)
  *      part of the state's event array, as we don't perform any checks in this 
  *      regard -- what can/should we do about this?
  */
-int register_event(scd_state_s *state, scd_event_s *ev)
+int register_event(state_s *state, event_s *ev)
 {
 	if (ev == NULL)
 	{
@@ -921,7 +946,7 @@ int register_event(scd_state_s *state, scd_event_s *ev)
 /*
  * 
  */
-int unregister_event(scd_state_s *state, scd_event_s *ev)
+int unregister_event(state_s *state, event_s *ev)
 {
 	if (ev == NULL)
 	{
@@ -964,7 +989,7 @@ int unregister_event(scd_state_s *state, scd_event_s *ev)
 /*
  * Register all events that have a valid file descriptor.
  */
-size_t register_events(scd_state_s *state)
+size_t register_events(state_s *state)
 {
 	size_t num_registered = 0;
 
@@ -980,60 +1005,66 @@ size_t register_events(scd_state_s *state)
 /*
  *
  */
-size_t create_events(scd_state_s *state)
+size_t create_events(state_s *state)
 {
 	size_t max_events = state->num_blocks + state->num_sparks + 1;
-	state->events = malloc(sizeof(scd_event_s) * max_events);
+	state->events = malloc(sizeof(event_s) * max_events);
 
 	size_t num_events = 0;
 
 	// Add LEMON
-	state->events[num_events] = (scd_event_s) { 0 };
-	state->events[num_events].ev_type = EV_LEMON;
+	state->events[num_events] = (event_s) { 0 };
+	state->events[num_events].ev_type = CHILD_LEMON;
 	state->events[num_events].fd_type = FD_OUT;
 	state->events[num_events].data    = state->lemon;
-	state->events[num_events].fd      = state->lemon->fp[FD_OUT] ?
-				fileno(state->lemon->fp[FD_OUT]) : -1;
+	state->events[num_events].fd      = state->lemon->child.fp[FD_OUT] ?
+				fileno(state->lemon->child.fp[FD_OUT]) : -1;
 	num_events += 1;
 
 	// Add LIVE blocks
+	block_s *block = NULL;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		if (!state->blocks[i].live)
+		block = &state->blocks[i];
+
+		if (block->type != BLOCK_LIVE)
 		{
 			continue;
 		}
 
-		fprintf(stderr, "Creating event for BLOCK %s\n", state->blocks[i].name);
-		state->events[num_events] = (scd_event_s) { 0 };
-		state->events[num_events].ev_type = EV_BLOCK;
+		fprintf(stderr, "Creating event for BLOCK %s\n", block->name);
+		state->events[num_events] = (event_s) { 0 };
+		state->events[num_events].ev_type = CHILD_BLOCK;
 		state->events[num_events].fd_type = FD_OUT;
-		state->events[num_events].data    = &state->blocks[i];
-		state->events[num_events].fd      = state->blocks[i].fp[FD_OUT] ?
-					fileno(state->blocks[i].fp[FD_OUT]) : -1;
+		state->events[num_events].data    = (void*) block;
+		state->events[num_events].fd      = block->child.fp[FD_OUT] ?
+					fileno(block->child.fp[FD_OUT]) : -1;
 		num_events += 1;
 	}
 
 	// Add SPARKs
+	spark_s *spark = NULL;
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		fprintf(stderr, "Creating event for SPARK %s\n", state->sparks[i].cmd);
-		state->events[num_events] = (scd_event_s) { 0 };
-		state->events[num_events].ev_type = EV_SPARK;
+		spark = &state->sparks[i];
+
+		fprintf(stderr, "Creating event for SPARK %s\n", spark->child.cmd);
+		state->events[num_events] = (event_s) { 0 };
+		state->events[num_events].ev_type = CHILD_SPARK;
 		state->events[num_events].fd_type = FD_OUT;
-		state->events[num_events].data    = &state->sparks[i];
-		state->events[num_events].fd      = state->sparks[i].fp[FD_OUT] ?
-					fileno(state->sparks[i].fp[FD_OUT]) : -1;
+		state->events[num_events].data    = (void*) spark;
+		state->events[num_events].fd      = spark->child.fp[FD_OUT] ?
+					fileno(spark->child.fp[FD_OUT]) : -1;
 		num_events += 1;
 	}
 	
 	// Resize to whatever amount of memory we actually needed
-	state->events = realloc(state->events, sizeof(scd_event_s) * num_events);
+	state->events = realloc(state->events, sizeof(event_s) * num_events);
 	state->num_events = num_events;
 	return num_events;
 }
 
-size_t create_sparks(scd_state_s *state)
+size_t create_sparks(state_s *state)
 {
 	// No need for sparks if there aren't any blocks
 	if (state->num_blocks == 0)
@@ -1042,26 +1073,29 @@ size_t create_sparks(scd_state_s *state)
 	}
 
 	// Use number of blocks as initial size 
-	state->sparks = malloc(sizeof(scd_spark_s) * state->num_blocks);
+	state->sparks = malloc(sizeof(spark_s) * state->num_blocks);
 	size_t num_sparks = 0;
 	
+	block_s *block = NULL;
 	// Go through all blocks, create sparks as appropriate
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
+		block = &state->blocks[i];
+		
 		// Block that's triggered by another program's output
-		if (state->blocks[i].trigger)
+		if (block->type == BLOCK_SPARKED)
 		{
-			state->sparks[num_sparks] = (scd_spark_s) { 0 };
+			state->sparks[num_sparks] = (spark_s) { 0 };
 			init_spark(&state->sparks[num_sparks]);
-			state->sparks[num_sparks].cmd = strdup(state->blocks[i].trigger);
-			state->sparks[num_sparks].block = &state->blocks[i];
+			state->sparks[num_sparks].child.cmd = strdup(block->block_cfg.trigger);
+			state->sparks[num_sparks].data = (void*) block;
 			num_sparks += 1;
 			continue;
 		}
 	}
 
 	// Resize to whatever amount of memory we actually needed
-	state->sparks = realloc(state->sparks, sizeof(scd_spark_s) * num_sparks);
+	state->sparks = realloc(state->sparks, sizeof(spark_s) * num_sparks);
 	state->num_sparks = num_sparks;
 	return num_sparks;
 }
@@ -1071,9 +1105,15 @@ size_t create_sparks(scd_state_s *state)
  * in the corresponding block's input field. Previous lines will be discarded.
  * Returns the number of lines read from the trigger's file descriptor.
  */
-size_t run_spark(scd_spark_s *t)
+size_t run_spark(spark_s *spark)
 {
-	if (t->fp[FD_OUT] == NULL)
+	if (spark->child.fp[FD_OUT] == NULL)
+	{
+		return 0;
+	}
+
+	// We're only going to deal with BLOCK sparks for now... TODO
+	if (spark->type != CHILD_BLOCK)
 	{
 		return 0;
 	}
@@ -1081,34 +1121,30 @@ size_t run_spark(scd_spark_s *t)
 	char res[BUFFER_SIZE];
 	size_t num_lines = 0;
 
-	while (fgets(res, BUFFER_SIZE, t->fp[FD_OUT]) != NULL)
+	while (fgets(res, BUFFER_SIZE, spark->child.fp[FD_OUT]) != NULL)
 	{
 		++num_lines;
 	}
 
 	if (num_lines)
 	{
+		block_s *block = (block_s*) spark->data;
+
+		// Make sure we clear out any previous input
+		free(block->child.input);
+		block->child.input = NULL;
+
 		// For live blocks, this will be the actual output
-		if (t->block->live)
+		if (block->type == BLOCK_LIVE)
 		{
-			if (t->block->result != NULL)
-			{
-				free(t->block->result);
-				t->block->result = NULL;
-			}
-			t->block->result = strdup(res);
+			block->child.output = strdup(res);
 			// Remove '\n'
-			t->block->result[strcspn(t->block->result, "\n")] = 0;
+			block->child.output[strcspn(block->child.output, "\n")] = 0;
 		}
 		// For regular blocks, this will be input for the block
 		else
 		{
-			if (t->block->input != NULL)
-			{
-				free(t->block->input);
-				t->block->input = NULL;
-			}
-			t->block->input = strdup(res);
+			block->child.input = strdup(res);
 		}
 	}
 	
@@ -1122,7 +1158,7 @@ size_t run_spark(scd_spark_s *t)
  * Returns 0 on success, -1 if the string was not a recognized action command
  * or the block that the action belongs to could not be found.
  */
-int process_action(const scd_state_s *state, const char *action)
+int process_action(const state_s *state, const char *action)
 {
 	size_t len = strlen(action);
 	if (len < 5)
@@ -1163,7 +1199,7 @@ int process_action(const scd_state_s *state, const char *action)
 	}
 
 	// Find the source block of the action
-	scd_block_s *source = get_block(state, block);
+	block_s *source = get_block(state, block);
 	if (source == NULL)
 	{
 		return -1;
@@ -1172,19 +1208,19 @@ int process_action(const scd_state_s *state, const char *action)
 	// Now to fire the right command for the action type
 	switch (b) {
 		case 0:
-			run_cmd(source->cmd_lmb);
+			run_cmd(source->click_cfg.lmb);
 			return 0;
 		case 1:
-			run_cmd(source->cmd_mmb);
+			run_cmd(source->click_cfg.mmb);
 			return 0;
 		case 2:
-			run_cmd(source->cmd_rmb);
+			run_cmd(source->click_cfg.rmb);
 			return 0;
 		case 3:
-			run_cmd(source->cmd_sup);
+			run_cmd(source->click_cfg.sup);
 			return 0;
 		case 4:
-			run_cmd(source->cmd_sdn);
+			run_cmd(source->click_cfg.sdn);
 			return 0;
 		default:
 			// Should never happen...
@@ -1203,13 +1239,13 @@ int process_action(const scd_state_s *state, const char *action)
 static void found_block_handler(const char *name, int align, int n, void *data)
 {
 	// 'Unpack' the data
-	scd_state_s *state = (scd_state_s*) data;
+	state_s *state = (state_s*) data;
 	
 	// Find or add the block with the given name
-	scd_block_s *block = add_block(state, name);
+	block_s *block = add_block(state, name);
 	
 	// Set the block's align to the given one
-	block->align = align;
+	block->block_cfg.align = align;
 }
 
 /*
@@ -1228,21 +1264,23 @@ void sigchld_handler(int sig)
 	//sigchld = waitpid(-1, NULL, WNOHANG);
 }
 
-void reap_children(scd_state_s *state)
+void reap_children(state_s *state)
 {
 	int pid = 0;
 	while((pid = waitpid(-1, NULL, WNOHANG)))
 	{
 		fprintf(stderr, "This guy quit on us: %d\n", pid);
+		block_s *block = NULL;
 		for (size_t i = 0; i < state->num_blocks; ++i)
 		{
-			if (state->blocks[i].pid != pid)
+			block = &state->blocks[i];
+			if (block->child.pid != pid)
 			{
 				continue;
 			}
-			fprintf(stderr, "waitpid(): %s (pid=%d) dead\n", state->blocks[i].name, state->blocks[i].pid);
-			close_block(&state->blocks[i]);
-			state->blocks[i].pid = 0;
+			fprintf(stderr, "waitpid(): %s (pid=%d) dead\n", block->name, block->child.pid);
+			close_block(block);
+			block->child.pid = 0;
 		}
 	}
 
@@ -1331,7 +1369,7 @@ int main(int argc, char **argv)
 	 * PARSE COMMAND LINE ARGUMENTS
 	 */
 
-	scd_prefs_s prefs = { 0 };
+	prefs_s prefs = { 0 };
 	parse_args(argc, argv, &prefs);
 
 	/*
@@ -1348,7 +1386,7 @@ int main(int argc, char **argv)
 	 * INITIALIZE SUCCADE STATE
 	 */
 
-	scd_state_s state = { 0 };
+	state_s state = { 0 };
 	state.prefs = &prefs;
 
 	/*
@@ -1364,7 +1402,7 @@ int main(int argc, char **argv)
 		//      to know where it came from. Should we simply strdup() 
 		//      everything that comes in via args, so that we get some
 		//      consistency? That would waste some memory though...
-		prefs.config = config_path("succaderc");
+		prefs.config = config_path("succaderc", SUCCADE_NAME);
 	}
 
 	// If no custom INI section for bar given, set it to default
@@ -1377,7 +1415,7 @@ int main(int argc, char **argv)
 	 * BAR
 	 */
 
-	scd_lemon_s lemonbar = { 0 };
+	lemon_s lemonbar = { 0 };
 	init_lemon(&lemonbar);
 	state.lemon = &lemonbar;
 
@@ -1388,9 +1426,9 @@ int main(int argc, char **argv)
 	}
 
 	// If no `bin` option was present in the config, set it to the default
-	if (lemonbar.bin == NULL)
+	if (lemonbar.lemon_cfg.bin == NULL)
 	{
-		lemonbar.bin = strdup(DEFAULT_LEMON_BIN);
+		lemonbar.lemon_cfg.bin = strdup(DEFAULT_LEMON_BIN);
 	}
 
 	// If no `name` option was present in the config, set it to the default
@@ -1411,7 +1449,7 @@ int main(int argc, char **argv)
 	 */
 
 	// Create blocks by parsing the format string
-	size_t parsed = parse_format(lemonbar.format, found_block_handler, &state);
+	size_t parsed = parse_format(lemonbar.lemon_cfg.format, found_block_handler, &state);
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
 			parsed, state.num_blocks);
@@ -1419,7 +1457,7 @@ int main(int argc, char **argv)
 	// Exit if no blocks could be loaded and 'empty' option isn't present
 	if (state.num_blocks == 0 && prefs.empty == 0)
 	{
-		fprintf(stderr, "No blocks loaded, stopping %s.\n", NAME);
+		fprintf(stderr, "No blocks loaded, stopping %s.\n", SUCCADE_NAME);
 		return EXIT_FAILURE;
 	}
 
@@ -1434,8 +1472,8 @@ int main(int argc, char **argv)
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			fprintf(stderr, "Block #%zu: %s -> %s\n", i, 
-					state.blocks[i].name,
-					state.blocks[i].bin);
+					state.blocks[i].block_cfg.name,
+					state.blocks[i].block_cfg.bin);
 		}
 	}
 
@@ -1519,7 +1557,7 @@ int main(int argc, char **argv)
 		// Mark all events with activity as dirty
 		for (int i = 0; i < num_events; ++i)
 		{
-			scd_event_s *ev = tev[i].data.ptr;
+			event_s *ev = tev[i].data.ptr;
 
 			if (tev[i].events & EPOLLIN)
 			{
@@ -1539,24 +1577,27 @@ int main(int argc, char **argv)
 		}
 
 		// TODO Handle dirty events
+		event_s *event = NULL;
 		for (size_t i = 0; i < state.num_events; ++i)
 		{
-			if (state.events[i].dirty)
+			event = &state.events[i];
+
+			if (event->dirty)
 			{
 				//handle_event(&state.events[i]);
-				switch (state.events[i].ev_type)
+				switch (event->ev_type)
 				{
-					case EV_LEMON:
+					case CHILD_LEMON:
 						fprintf(stderr, "*** LEMON EVENT\n");
 						break;
-					case EV_BLOCK:
+					case CHILD_BLOCK:
 						fprintf(stderr, "*** BLOCK EVENT\n");
 						break;
-					case EV_SPARK:
+					case CHILD_SPARK:
 						fprintf(stderr, "*** SPARK EVENT\n");
 						break;
 				}
-				state.events[i].dirty = 0;
+				event->dirty = 0;
 			}
 		}	
 
@@ -1566,45 +1607,62 @@ int main(int argc, char **argv)
 		// TODO blocks can have a trigger AND reload, don't run them twice..
 		//      also, reload=0.0 alone doesn't mean STATIC, it could be a 
 		//      triggered one. we need some more elegant logic here! 
+		block_s *block = NULL;
+		double now = get_time();
+		double waited = 0.0;
+
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
+			block  = &state.blocks[i];
+			waited = now - block->child.last;
+
 			// TIMED BLOCK
-			if (state.blocks[i].reload > 0.0)
+			if (block->type == BLOCK_TIMED)
 			{
 				// Update the time this block has waited
-				state.blocks[i].waited += delta;
+				//state.blocks[i].child.waited += delta;
 
 				// Block has never been run before, do it now!
-				if (state.blocks[i].used == 0)
+				//if (state.blocks[i].used == 0)
+				if (block->child.last == 0.0)
 				{
-					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", state.blocks[i].name);
-					state.blocks[i].waited = 0.0;
+					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->name);
+					//state.blocks[i].waited = 0.0;
+					block->child.last = now;
 					continue;
 				}
-				if (state.blocks[i].waited >= state.blocks[i].reload)
+				//if (state.blocks[i].waited >= state.blocks[i].reload)
+				if (waited >= block->block_cfg.reload)
 				{
-					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", state.blocks[i].name);
-					state.blocks[i].waited = 0.0;
+					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->name);
+					//state.blocks[i].waited = 0.0;
+					block->child.last = now;
 					continue;
 				}
 			}
 
 			// SPARKED BLOCK
-			if (state.blocks[i].trigger && state.blocks[i].input)
+			if (block->type == BLOCK_SPARKED)
 			{
-				fprintf(stderr, "*** RUN SPARKED BLOCK: %s\n", state.blocks[i].name);
-				state.blocks[i].used = 1;
-				free(state.blocks[i].input);
-				state.blocks[i].input = NULL;
+				fprintf(stderr, "*** RUN SPARKED BLOCK: %s\n", block->name);
+				//state.blocks[i].used = 1;
+				block->child.last = now;
+				//free(state.blocks[i].input);
+				free(block->child.input);
+				//state.blocks[i].input = NULL;
+				block->child.input = NULL;
 			}
 
 			// STATIC BLOCK
-			else if (state.blocks[i].reload == 0.0)
+			//else if (state.blocks[i].reload == 0.0)
+			else if (block->type == BLOCK_ONCE)
 			{
-				if (state.blocks[i].used == 0)
+				if (block->child.last == 0.0)
+				//if (state.blocks[i].used == 0)
 				{
-					fprintf(stderr, "*** RUN STATIC BLOCK: %s\n", state.blocks[i].name);
-					state.blocks[i].used = 1;
+					fprintf(stderr, "*** RUN STATIC BLOCK: %s\n", block->name);
+					//state.blocks[i].used = 1;
+					block->child.last = now;
 					continue;
 				}
 			}
@@ -1647,7 +1705,7 @@ int main(int argc, char **argv)
 
 		// Let's update bar! 
 		//feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
-		fputs("HELLO WORLD\n", state.lemon->fp[FD_IN]);
+		fputs("HELLO WORLD\n", state.lemon->child.fp[FD_IN]);
 		wait = 2;
 	}
 
