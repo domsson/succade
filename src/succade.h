@@ -143,7 +143,8 @@ struct succade_click_cfg
 
 struct succade_child
 {
-	char *cmd;             // command/binary to run
+	char *cmd;             // command/binary to run (could have arguments)
+	char *arg;             // additional argument string (optional)
 	pid_t pid;             // process ID
 	FILE *fp[3];           // stdin/stdout/stderr file pointers
 	char *input;           // input for the next invocation

@@ -134,6 +134,59 @@ int lemon_cmd(lemon_s *lemon, char *buf, size_t buf_len)
 	return cmd_len;
 }
 
+// TODO not in use yet!
+int open_child(child_s *child)
+{
+	if (child->pid > 0)
+	{
+		// ALREADY OPEN
+		return -1;
+	}
+
+	if (empty(child->cmd))
+	{
+		// NO COMMAND GIVEN
+		return -1;
+	}
+
+	// Construct the command, if there is an additional argument string
+	char *cmd = NULL;
+	if (child->arg)
+	{
+		size_t len = strlen(child->cmd) + strlen(child->arg) + 4;
+		cmd = malloc(sizeof(char) * len);
+		snprintf(cmd, len, "%s '%s'", child->cmd, child->arg);
+	}
+
+	// Execute the block and retrieve its PID
+	child->pid = popen_noshell(cmd ? cmd : child->cmd, &(child->fp[FD_OUT]), 
+			&(child->fp[FD_ERR]), &(child->fp[FD_IN]));
+	free(cmd);
+	
+	// Check if that worked
+	if (child->pid == -1)
+	{
+		// FAILED TO OPEN
+		return -1;
+	}
+	
+	// TODO do we really always want linebuf for ALL THREE streams?
+	if (child->fp[FD_IN])
+	{
+		setlinebuf(child->fp[FD_IN]);
+	}
+	if (child->fp[FD_OUT])
+	{
+		setlinebuf(child->fp[FD_OUT]);
+	}
+	if (child->fp[FD_ERR])
+	{
+		setlinebuf(child->fp[FD_ERR]);
+	}
+
+	return 0;
+}
+
 /*
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
@@ -1428,14 +1481,14 @@ int main(int argc, char **argv)
 	}
 
 	// If no `bin` option was present in the config, set it to the default
-	if (lemon->lemon_cfg.bin == NULL)
+	if (empty(lemon->lemon_cfg.bin))
 	{
 		// We use strdup() for consistency with free() later on
 		lemon->lemon_cfg.bin = strdup(DEFAULT_LEMON_BIN);
 	}
 
 	// If no `name` option was present in the config, set it to the default
-	if (lemon->lemon_cfg.name == NULL)
+	if (empty(lemon->lemon_cfg.name))
 	{
 		// We use strdup() for consistency with free() later on
 		lemon->lemon_cfg.name = strdup(DEFAULT_LEMON_NAME);
