@@ -17,6 +17,8 @@
 #define BLOCK_WAIT_TOLERANCE 0.1
 #define MILLISEC_PER_SEC     1000
 
+#define DEFAULT_CFG_FILE "succaderc"
+
 #define DEFAULT_LEMON_BIN     "lemonbar"
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"
 #define DEFAULT_LEMON_SECTION "bar"
@@ -81,8 +83,8 @@ typedef struct succade_click_cfg click_cfg_s;
 
 struct succade_lemon_cfg
 {
-	char *name;            // TODO succade_lemon already has a member `name`
-	char *bin;             // command to run
+	char *name;            // Window name (WM_NAME)
+	char *bin;             // Command to run
 
 	size_t w : 16;         // Width of the bar
 	size_t h : 16;         // Height of the bar
@@ -103,8 +105,7 @@ struct succade_lemon_cfg
 
 struct succade_block_cfg
 {
-	char *name;            // TODO succade_block already has a member `name`
-	char *bin;             // command to run
+	char *bin;             // Command to run
 
 	char *fg;              // Foreground color
 	char *bg;              // Background color
@@ -133,11 +134,11 @@ struct succade_block_cfg
 
 struct succade_click_cfg
 {
-	char *lmb;         // Command to run on left mouse click
-	char *mmb;         // Command to run on middle mouse click
-	char *rmb;         // Command to run on right mouse click
-	char *sup;         // Command to run on scroll up
-	char *sdn;         // Command to run on scroll down
+	char *lmb;             // Command to run on left mouse click
+	char *mmb;             // Command to run on middle mouse click
+	char *rmb;             // Command to run on right mouse click
+	char *sup;             // Command to run on scroll up
+	char *sdn;             // Command to run on scroll down
 };
 
 struct succade_child
@@ -157,7 +158,7 @@ struct succade_child
 
 struct succade_lemon
 {
-	char         *name;      // name (will be used as window title)
+	char         *sid;       // section ID (config section name)
 	child_s       child;     // associated child process
 	lemon_cfg_s   lemon_cfg; // associated lemon config
 	block_cfg_s   block_cfg; // associated common block config
@@ -165,7 +166,7 @@ struct succade_lemon
 
 struct succade_block
 {
-	char         *name;      // name (= config section)
+	char         *sid;       // section ID (config section name)
 	child_s       child;     // associated child process
 	block_type_e  type;      // type of block (one-shot, reload, sparked, live)
 	block_cfg_s   block_cfg; // associated block config
@@ -202,8 +203,8 @@ struct succade_prefs
 
 struct succade_state
 {
-        prefs_s *prefs;    // Reference to preferences (options/config)
-	lemon_s *lemon;    // Reference to lemon (prev. 'bar')
+        prefs_s  prefs;    // Preferences (options/config)
+	lemon_s  lemon;    // Lemon (prev. 'bar')
 	block_s *blocks;   // Reference to block array
 	spark_s *sparks;   // Reference to spark array (prev. 'trigger')
 	event_s *events;   // Reference to events array

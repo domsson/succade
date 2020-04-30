@@ -19,15 +19,6 @@ static volatile int handled;   // The last signal that has been handled
 static volatile int sigchld;   // SIGCHLD has been received, please handle
 
 /*
- * Init the given bar struct to a well defined state using sensible defaults.
- */
-
-static void init_lemon(lemon_s *lemon)
-{
-	lemon->lemon_cfg.lw = 1;
-}
-
-/*
  * Init the given block struct to a well defined state using sensible defaults.
  */
 static void init_block(block_s *block)
@@ -114,7 +105,7 @@ int lemon_cmd(lemon_s *lemon, char *buf, size_t buf_len)
 	char *block_font = optstr('f', lcfg->block_font);
 	char *label_font = optstr('f', lcfg->label_font);
 	char *affix_font = optstr('f', lcfg->affix_font);
-	char *name_str   = optstr('n', lemon->name);
+	char *name_str   = optstr('n', lcfg->name);
 
 	int cmd_len = snprintf(buf, buf_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
@@ -183,12 +174,12 @@ int open_block(block_s *block)
 	// Check if block already has PID (likely already/still running)
 	if (child->pid > 0)
 	{
-		fprintf(stderr, "Block already open: %s\n", block->name);
+		fprintf(stderr, "Block already open: %s\n", block->sid);
 		return -1;
 	}
 
-	// If no binary given, use the block's name
-	char *bin = block->block_cfg.bin ? block->block_cfg.bin : block->name;
+	// If no binary given, use the block's section ID
+	char *bin = block->block_cfg.bin ? block->block_cfg.bin : block->sid;
 
 	// Construct the cmd string with or without input
 	char *cmd = NULL;
@@ -208,7 +199,7 @@ int open_block(block_s *block)
 
 	// Execute the block and retrieve its PID
 	child->pid = popen_noshell(cmd, &(child->fp[FD_OUT]), NULL, NULL);
-	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->name, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
+	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
 	free(cmd);
 
 	// Return 0 on success, -1 on error
@@ -394,16 +385,16 @@ int run_block(block_s *b, size_t result_length)
 {
 	if (b->type == BLOCK_LIVE)
 	{
-		fprintf(stderr, "Block is live: `%s`\n", b->name);
+		fprintf(stderr, "Block is live: `%s`\n", b->sid);
 		return -1;
 	}
 
-	fprintf(stderr, "Attempting to open block `%s`\n", b->name);
+	fprintf(stderr, "Attempting to open block `%s`\n", b->sid);
 
 	open_block(b);
 	if (b->child.fp[FD_OUT] == NULL)
 	{
-		fprintf(stderr, "Block is dead: `%s`\n", b->name);
+		fprintf(stderr, "Block is dead: `%s`\n", b->sid);
 		close_block(b); // In case it has a PID already    TODO does this make sense?
 		return -1;
 	}
@@ -412,9 +403,9 @@ int run_block(block_s *b, size_t result_length)
 	char *result = malloc(result_length);
 	if (fgets(result, result_length, b->child.fp[FD_OUT]) == NULL)
 	{
-		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->name);
-		if (feof(b->child.fp[FD_OUT]))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->name);
-		if (ferror(b->child.fp[FD_OUT])) fprintf(stderr, "Reading from block failed (err): %s\n", b->name);
+		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->sid);
+		if (feof(b->child.fp[FD_OUT]))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->sid);
+		if (ferror(b->child.fp[FD_OUT])) fprintf(stderr, "Reading from block failed (err): %s\n", b->sid);
 		close_block(b);
 		return -1;
 	}
@@ -453,7 +444,7 @@ int run_block(block_s *b, size_t result_length)
  */
 char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 {
-	char action_start[(5 * strlen(block->name)) + 56]; // ... + (5 * 11) + 1
+	char action_start[(5 * strlen(block->sid)) + 56]; // ... + (5 * 11) + 1
 	action_start[0] = 0;
 	char action_end[21]; // (5 * 4) + 1
 	action_end[0] = 0;
@@ -461,35 +452,35 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	if (block->click_cfg.lmb)
 	{
 		strcat(action_start, "%{A1:");
-		strcat(action_start, block->name);
+		strcat(action_start, block->sid);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
 	if (block->click_cfg.mmb)
 	{
 		strcat(action_start, "%{A2:");
-		strcat(action_start, block->name);
+		strcat(action_start, block->sid);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
 	if (block->click_cfg.rmb)
 	{
 		strcat(action_start, "%{A3:");
-		strcat(action_start, block->name);
+		strcat(action_start, block->sid);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
 	if (block->click_cfg.sup)
 	{
 		strcat(action_start, "%{A4:");
-		strcat(action_start, block->name);
+		strcat(action_start, block->sid);
 		strcat(action_start, "_sup:}");
 		strcat(action_end, "%{A}");
 	}
 	if (block->click_cfg.sdn)
 	{
 		strcat(action_start, "%{A5:");
-		strcat(action_start, block->name);
+		strcat(action_start, block->sid);
 		strcat(action_start, "_sdn:}");
 		strcat(action_end, "%{A}");
 	}
@@ -585,7 +576,7 @@ char get_align(const int align)
 char *barstr(const state_s *state)
 {
 	// For convenience...
-	const lemon_s *bar = state->lemon;
+	const lemon_s *bar = &state->lemon;
 	const block_s *blocks = state->blocks;
 	size_t num_blocks = state->num_blocks;
 
@@ -648,13 +639,13 @@ size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
 {
 
 	// Can't pipe to bar if its file descriptor isn't available
-	if (state->lemon->child.fp[FD_IN] == NULL)
+	if (state->lemon.child.fp[FD_IN] == NULL)
 	{
 		return -1;
 	}
 	
 	// For convenience...
-	lemon_s *bar = state->lemon;
+	lemon_s *bar = &state->lemon;
 	block_s *blocks = state->blocks;
 	size_t num_blocks = state->num_blocks;
 
@@ -772,15 +763,15 @@ size_t parse_format(const char *format, create_block_callback cb, void *data)
 }
 
 /*
- * Finds and returns the block with the given `name` -- or NULL.
+ * Finds and returns the block with the given `sid` -- or NULL.
  */
-block_s *get_block(const state_s *state, const char *name)
+block_s *get_block(const state_s *state, const char *sid)
 {
 	// Iterate over all existing blocks and check for a name match
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
 		// If names match, return a pointer to this block
-		if (strcmp(state->blocks[i].name, name) == 0)
+		if (equals(state->blocks[i].sid, sid))
 		{
 			return &state->blocks[i];
 		}
@@ -789,15 +780,15 @@ block_s *get_block(const state_s *state, const char *name)
 }
 
 /*
- * Add the block with the given name to the collection of blocks in the given 
- * block container, unless there is already a block with that name in there. 
+ * Add the block with the given SID to the collection of blocks in the given 
+ * block container, unless there is already a block with that SID in there. 
  * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
-block_s *add_block(state_s *state, const char *name)
+block_s *add_block(state_s *state, const char *sid)
 {
 	// See if there is an existing block by this name (and return, if so)
 	//block_s *eb = get_block(state->blocks, state->num_blocks, name);
-	block_s *eb = get_block(state, name);
+	block_s *eb = get_block(state, sid);
 	if (eb)
 	{
 		return eb;
@@ -809,42 +800,55 @@ block_s *add_block(state_s *state, const char *name)
 	state->blocks = realloc(state->blocks, sizeof(block_s) * state->num_blocks);
 	
 	// Create the block, setting its name and default values
-	state->blocks[current] = (block_s) { .name = strdup(name) };
+	state->blocks[current] = (block_s) { .sid = strdup(sid) };
 	init_block(&state->blocks[current]);
 
 	// Return a pointer to the new block
 	return &state->blocks[current];
 }
 
+/*
+ * inih doc: "Handler should return nonzero on success, zero on error."
+ */
 int lemon_cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
 	state_s *state = (state_s*) data;
 
 	// Only process if section is empty or specificially for bar
-	if (!section[0] || strcmp(section, state->prefs->section) == 0)
+	if (empty(section) || equals(section, state->lemon.sid))
 	{
-		return lemon_ini_handler(state->lemon, section, name, value);
+		return lemon_ini_handler(&state->lemon, section, name, value);
 	}
-	return 0;
+
+	return 1;
 }
 
+/*
+ * inih doc: "Handler should return nonzero on success, zero on error."
+ */
 int block_cfg_handler(void *data, const char *section, const char *name, const char *value)
 {
 	state_s *state = (state_s*) data;
-	
-	// Do not process if section is empty or specifically for bar
-	if (!section[0] || strcmp(section, state->prefs->section) == 0)
+
+	// Abort if section is empty
+	if (empty(section))
 	{
-		return 0;
+		return 1;
+	}
+	
+	// Abort if section is specifically for bar, not a block
+	if (equals(section, state->lemon.sid))
+	{
+		return 1;
 	}
 
 	// Find the block whose name fits the section name
 	block_s *block = get_block(state, section);
 
-	// Indicate an issue if we couldn't find that block
+	// Abort if we couldn't find that block
 	if (block == NULL)
 	{
-		return 0;
+		return 1;
 	}
 
 	// Process via the appropriate handler
@@ -853,33 +857,37 @@ int block_cfg_handler(void *data, const char *section, const char *name, const c
 
 /*
  * Load the config and parse the section for the bar, ignoring other sections.
- * Returns 1 on success, 0 on failure (for example, file could not be read).
+ * Returns 0 on success, -1 on file open error, -2 on memory allocation error, 
+ * -3 if no config file path was given in the preferences, or the line number 
+ * of the first encountered parse error.
  */
-static int load_lemon_cfg(state_s *s)
+static int load_lemon_cfg(state_s *state)
 {
 	// Abort if config file path empty or NULL
-	if (!s->prefs->config || !s->prefs->config[0])
+	if (empty(state->prefs.config))
 	{
-		return 0;
+		return -3;
 	}
 
 	// Fire up the INI parser
-	return (ini_parse(s->prefs->config, lemon_cfg_handler, s) < 0) ? -1 : 0;
+	return ini_parse(state->prefs.config, lemon_cfg_handler, state);
 }
 
 /*
- * Load the config and parse all section apart from the bar section.
- * Returns 1 on success, 0 on failure (for example, file could not be read).
+ * Load the config and parse all sections apart from the bar section.
+ * Returns 0 on success, -1 on file open error, -2 on memory allocation error, 
+ * -3 if no config file path was given in the preferences, or the line number 
+ * of the first encountered parse error.
  */
-static int load_block_cfg(state_s *s)
+static int load_block_cfg(state_s *state)
 {
 	// Abort if config file path empty or NULL
-	if (!s->prefs->config || !s->prefs->config[0])
+	if (empty(state->prefs.config))
 	{
-		return 0;
+		return -3;
 	}
 
-	return (ini_parse(s->prefs->config, block_cfg_handler, s) < 0) ? -1 : 0;
+	return ini_parse(state->prefs.config, block_cfg_handler, state);
 }
 
 /*
@@ -1016,9 +1024,9 @@ size_t create_events(state_s *state)
 	state->events[num_events] = (event_s) { 0 };
 	state->events[num_events].ev_type = CHILD_LEMON;
 	state->events[num_events].fd_type = FD_OUT;
-	state->events[num_events].data    = state->lemon;
-	state->events[num_events].fd      = state->lemon->child.fp[FD_OUT] ?
-				fileno(state->lemon->child.fp[FD_OUT]) : -1;
+	state->events[num_events].data    = &state->lemon;
+	state->events[num_events].fd      = state->lemon.child.fp[FD_OUT] ?
+				fileno(state->lemon.child.fp[FD_OUT]) : -1;
 	num_events += 1;
 
 	// Add LIVE blocks
@@ -1032,7 +1040,7 @@ size_t create_events(state_s *state)
 			continue;
 		}
 
-		fprintf(stderr, "Creating event for BLOCK %s\n", block->name);
+		fprintf(stderr, "Creating event for BLOCK %s\n", block->sid);
 		state->events[num_events] = (event_s) { 0 };
 		state->events[num_events].ev_type = CHILD_BLOCK;
 		state->events[num_events].fd_type = FD_OUT;
@@ -1278,14 +1286,11 @@ void reap_children(state_s *state)
 			{
 				continue;
 			}
-			fprintf(stderr, "waitpid(): %s (pid=%d) dead\n", block->name, block->child.pid);
+			fprintf(stderr, "waitpid(): %s (pid=%d) dead\n", block->sid, block->child.pid);
 			close_block(block);
 			block->child.pid = 0;
 		}
 	}
-
-	/*
-	*/
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
@@ -1366,81 +1371,80 @@ int main(int argc, char **argv)
 	}
 
 	/*
+	 * INITIALIZE SUCCADE STATE
+	 */
+
+	state_s  state = { 0 };
+	prefs_s *prefs = &(state.prefs); // For convenience
+	lemon_s *lemon = &(state.lemon); // For convenience
+
+	/*
 	 * PARSE COMMAND LINE ARGUMENTS
 	 */
 
-	prefs_s prefs = { 0 };
-	parse_args(argc, argv, &prefs);
+	parse_args(argc, argv, prefs);
+	char *default_cfg_path = NULL;
 
 	/*
-	 * PRINT HELP AND EXIT, IF REQUESTED
+	 * PRINT HELP AND EXIT, MAYBE
 	 */
 
-	if (prefs.help)
+	if (prefs->help)
 	{
 		help(argv[0]);
 		return EXIT_SUCCESS;
 	}
 
 	/*
-	 * INITIALIZE SUCCADE STATE
-	 */
-
-	state_s state = { 0 };
-	state.prefs = &prefs;
-
-	/*
 	 * PREFERENCES / DEFAULTS
 	 */
 
 	// If no custom config file given, set it to the default
-	if (prefs.config == NULL)
+	if (prefs->config == NULL)
 	{
-		// TODO If we get this string from args, we don't need to free
-		//      it but if we get it via config_path(), then we DO need 
-		//      to free it. That's an issue as there is no way, later,
-		//      to know where it came from. Should we simply strdup() 
-		//      everything that comes in via args, so that we get some
-		//      consistency? That would waste some memory though...
-		prefs.config = config_path("succaderc", SUCCADE_NAME);
+		// We use the additional variable for consistency with free()
+		default_cfg_path = config_path(DEFAULT_CFG_FILE, SUCCADE_NAME);
+		prefs->config = default_cfg_path; 
 	}
 
 	// If no custom INI section for bar given, set it to default
-	if (prefs.section == NULL)
+	if (prefs->section == NULL)
 	{
-		prefs.section = DEFAULT_LEMON_SECTION;
+		prefs->section = DEFAULT_LEMON_SECTION;
 	}
 
 	/*
 	 * BAR
 	 */
 
-	lemon_s lemonbar = { 0 };
-	init_lemon(&lemonbar);
-	state.lemon = &lemonbar;
+	// Copy the Section ID from the config for convenience
+	lemon->sid = strdup(prefs->section);
 
-	if (load_lemon_cfg(&state) == -1)
+	// Read the config file and parse bar's section
+	if (load_lemon_cfg(&state) < 0)
 	{
-		fprintf(stderr, "Failed to load config file: %s\n", prefs.config);
+		fprintf(stderr, "Failed to load config file: %s\n", prefs->config);
 		return EXIT_FAILURE;
 	}
 
 	// If no `bin` option was present in the config, set it to the default
-	if (lemonbar.lemon_cfg.bin == NULL)
+	if (lemon->lemon_cfg.bin == NULL)
 	{
-		lemonbar.lemon_cfg.bin = strdup(DEFAULT_LEMON_BIN);
+		// We use strdup() for consistency with free() later on
+		lemon->lemon_cfg.bin = strdup(DEFAULT_LEMON_BIN);
 	}
 
 	// If no `name` option was present in the config, set it to the default
-	if (lemonbar.name == NULL)
+	if (lemon->lemon_cfg.name == NULL)
 	{
-		lemonbar.name = strdup(DEFAULT_LEMON_NAME);
+		// We use strdup() for consistency with free() later on
+		lemon->lemon_cfg.name = strdup(DEFAULT_LEMON_NAME);
 	}
 
 	// TODO hardcoded value for the buffer, also 512 would probably do just fine
-	if (open_lemon(&lemonbar, 1024) == -1)
+	if (open_lemon(lemon, 1024) == -1)
 	{
-		fprintf(stderr, "Failed to open bar: %s\n", lemonbar.name);
+		fprintf(stderr, "Failed to open bar: %s\n", lemon->sid);
 		return EXIT_FAILURE;
 	}
 
@@ -1449,21 +1453,21 @@ int main(int argc, char **argv)
 	 */
 
 	// Create blocks by parsing the format string
-	size_t parsed = parse_format(lemonbar.lemon_cfg.format, found_block_handler, &state);
+	size_t parsed = parse_format(lemon->lemon_cfg.format, found_block_handler, &state);
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
 			parsed, state.num_blocks);
 
 	// Exit if no blocks could be loaded and 'empty' option isn't present
-	if (state.num_blocks == 0 && prefs.empty == 0)
+	if (state.num_blocks == 0 && prefs->empty == 0)
 	{
 		fprintf(stderr, "No blocks loaded, stopping %s.\n", SUCCADE_NAME);
 		return EXIT_FAILURE;
 	}
 
-	if (load_block_cfg(&state) == -1)
+	if (load_block_cfg(&state) < 0)
 	{
-		fprintf(stderr, "Failed to load config file: %s\n", prefs.config);
+		fprintf(stderr, "Failed to load config file: %s\n", prefs->config);
 		return EXIT_FAILURE;
 	}
 
@@ -1472,7 +1476,7 @@ int main(int argc, char **argv)
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			fprintf(stderr, "Block #%zu: %s -> %s\n", i, 
-					state.blocks[i].block_cfg.name,
+					state.blocks[i].sid,
 					state.blocks[i].block_cfg.bin);
 		}
 	}
@@ -1531,8 +1535,8 @@ int main(int argc, char **argv)
 	int max_events = state.num_sparks + 1;
 	struct epoll_event tev[max_events];
 
-	char bar_output[BUFFER_SIZE];
-	bar_output[0] = '\0';
+	//char bar_output[BUFFER_SIZE];
+	//bar_output[0] = '\0';
 
 	running = 1;
 	
@@ -1626,7 +1630,7 @@ int main(int argc, char **argv)
 				//if (state.blocks[i].used == 0)
 				if (block->child.last == 0.0)
 				{
-					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->name);
+					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->sid);
 					//state.blocks[i].waited = 0.0;
 					block->child.last = now;
 					continue;
@@ -1634,7 +1638,7 @@ int main(int argc, char **argv)
 				//if (state.blocks[i].waited >= state.blocks[i].reload)
 				if (waited >= block->block_cfg.reload)
 				{
-					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->name);
+					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->sid);
 					//state.blocks[i].waited = 0.0;
 					block->child.last = now;
 					continue;
@@ -1644,7 +1648,7 @@ int main(int argc, char **argv)
 			// SPARKED BLOCK
 			if (block->type == BLOCK_SPARKED)
 			{
-				fprintf(stderr, "*** RUN SPARKED BLOCK: %s\n", block->name);
+				fprintf(stderr, "*** RUN SPARKED BLOCK: %s\n", block->sid);
 				//state.blocks[i].used = 1;
 				block->child.last = now;
 				//free(state.blocks[i].input);
@@ -1660,7 +1664,7 @@ int main(int argc, char **argv)
 				if (block->child.last == 0.0)
 				//if (state.blocks[i].used == 0)
 				{
-					fprintf(stderr, "*** RUN STATIC BLOCK: %s\n", block->name);
+					fprintf(stderr, "*** RUN STATIC BLOCK: %s\n", block->sid);
 					//state.blocks[i].used = 1;
 					block->child.last = now;
 					continue;
@@ -1705,8 +1709,8 @@ int main(int argc, char **argv)
 
 		// Let's update bar! 
 		//feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
-		fputs("HELLO WORLD\n", state.lemon->child.fp[FD_IN]);
-		wait = 2;
+		fputs("HELLO WORLD\n", state.lemon.child.fp[FD_IN]);
+		wait = 2.0;
 	}
 
 	/*
@@ -1715,6 +1719,8 @@ int main(int argc, char **argv)
 
 	fprintf(stderr, "Performing clean-up ...\n");
 	close(state.epfd);
+
+	free(default_cfg_path);
 
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
@@ -1733,8 +1739,8 @@ int main(int argc, char **argv)
 	free(state.blocks);
 
 	// Close bar
-	close_lemon(&lemonbar);
-	free_lemon(&lemonbar);
+	close_lemon(&state.lemon);
+	free_lemon(&state.lemon);
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
 

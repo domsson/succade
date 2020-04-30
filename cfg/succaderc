@@ -4,13 +4,13 @@ name = "testbar"
 # format is required, it lists the blocks to display
 format = "desktop | datetime | temp"
 # dock defines bar's position: 'top' or 'bottom'
-dock = bottom
+dock = top
 # height of the bar in pixel
 height = 24
 # default font color
-foreground = "#e0e2e4"
+foreground = "#000000"
 # default background color for the entire bar
-background = "#293134"
+background = "#ce7942"
 # display underline? true or false
 underline = true
 # display overline? true or false

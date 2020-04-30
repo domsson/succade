@@ -12,6 +12,14 @@ int equals(const char *str1, const char *str2)
 }
 
 /*
+ * Returns 1 if the input string is NULL or empty, otherwise 0.
+ */
+int empty(const char *str)
+{
+	return (str == NULL || str[0] == '\0');
+}
+
+/*
  * Returns 1 if the input string is quoted, otherwise 0.
  */
 int is_quoted(const char *str)

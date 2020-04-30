@@ -14,7 +14,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	// Check for `name` and set the appropriate property
 	if (equals(name, "name"))
 	{
-		lemon->name = is_quoted(value) ? unquote(value) : strdup(value);
+		lc->name = is_quoted(value) ? unquote(value) : strdup(value);
 		return 1;
 	}
 	if (equals(name, "bin") || equals(name, "cmd") || equals(name, "command"))
