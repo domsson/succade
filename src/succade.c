@@ -224,6 +224,8 @@ int open_child(child_s *child, int in, int out, int err)
 	fp_linebuffered(child->fp[FD_ERR]);
 
 	// Remember the time of this invocation
+	// TODO - or should this be set by the calling context?
+	//      - or should this only be set after READING from the child?
 	child->last = get_time();
 
 	return 0;
@@ -470,29 +472,39 @@ int block_due(block_s *block, double now)
 		return block->spark->child.output != NULL;
 	}
 
-	// Live blocks are due if they have unprocessed output available
+	// Live blocks are due if they have unread data available
 	if (block->type == BLOCK_LIVE)
-	{
-		// TODO implement logic
-		return 0;
+	{	
+		return block->child.ready;
 	}
 
-	// Unknown block type (WTF)
+	// Unknown block type (WTF?)
 	return 0;
 }
 
+/*
+ * Attempt to read from the child's stdout file pointer, and store the result, 
+ * if any, in the child's `output` field.
+ */
 int read_child(child_s *child, size_t len)
 {
 	// TODO maybe use getline() instead? It allocates a suitable buffer!
 	char *buf = malloc(len);
 	size_t num_lines = 0;
 
+	// TODO we need to figure out if all use-cases are okay with just 
+	//      calling fgets() once; at least one use-case was using the
+	//      while-loop approach; not sure if that might now break?
+	/*
 	while (fgets(buf, len, child->fp[FD_OUT]) != NULL)
 	{
 		++num_lines;
 	}
 
 	if (num_lines == 0)
+	*/
+
+	if (fgets(buf, len, child->fp[FD_OUT]) == NULL)
 	{
 		fprintf(stderr, "read_child(): fgets() failed\n");
 		if (feof(child->fp[FD_OUT]))   fprintf(stderr, "\t(EOF)\n");
@@ -538,32 +550,11 @@ int run_block(block_s *b, size_t result_length)
 		return -1;
 	}
 
-/*	
-	char *result = malloc(result_length);
-	if (fgets(result, result_length, b->child.fp[FD_OUT]) == NULL)
-	{
-		fprintf(stderr, "Unable to fetch input from block: `%s`\n", b->sid);
-		if (feof(b->child.fp[FD_OUT]))   fprintf(stderr, "Reading from block failed (EOF): %s\n", b->sid);
-		if (ferror(b->child.fp[FD_OUT])) fprintf(stderr, "Reading from block failed (err): %s\n", b->sid);
-		close_block(b);
-		return -1;
-	}
-
-	// Clear out the previous output, if any
-	if (b->child.output != NULL)
-	{
-		free(b->child.output);
-		b->child.output = NULL;
-	}
-	
-	result[strcspn(result, "\n")] = 0; // Remove '\n'
-	b->child.output = result; // Copy pointer to result over
-*/
 	read_child(&b->child, result_length);
 
 	// Update the block's state accordingly
 	// TODO should open_child() set this instead? currently both do...
-	b->child.last = get_time();
+	//b->child.last = get_time();
 
 	// Discard block's input, as it has now been processed
 	free(b->child.input);
@@ -1625,15 +1616,14 @@ int main(int argc, char **argv)
 		}
 	}
 
-	/*
-	size_t num_blocks_opened = open_blocks(&state);
-
-	if (DEBUG)
+	// Actually run all LIVE blocks, so we can register their events
+	for (int i = 0; i < state.num_blocks; ++i)
 	{
-		fprintf(stderr, "Number of blocks: parsed = %zu, opened = %zu\n", 
-				state.num_blocks, num_blocks_opened);
+		if (state.blocks[i].type == BLOCK_LIVE)
+		{
+			open_block(&state.blocks[i]);
+		}
 	}
-	*/
 
 	/*
 	 * SPARKS - fire when their respective commands produce output
@@ -1758,28 +1748,37 @@ int main(int argc, char **argv)
 					break;
 				case CHILD_BLOCK:
 					fprintf(stderr, "*** BLOCK EVENT\n");
-					// TODO make sure we fetch the block's output
-					// TODO make sure we update bar with new block output 
+					((block_s*)event->thing)->child.ready = 1;
 					break;
 				case CHILD_SPARK:
 					fprintf(stderr, "*** SPARK EVENT\n");
-					spark_s *spark = (spark_s *) event->thing;
-					run_spark(spark);
-					// TODO make sure we fetch the spark's output
-					// TODO make sure we re-run the spark's block
+					((spark_s*)event->thing)->child.ready = 1;
 					break;
 			}
 			event->dirty = 0;
 		}
 
-		// Handle BLOCKS
-		// TODO open blocks that aren't open yet
-		// TODO open sparks that aren't open yet
+		// Handle SPARKS
+		spark_s *spark = NULL;
+		for (size_t i = 0; i < state.num_sparks; ++i)
+		{
+			spark = &state.sparks[i];
+		
+			if (!spark->child.ready)
+			{
+				continue;
+			}
 
+			fprintf(stderr, "*** RUNNING SPARK: %s\n", spark->child.cmd);
+			run_spark(spark);
+			spark->child.last = now; // TODO where/when to set this d00d?
+		}
+
+		// Handle BLOCKS
 		block_s *block = NULL;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
-			block  = &state.blocks[i];
+			block = &state.blocks[i];
 			
 			if (!block_due(block, now))
 			{
@@ -1787,8 +1786,18 @@ int main(int argc, char **argv)
 			}
 
 			fprintf(stderr, "*** RUNNING BLOCK: %s\n", block->sid);
-			run_block(block, BUFFER_SIZE);
+			if (block->type == BLOCK_LIVE)
+			{
+				// TODO should run_block() take care of this as well?
+				//      it would be consistent with run_spark()
+				read_child(&block->child, BUFFER_SIZE);
+			}
+			else
+			{
+				run_block(block, BUFFER_SIZE);
+			}
 			block->child.last = now; // TODO this is already set by run_block() AND open_child()...
+			block->child.ready = 0;
 		}
 
 		/*

@@ -151,7 +151,7 @@ struct succade_child
 	char *output;          // output of the last invocation
 
 	double last;           // time of last invocation (0.0 for never) TODO or time of last READ?
-	unsigned ready : 1;    // fd has new data available for reading
+	unsigned ready : 1;    // fd has new data available for reading TODO maybe make it int and save the fp index that is ready?
 
 	child_type_e  type;    // type of data: lemon, block or spark
 	void         *thing;   // associated lemon, block or spark struct 
