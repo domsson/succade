@@ -150,11 +150,11 @@ struct succade_child
 	char *input;           // input for the next invocation
 	char *output;          // output of the last invocation
 
-	double last;           // time of last invocation (0.0 for never)
+	double last;           // time of last invocation (0.0 for never) TODO or time of last READ?
 	unsigned ready : 1;    // fd has new data available for reading
 
 	child_type_e  type;    // type of data: lemon, block or spark
-	void         *data;    // associated lemon, block or spark struct 
+	void         *thing;   // associated lemon, block or spark struct 
 };
 
 struct succade_lemon
@@ -179,7 +179,7 @@ struct succade_spark
 {
 	child_s       child;     // associated child process
 	child_type_e  type;      // type of data: lemon or block
-	void         *data;      // associated lemon or block struct
+	void         *thing;     // associated lemon or block struct
 
 	//unsigned ready : 1;    // fd has new data available for reading
 };
@@ -188,7 +188,7 @@ struct succade_event
 {
 	fdesc_type_e fd_type;    // stdin, stdout, stderr?
 	child_type_e ev_type;    // Type of data
-	void *data;              // Ptr to lemon, a block or a spark
+	void *thing;             // Ptr to lemon, a block or a spark
 	int fd;                  // File descriptor of data->fp[0], [1] or [2]
 	unsigned registered : 1; // Registered with epoll?
 	unsigned dirty : 1;      // Unhandled activity has occurred

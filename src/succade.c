@@ -26,10 +26,6 @@ static void init_block(block_s *block)
 	//block->block_cfg.reload = 5.0;
 }
 
-static void init_spark(spark_s *spark)
-{
-}
-
 /*
  * Frees all members of the given bar that need freeing.
  */
@@ -182,8 +178,7 @@ char *lemon_arg(lemon_s *lemon)
 	return arg;
 }
 
-// TODO - not in use yet!
-//      - would be nice if we didn't have to hand in `in`, `out` and `err`
+// TODO would be nice if we didn't have to hand in `in`, `out` and `err`
 int open_child(child_s *child, int in, int out, int err)
 {
 	if (child->pid > 0)
@@ -227,6 +222,10 @@ int open_child(child_s *child, int in, int out, int err)
 	fp_linebuffered(child->fp[FD_IN]);
 	fp_linebuffered(child->fp[FD_OUT]);
 	fp_linebuffered(child->fp[FD_ERR]);
+
+	// Remember the time of this invocation
+	child->last = get_time();
+
 	return 0;
 }
 
@@ -282,7 +281,9 @@ int open_block(block_s *block)
 
 	// Execute the block and retrieve its PID
 	int success = open_child(child, 0, 1, 0);
-	//fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
+	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
+
+	// TODO should we clear out child->arg here?
 
 	// Return 0 on success, -1 on error
 	return success; 
@@ -396,7 +397,7 @@ size_t open_sparks(state_s *state)
 	size_t num_sparks_opened = 0;
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		num_sparks_opened += (open_spark(&state->sparks[i]) == 0) ? 1 : 0;
+		num_sparks_opened += (open_spark(&state->sparks[i]) == 0);
 	}
 	return num_sparks_opened;
 }
@@ -446,6 +447,71 @@ void free_sparks(state_s *state)
 	}
 }
 
+int block_due(block_s *block, double now)
+{
+	// One-shot blocks are due if they have never been run before
+	if (block->type == BLOCK_ONCE)
+	{
+		return block->child.last == 0.0;
+	}
+
+	// Timed blocks are due if their reload time has elapsed
+	if (block->type == BLOCK_TIMED)
+	{
+		double elapsed = now - block->child.last;
+		return elapsed > block->block_cfg.reload;
+	}
+
+	// Sparked blocks are due if their spark has new output
+	if (block->type == BLOCK_SPARKED)
+	{
+		// TODO - currently, the output is never cleared I think?
+		//      - or should we check for the block's input instead?
+		return block->spark->child.output != NULL;
+	}
+
+	// Live blocks are due if they have unprocessed output available
+	if (block->type == BLOCK_LIVE)
+	{
+		// TODO implement logic
+		return 0;
+	}
+
+	// Unknown block type (WTF)
+	return 0;
+}
+
+int read_child(child_s *child, size_t len)
+{
+	// TODO maybe use getline() instead? It allocates a suitable buffer!
+	char *buf = malloc(len);
+	size_t num_lines = 0;
+
+	while (fgets(buf, len, child->fp[FD_OUT]) != NULL)
+	{
+		++num_lines;
+	}
+
+	if (num_lines == 0)
+	{
+		fprintf(stderr, "read_child(): fgets() failed\n");
+		if (feof(child->fp[FD_OUT]))   fprintf(stderr, "\t(EOF)\n");
+		if (ferror(child->fp[FD_OUT])) fprintf(stderr, "\t(err)\n");
+		return -1;
+	}
+
+	if (child->output)
+	{
+		free(child->output);
+		child->output = NULL;
+	}
+
+	buf[strcspn(buf, "\n")] = 0; // Remove '\n'
+	child->output = buf; // Copy pointer to result over
+
+	return 0;
+}
+
 /*
  * Executes the given block by calling open_block() on it and saves the output 
  * of the block, if any, in its `result` field. If the block was run for the 
@@ -458,11 +524,11 @@ int run_block(block_s *b, size_t result_length)
 {
 	if (b->type == BLOCK_LIVE)
 	{
-		fprintf(stderr, "Block is live: `%s`\n", b->sid);
+		fprintf(stderr, "run_block(): not running live block `%s`\n", b->sid);
 		return -1;
 	}
 
-	fprintf(stderr, "Attempting to open block `%s`\n", b->sid);
+	fprintf(stderr, "run_block(): attempting to open block `%s`\n", b->sid);
 
 	open_block(b);
 	if (b->child.fp[FD_OUT] == NULL)
@@ -471,8 +537,8 @@ int run_block(block_s *b, size_t result_length)
 		close_block(b); // In case it has a PID already    TODO does this make sense?
 		return -1;
 	}
-		
-	// TODO maybe use getline() instead? It allocates a suitable buffer!
+
+/*	
 	char *result = malloc(result_length);
 	if (fgets(result, result_length, b->child.fp[FD_OUT]) == NULL)
 	{
@@ -483,6 +549,7 @@ int run_block(block_s *b, size_t result_length)
 		return -1;
 	}
 
+	// Clear out the previous output, if any
 	if (b->child.output != NULL)
 	{
 		free(b->child.output);
@@ -491,17 +558,18 @@ int run_block(block_s *b, size_t result_length)
 	
 	result[strcspn(result, "\n")] = 0; // Remove '\n'
 	b->child.output = result; // Copy pointer to result over
+*/
+	read_child(&b->child, result_length);
 
 	// Update the block's state accordingly
-	//b->used = 1;     // Mark this block as having run at least once
-	//b->waited = 0.0; // This block was last run... now!
+	// TODO should open_child() set this instead? currently both do...
 	b->child.last = get_time();
 
 	// Discard block's input, as it has now been processed
 	free(b->child.input);
 	b->child.input = NULL;
 
-	// Close the block (unless it is a live block? We should rethink this)
+	// Close the block
 	close_block(b);
 	return 0;
 }
@@ -710,7 +778,6 @@ char *barstr(const state_s *state)
  */
 size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
 {
-
 	// Can't pipe to bar if its file descriptor isn't available
 	if (state->lemon.child.fp[FD_IN] == NULL)
 	{
@@ -978,7 +1045,7 @@ event_s *get_event(state_s *state, void *thing, child_type_e ev_type, fdesc_type
 		{
 			continue;
 		}
-		if (state->events[i].data == thing)
+		if (state->events[i].thing == thing)
 		{
 			return &state->events[i];
 		}
@@ -1113,7 +1180,7 @@ event_s *add_event(state_s *state, child_type_e ev_type, fdesc_type_e fd_type, v
 	state->events[current] = (event_s) { 0 };
 	state->events[current].ev_type = ev_type;
 	state->events[current].fd_type = fd_type;
-	state->events[current].data    = thing;
+	state->events[current].thing   = thing;
 	state->events[current].fd      = child->fp[fd_type] ?
 				fileno(child->fp[fd_type]) : -1;
 
@@ -1128,6 +1195,7 @@ size_t create_events(state_s *state)
 {
 	// Add LEMON
 	// TODO do we also need to add an event for FD_ERR and/or FD_IN?
+	fprintf(stderr, "Creating event for LEMONBAR\n");
 	add_event(state, CHILD_LEMON, FD_OUT, &state->lemon);
 
 	// Add LIVE blocks
@@ -1183,9 +1251,8 @@ size_t create_sparks(state_s *state)
 		}
 
 		state->sparks[num_sparks] = (spark_s) { 0 };
-		init_spark(&state->sparks[num_sparks]);
 		state->sparks[num_sparks].child.cmd = strdup(block->block_cfg.trigger);
-		state->sparks[num_sparks].data = (void*) block;
+		state->sparks[num_sparks].thing = (void*) block;
 		num_sparks += 1;
 	}
 
@@ -1208,39 +1275,30 @@ size_t run_spark(spark_s *spark)
 	}
 
 	// We're only going to deal with BLOCK sparks for now... TODO
+	// ... (actually, will there ever be any OTHER sparks?!)
 	if (spark->type != CHILD_BLOCK)
 	{
 		return 0;
 	}
 
-	char res[BUFFER_SIZE];
-	size_t num_lines = 0;
-
-	while (fgets(res, BUFFER_SIZE, spark->child.fp[FD_OUT]) != NULL)
+	// Sparks should only be associated with sparked blocks...
+	/*
+	block_s *block = (block_s*) spark->thing;
+	if (block->type != BLOCK_SPARKED)
 	{
-		++num_lines;
+		return 0;
 	}
+	*/
 
+	size_t num_lines = read_child(&spark->child, BUFFER_SIZE);
+
+	// TODO should we really save the result BOTH in the block child 
+	//      as well as in the spark child!? quite redundant, isn't it...
 	if (num_lines)
 	{
-		block_s *block = (block_s*) spark->data;
-
-		// Make sure we clear out any previous input
+		block_s *block = (block_s*) spark->thing;
 		free(block->child.input);
-		block->child.input = NULL;
-
-		// For live blocks, this will be the actual output
-		if (block->type == BLOCK_LIVE)
-		{
-			block->child.output = strdup(res);
-			// Remove '\n'
-			block->child.output[strcspn(block->child.output, "\n")] = 0;
-		}
-		// For regular blocks, this will be input for the block
-		else
-		{
-			block->child.input = strdup(res);
-		}
+		block->child.input = strdup(spark->child.output);
 	}
 	
 	return num_lines;
@@ -1356,7 +1414,6 @@ void sigint_handler(int sig)
 void sigchld_handler(int sig)
 {
 	sigchld = 1;
-	//sigchld = waitpid(-1, NULL, WNOHANG);
 }
 
 void reap_children(state_s *state)
@@ -1569,6 +1626,16 @@ int main(int argc, char **argv)
 	}
 
 	/*
+	size_t num_blocks_opened = open_blocks(&state);
+
+	if (DEBUG)
+	{
+		fprintf(stderr, "Number of blocks: parsed = %zu, opened = %zu\n", 
+				state.num_blocks, num_blocks_opened);
+	}
+	*/
+
+	/*
 	 * SPARKS - fire when their respective commands produce output
 	 */
 
@@ -1646,9 +1713,10 @@ int main(int argc, char **argv)
 		int num_events = epoll_wait(state.epfd, tev, max_events, wait * MILLISEC_PER_SEC);
 
 		// Mark all events with activity as dirty
+		event_s *ev = NULL;
 		for (int i = 0; i < num_events; ++i)
 		{
-			event_s *ev = tev[i].data.ptr;
+			ev = tev[i].data.ptr;
 
 			if (tev[i].events & EPOLLIN)
 			{
@@ -1668,107 +1736,60 @@ int main(int argc, char **argv)
 		}
 
 		// TODO Handle dirty events
+		//      - why don't we do this in the previous loop!? 
+		//        do we even need the 'dirty' flag?!
+
 		event_s *event = NULL;
 		for (size_t i = 0; i < state.num_events; ++i)
 		{
 			event = &state.events[i];
 
-			if (event->dirty)
+			if (!event->dirty)
 			{
-				//handle_event(&state.events[i]);
-				switch (event->ev_type)
-				{
-					case CHILD_LEMON:
-						fprintf(stderr, "*** LEMON EVENT\n");
-						break;
-					case CHILD_BLOCK:
-						fprintf(stderr, "*** BLOCK EVENT\n");
-						break;
-					case CHILD_SPARK:
-						fprintf(stderr, "*** SPARK EVENT\n");
-						break;
-				}
-				event->dirty = 0;
+				continue;
 			}
-		}	
+
+			//handle_event(&state.events[i]);
+			switch (event->ev_type)
+			{
+				case CHILD_LEMON:
+					fprintf(stderr, "*** LEMON EVENT\n");
+					// TODO make us log or print lemonbar's output
+					break;
+				case CHILD_BLOCK:
+					fprintf(stderr, "*** BLOCK EVENT\n");
+					// TODO make sure we fetch the block's output
+					// TODO make sure we update bar with new block output 
+					break;
+				case CHILD_SPARK:
+					fprintf(stderr, "*** SPARK EVENT\n");
+					spark_s *spark = (spark_s *) event->thing;
+					run_spark(spark);
+					// TODO make sure we fetch the spark's output
+					// TODO make sure we re-run the spark's block
+					break;
+			}
+			event->dirty = 0;
+		}
 
 		// Handle BLOCKS
 		// TODO open blocks that aren't open yet
 		// TODO open sparks that aren't open yet
-		// TODO blocks can have a trigger AND reload, don't run them twice..
-		//      also, reload=0.0 alone doesn't mean STATIC, it could be a 
-		//      triggered one. we need some more elegant logic here! 
-		block_s *block = NULL;
-		double now = get_time();
-		double waited = 0.0;
 
+		block_s *block = NULL;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block  = &state.blocks[i];
-			waited = now - block->child.last;
-
-			// TIMED BLOCK
-			if (block->type == BLOCK_TIMED)
+			
+			if (!block_due(block, now))
 			{
-				// Update the time this block has waited
-				//state.blocks[i].child.waited += delta;
-
-				// Block has never been run before, do it now!
-				//if (state.blocks[i].used == 0)
-				if (block->child.last == 0.0)
-				{
-					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->sid);
-					//state.blocks[i].waited = 0.0;
-					block->child.last = now;
-					continue;
-				}
-				//if (state.blocks[i].waited >= state.blocks[i].reload)
-				if (waited >= block->block_cfg.reload)
-				{
-					fprintf(stderr, "*** RUN TIMED BLOCK: %s\n", block->sid);
-					//state.blocks[i].waited = 0.0;
-					block->child.last = now;
-					continue;
-				}
+				continue;
 			}
 
-			// SPARKED BLOCK
-			if (block->type == BLOCK_SPARKED)
-			{
-				fprintf(stderr, "*** RUN SPARKED BLOCK: %s\n", block->sid);
-				//state.blocks[i].used = 1;
-				block->child.last = now;
-				//free(state.blocks[i].input);
-				free(block->child.input);
-				//state.blocks[i].input = NULL;
-				block->child.input = NULL;
-			}
-
-			// STATIC BLOCK
-			//else if (state.blocks[i].reload == 0.0)
-			else if (block->type == BLOCK_ONCE)
-			{
-				if (block->child.last == 0.0)
-				//if (state.blocks[i].used == 0)
-				{
-					fprintf(stderr, "*** RUN STATIC BLOCK: %s\n", block->sid);
-					//state.blocks[i].used = 1;
-					block->child.last = now;
-					continue;
-				}
-			}
+			fprintf(stderr, "*** RUNNING BLOCK: %s\n", block->sid);
+			run_block(block, BUFFER_SIZE);
+			block->child.last = now; // TODO this is already set by run_block() AND open_child()...
 		}
-
-		// Fetch input from all marked triggers
-		/*
-		for (int i = 0; i < state.num_sparks; ++i)
-		{
-			if (state.sparks[i].ready)
-			{
-				run_spark(&state.sparks[i]);
-			}
-		}
-		*/
 
 		/*
 		// Let's see if Lemonbar produced any output
@@ -1796,7 +1817,13 @@ int main(int argc, char **argv)
 
 		// Let's update bar! 
 		//feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
-		fputs("HELLO WORLD\n", state.lemon.child.fp[FD_IN]);
+
+		char *lemonbar_str = barstr(&state);
+		// TODO add error handling (EOF => bar dead?)
+		fputs(lemonbar_str, lemon->child.fp[FD_IN]);
+		free(lemonbar_str);
+		
+		//fputs("HELLO WORLD\n", state.lemon.child.fp[FD_IN]);
 		wait = 2.0;
 	}
 
