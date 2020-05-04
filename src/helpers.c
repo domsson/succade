@@ -135,10 +135,11 @@ const char *strsel(const char *str1, const char *str2,  const char *str3)
  * Creates a string suitable for use as a command line option, where the given 
  * character `o` will be used for the switch/option and the given string `arg`
  * will be the argument for that option. If the given `arg` string is NULL, an 
- * empty string is returned. In any case, the returned string is dynamically 
- * allocated, so remember to free it at some point.
+ * empty string is returned. The `arg` string will always be placed in quotes. 
+ * Make sure to escape all quotes in `arg`, or you will get unexpected results.
+ * The returned string is dynamically allocated, please free it at some point.
  */
-char *optstr(char o, const char *arg)
+char *optstr(char o, const char *arg, int space)
 {
 	char *str = NULL;
 
@@ -146,7 +147,7 @@ char *optstr(char o, const char *arg)
 	{
 		size_t len = strlen(arg) + 6;
 		str = malloc(len);
-		snprintf(str, len, "-%c \"%s\"", o, arg);
+		snprintf(str, len, "-%c%s\"%s\"", o, (space ? " " : ""), arg);
 	}
 	else
 	{

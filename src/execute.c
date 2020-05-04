@@ -12,7 +12,7 @@ extern char **environ; // Required to pass the environment to child cmds
  *      posix_spawn(). The difference is that the latter expect an absolute 
  *      or relative file path to the executable, while the former expect to 
  *      simply receive a filename which will then be searched for in PATH.
- *      The questio is, which one actually makes more sense for us to use?
+ *      The question is, which one actually makes more sense for us to use?
  *      Can the former _also_ handle file paths? Or do we need to look at 
  *      the commands given, figure out if they are a path, then call one or 
  *      the other function accordingly? Some more testing is required here!
@@ -29,7 +29,7 @@ extern char **environ; // Required to pass the environment to child cmds
  * the return value of this function only indicates whether the child process 
  * was successfully forked or not.
  */
-pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
+pid_t popen_noshell(const char *cmd, FILE **in, FILE **out, FILE **err)
 {
 	if (!cmd || !strlen(cmd))
 	{
@@ -37,19 +37,19 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 	}
 
 	// 0 = read end of pipes, 1 = write end of pipes
+	int pipe_stdin[2];
 	int pipe_stdout[2];
 	int pipe_stderr[2];
-	int pipe_stdin[2];
 
+	if (in && (pipe(pipe_stdin) < 0))
+	{
+		return -1;
+	}
 	if (out && (pipe(pipe_stdout) < 0))
 	{
 		return -1;
 	}
 	if (err && (pipe(pipe_stderr) < 0))
-	{
-		return -1;
-	}
-	if (in && (pipe(pipe_stdin) < 0))
 	{
 		return -1;
 	}
@@ -61,6 +61,15 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 	}
 	else if (pid == 0) // child
 	{
+		// redirect stdin to the read end of this pipe
+		if (in)
+		{
+			if (dup2(pipe_stdin[0], STDIN_FILENO) == -1)
+			{
+				_exit(-1);
+			}
+			close(pipe_stdin[1]); // child doesn't need write end
+		}
 		// redirect stdout to the write end of this pipe
 		if (out)
 		{
@@ -79,15 +88,6 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 			}
 			close(pipe_stderr[0]); // child doesn't need read end
 		}
-		// redirect stdin to the read end of this pipe
-		if (in)
-		{
-			if (dup2(pipe_stdin[0], STDIN_FILENO) == -1)
-			{
-				_exit(-1);
-			}
-			close(pipe_stdin[1]); // child doesn't need write end
-		}
 
 		wordexp_t p;
 		if (wordexp(cmd, &p, 0) != 0)
@@ -104,6 +104,11 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 	}
 	else // parent
 	{
+		if (in)
+		{
+			close(pipe_stdin[0]);  // parent doesn't need read end
+			*in = fdopen(pipe_stdin[1], "w");
+		}
 		if (out)
 		{
 			close(pipe_stdout[1]); // parent doesn't need write end
@@ -113,11 +118,6 @@ pid_t popen_noshell(const char *cmd, FILE **out, FILE **err, FILE **in)
 		{
 			close(pipe_stderr[1]); // parent doesn't need write end
 			*err = fdopen(pipe_stderr[0], "r");
-		}
-		if (in)
-		{
-			close(pipe_stdin[0]); // parent doesn't need read end
-			*in = fdopen(pipe_stdin[1], "w");
 		}
 		return pid;
 	}

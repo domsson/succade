@@ -102,10 +102,10 @@ int lemon_cmd(lemon_s *lemon, char *buf, size_t buf_len)
 	snprintf(w, 8, "%d", lcfg->w);
 	snprintf(h, 8, "%d", lcfg->h);
 
-	char *block_font = optstr('f', lcfg->block_font);
-	char *label_font = optstr('f', lcfg->label_font);
-	char *affix_font = optstr('f', lcfg->affix_font);
-	char *name_str   = optstr('n', lcfg->name);
+	char *block_font = optstr('f', lcfg->block_font, 0);
+	char *label_font = optstr('f', lcfg->label_font, 0);
+	char *affix_font = optstr('f', lcfg->affix_font, 0);
+	char *name_str   = optstr('n', lcfg->name, 0);
 
 	int cmd_len = snprintf(buf, buf_len,
 		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
@@ -134,8 +134,58 @@ int lemon_cmd(lemon_s *lemon, char *buf, size_t buf_len)
 	return cmd_len;
 }
 
-// TODO not in use yet!
-int open_child(child_s *child)
+/*
+ * Command line options and arguments string for lemonbar.
+ * Allocated with malloc(), so please free() it at some point.
+ * TODO not in use yet, should eventually replace lemon_cmd()
+ */
+char *lemon_arg(lemon_s *lemon)
+{
+	lemon_cfg_s *lcfg = &lemon->lemon_cfg;
+	block_cfg_s *bcfg = &lemon->block_cfg;
+
+	char w[8]; // TODO hardcoded (8 is what we want tho) 
+	char h[8];
+
+	snprintf(w, 8, "%d", lcfg->w);
+	snprintf(h, 8, "%d", lcfg->h);
+
+	char *block_font = optstr('f', lcfg->block_font, 0);
+	char *label_font = optstr('f', lcfg->label_font, 0);
+	char *affix_font = optstr('f', lcfg->affix_font, 0);
+	char *name_str   = optstr('n', lcfg->name, 0);
+
+	char *arg = malloc(sizeof(char) * 1024); // TODO hardcoded (1024 is what we want tho)
+
+	snprintf(arg, 1024,
+		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
+		(lcfg->w > 0) ? w : "",                      // max 8
+		(lcfg->h > 0) ? h : "",                      // max 8
+		lcfg->x,                                     // max 8
+		lcfg->y,                                     // max 8
+		(bcfg->fg && bcfg->fg[0]) ? bcfg->fg : "-",  // strlen, max 9
+		(lcfg->bg && lcfg->bg[0]) ? lcfg->bg : "-",  // strlen, max 9
+		(bcfg->lc && bcfg->lc[0]) ? bcfg->lc : "-",  // strlen, max 9
+		lcfg->lw,                                    // max 4
+		(lcfg->bottom) ? "-b" : "",                  // max 2
+		(lcfg->force)  ? "-d" : "",                  // max 2
+		block_font,                                  // strlen, max 255
+		label_font,                                  // strlen, max 255
+		affix_font,                                  // strlen, max 255
+		name_str                                     // strlen
+	);
+
+	free(block_font);
+	free(label_font);
+	free(affix_font);
+	free(name_str);
+
+	return arg;
+}
+
+// TODO - not in use yet!
+//      - would be nice if we didn't have to hand in `in`, `out` and `err`
+int open_child(child_s *child, int in, int out, int err)
 {
 	if (child->pid > 0)
 	{
@@ -155,12 +205,16 @@ int open_child(child_s *child)
 	{
 		size_t len = strlen(child->cmd) + strlen(child->arg) + 4;
 		cmd = malloc(sizeof(char) * len);
-		snprintf(cmd, len, "%s '%s'", child->cmd, child->arg);
+		snprintf(cmd, len, "%s %s", child->cmd, child->arg);
+		fprintf(stderr, "open_child(): %s\n", cmd);
 	}
 
 	// Execute the block and retrieve its PID
-	child->pid = popen_noshell(cmd ? cmd : child->cmd, &(child->fp[FD_OUT]), 
-			&(child->fp[FD_ERR]), &(child->fp[FD_IN]));
+	child->pid = popen_noshell(
+			cmd ? cmd : child->cmd, 
+			in  ? &(child->fp[FD_IN])  : NULL,
+			out ? &(child->fp[FD_OUT]) : NULL,
+		        err ? &(child->fp[FD_ERR]) : NULL);
 	free(cmd);
 	
 	// Check if that worked
@@ -191,28 +245,26 @@ int open_child(child_s *child)
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
-int open_lemon(lemon_s *lemon, size_t buf_len)
+int open_lemon(lemon_s *lemon)
 {
 	child_s *child = &lemon->child;
 
-	char bar_cmd[buf_len];
-	bar_cmd[0] = '\0';
-	lemon_cmd(lemon, bar_cmd, buf_len);
+	if (empty(child->cmd))
+	{
+		child->cmd = strdup(lemon->lemon_cfg.bin);
+	}
+
+	if (empty(child->arg))
+	{
+		child->arg = lemon_arg(lemon);
+	}
 
 	if (DEBUG)
 	{
-		fprintf(stderr, "Bar command: (length %zu/%zu)\n\t%s\n", strlen(bar_cmd), buf_len, bar_cmd);
+		fprintf(stderr, "Bar command: %s %s\n", child->cmd, child->arg);
 	}
-
-	child->pid = popen_noshell(bar_cmd, &(child->fp[FD_OUT]), NULL, &(child->fp[FD_IN]));
-	if (child->pid == -1)
-	{
-		return -1;
-	}
-	setlinebuf(child->fp[FD_OUT]);
-	setlinebuf(child->fp[FD_IN]);
-
-	return 0;
+	
+	return open_child(child, 1, 1, 0);
 }
 
 /*
@@ -224,39 +276,27 @@ int open_block(block_s *block)
 {
 	child_s *child = &block->child;
 
-	// Check if block already has PID (likely already/still running)
-	if (child->pid > 0)
+	// If no cmd given for child, use `bin` from config or `sid` from block
+	if (empty(child->cmd))
 	{
-		fprintf(stderr, "Block already open: %s\n", block->sid);
-		return -1;
+		child->cmd = block->block_cfg.bin ? strdup(block->block_cfg.bin) : strdup(block->sid);
 	}
 
-	// If no binary given, use the block's section ID
-	char *bin = block->block_cfg.bin ? block->block_cfg.bin : block->sid;
-
-	// Construct the cmd string with or without input
-	char *cmd = NULL;
-	size_t cmd_len = 0;
 	if (child->input)
 	{
-		cmd_len = strlen(bin) + strlen(child->input) + 4;
-		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s '%s'", bin, child->input);
-	}
-	else
-	{
-		cmd_len = strlen(bin) + 1;
-		cmd = malloc(cmd_len);
-		snprintf(cmd, cmd_len, "%s", bin);
+		// Place a quoted version of `input` into `arg`
+		free(child->arg);
+		size_t arg_len = strlen(child->input) + 3;
+		child->arg = malloc(sizeof(char) * arg_len);
+		snprintf(child->arg, arg_len, "'%s'", child->input);
 	}
 
 	// Execute the block and retrieve its PID
-	child->pid = popen_noshell(cmd, &(child->fp[FD_OUT]), NULL, NULL);
-	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
-	free(cmd);
+	int success = open_child(child, 0, 1, 0);
+	//fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
 
 	// Return 0 on success, -1 on error
-	return (child->pid == -1) ? -1 : 0;
+	return success; 
 }
 
 /*
@@ -324,7 +364,7 @@ int open_spark(spark_s *spark)
 		return -1;
 	}
 	
-	child->pid = popen_noshell(child->cmd, &(child->fp[FD_OUT]), NULL, NULL);
+	child->pid = popen_noshell(child->cmd, NULL, &(child->fp[FD_OUT]), NULL);
 	if (child->pid == -1)
 	{
 		return -1;
@@ -1470,7 +1510,7 @@ int main(int argc, char **argv)
 	 * BAR
 	 */
 
-	// Copy the Section ID from the config for convenience
+	// Copy the Section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
 
 	// Read the config file and parse bar's section
@@ -1494,8 +1534,8 @@ int main(int argc, char **argv)
 		lemon->lemon_cfg.name = strdup(DEFAULT_LEMON_NAME);
 	}
 
-	// TODO hardcoded value for the buffer, also 512 would probably do just fine
-	if (open_lemon(lemon, 1024) == -1)
+	// Open (run) the lemon
+	if (open_lemon(lemon) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", lemon->sid);
 		return EXIT_FAILURE;
