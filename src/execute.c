@@ -1,11 +1,48 @@
 #include <stdio.h>     // fdopen(), FILE, ...
 #include <unistd.h>    // pipe(), fork(), dup(), close(), _exit(), ...
 #include <string.h>    // strlen()
+#include <fcntl.h>     // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <spawn.h>     // posix_spawnp()
 #include <wordexp.h>   // wordexp(), wordfree(), ...
 #include <sys/types.h> // pid_t
 
 extern char **environ; // Required to pass the environment to child cmds
+
+/*
+ * Set the given file pointer to be line buffered.
+ * Returns 0 on success, -1 on error.
+ */
+int fp_linebuffered(FILE *fp)
+{
+	if (fp == NULL)
+	{
+		return -1;
+	}
+
+	setlinebuf(fp);
+	return 0;
+}
+
+/*
+ * Set the file descriptor for the given file pointer to be non-blocking.
+ * Returns 0 on success, -1 on error.
+ */
+int fp_nonblocking(FILE *fp)
+{
+	if (fp == NULL)
+	{
+		return -1;
+	}
+
+	int fd = fileno(fp);
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags == -1)
+	{
+		return -1;
+	}
+	flags |= O_NONBLOCK;
+	return fcntl(fd, F_SETFL, flags);
+}
 
 /*
  * TODO we're using execvp() and posix_spawnp() instead of execv() and 
@@ -130,7 +167,7 @@ pid_t popen_noshell(const char *cmd, FILE **in, FILE **out, FILE **err)
 pid_t run_cmd(const char *cmd)
 {
 	// Return early if cmd is NULL or empty
-	if (cmd == NULL || !strlen(cmd))
+	if (cmd == NULL || cmd[0] == '\0')
 	{
 		return -1;
 	}

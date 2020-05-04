@@ -239,25 +239,28 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	{
 		if (is_quoted(value)) // String means trigger!
 		{
+			block->type = BLOCK_SPARKED;
 			bc->trigger = unquote(value);
 			bc->reload = 0.0;
 		}
 		else
 		{
+			block->type = BLOCK_TIMED;
 			bc->reload = atof(value);
 		}
 		return 1;
 	}
 	if (equals(name, "trigger"))
 	{
+		block->type = BLOCK_SPARKED;
 		bc->trigger = is_quoted(value) ? unquote(value) : strdup(value);
 		bc->reload = 0.0;
 		return 1;
 	}
 	if (equals(name, "live"))
 	{
+		block->type = BLOCK_LIVE;
 		bc->live = equals(value, "true");
-		// TODO free/null trigger and reload?
 		return 1;
 	}
 	if (equals(name, "mouse-left"))

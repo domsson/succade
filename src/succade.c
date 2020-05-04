@@ -1,7 +1,6 @@
 #include <stdlib.h>    // NULL, size_t, EXIT_SUCCESS, EXIT_FAILURE, ...
 #include <string.h>    // strlen(), strcmp(), ...
 #include <signal.h>    // sigaction(), ... 
-#include <fcntl.h>     // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <float.h>     // DBL_MAX
 #include <sys/epoll.h> // epoll_wait(), ... 
 #include <sys/types.h> // pid_t
@@ -224,20 +223,10 @@ int open_child(child_s *child, int in, int out, int err)
 		return -1;
 	}
 	
-	// TODO do we really always want linebuf for ALL THREE streams?
-	if (child->fp[FD_IN])
-	{
-		setlinebuf(child->fp[FD_IN]);
-	}
-	if (child->fp[FD_OUT])
-	{
-		setlinebuf(child->fp[FD_OUT]);
-	}
-	if (child->fp[FD_ERR])
-	{
-		setlinebuf(child->fp[FD_ERR]);
-	}
-
+	// TODO do we really ALWAYS want linebuf for ALL THREE streams?
+	fp_linebuffered(child->fp[FD_IN]);
+	fp_linebuffered(child->fp[FD_OUT]);
+	fp_linebuffered(child->fp[FD_ERR]);
 	return 0;
 }
 
@@ -359,22 +348,13 @@ int open_spark(spark_s *spark)
 {
 	child_s *child = &spark->child;
 
-	if (child->cmd == NULL)
-	{
-		return -1;
-	}
-	
-	child->pid = popen_noshell(child->cmd, NULL, &(child->fp[FD_OUT]), NULL);
+	open_child(child, 0, 1, 0);
 	if (child->pid == -1)
 	{
 		return -1;
 	}
 
-	setlinebuf(child->fp[FD_OUT]); // TODO add error handling
-	int fd = fileno(child->fp[FD_OUT]);
-	int flags = fcntl(fd, F_GETFL, 0); // TODO add error handling
-	flags |= O_NONBLOCK;
-	fcntl(fd, F_SETFL, flags); // TODO add error handling
+	fp_nonblocking(child->fp[FD_OUT]);
 	return 0;
 }
 
@@ -873,8 +853,8 @@ block_s *get_block(const state_s *state, const char *sid)
 }
 
 /*
- * Add the block with the given SID to the collection of blocks in the given 
- * block container, unless there is already a block with that SID in there. 
+ * Add the block with the given SID to the collection of blocks, unless there 
+ * is already a block with that SID present. 
  * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
 block_s *add_block(state_s *state, const char *sid)
@@ -986,11 +966,15 @@ static int load_block_cfg(state_s *state)
 /*
  * Find the event for the given lemon/block/spark or NULL if not found.
  */
-event_s *get_event(state_s *state, void *thing, child_type_e ev_type)
+event_s *get_event(state_s *state, void *thing, child_type_e ev_type, fdesc_type_e fd_type)
 {
 	for (size_t i = 0; i < state->num_events; ++i)
 	{
 		if (state->events[i].ev_type != ev_type)
+		{
+			continue;
+		}
+		if (state->events[i].fd_type != fd_type)
 		{
 			continue;
 		}
@@ -1018,12 +1002,6 @@ int register_event(state_s *state, event_s *ev)
 	{
 		return -1;
 	}
-
-	// TODO (maybe)
-	//if (ev is not in state->events)
-	//{
-	//	return -1;
-	//}
 
 	struct epoll_event eev = { 0 };
 	eev.data.ptr = ev;
@@ -1059,12 +1037,6 @@ int unregister_event(state_s *state, event_s *ev)
 		return -1;
 	}
 
-	// TODO (maybe)
-	//if (ev is not in state->events)
-	//{
-	//	return -1;
-	//}
-	
 	if (epoll_ctl(state->epfd, EPOLL_CTL_DEL, ev->fd, NULL) == 0)
 	{
 		// Success!
@@ -1094,13 +1066,59 @@ size_t register_events(state_s *state)
 {
 	size_t num_registered = 0;
 
+	event_s *event = NULL;
 	for (size_t i = 0; i < state->num_events; ++i)
 	{
-		fprintf(stderr, "Registering for fd=%d (%d)\n", state->events[i].fd, state->events[i].ev_type);
-		int res = register_event(state, &state->events[i]);
+		event = &state->events[i];
+		fprintf(stderr, "Registering for fd=%d (%d)\n", event->fd, event->ev_type);
+		int res = register_event(state, event);
 		num_registered += (res == 0);
 	}
 	return num_registered;
+}
+
+event_s *add_event(state_s *state, child_type_e ev_type, fdesc_type_e fd_type, void *thing)
+{
+	// See if there is an existing event that matches the given params
+	// TODO this iterates over all events, every time we call this function
+	//      when that's not needed when we call it from create_events();
+	//      hence we should make this optional via a flag or something...
+	event_s *ee = get_event(state, thing, ev_type, fd_type);
+	if (ee)
+	{
+		return ee;
+	}
+
+	// Resize the event array to be able to hold one more event
+	int current = state->num_events;
+	state->num_events += 1;
+	state->events = realloc(state->events, sizeof(event_s) * state->num_events);
+	 
+	// Get the child of the thing
+	child_s *child = NULL;
+	switch (ev_type)
+	{
+		case CHILD_LEMON:
+			child = &((lemon_s *)thing)->child;
+			break;
+		case CHILD_BLOCK:
+			child = &((block_s *)thing)->child;
+			break;
+		case CHILD_SPARK:
+			child = &((spark_s *)thing)->child;
+			break;
+	}
+
+	// Create the event, setting all the important bits accordingly
+	state->events[current] = (event_s) { 0 };
+	state->events[current].ev_type = ev_type;
+	state->events[current].fd_type = fd_type;
+	state->events[current].data    = thing;
+	state->events[current].fd      = child->fp[fd_type] ?
+				fileno(child->fp[fd_type]) : -1;
+
+	// Return a pointer to the new event
+	return &state->events[current];
 }
 
 /*
@@ -1108,19 +1126,9 @@ size_t register_events(state_s *state)
  */
 size_t create_events(state_s *state)
 {
-	size_t max_events = state->num_blocks + state->num_sparks + 1;
-	state->events = malloc(sizeof(event_s) * max_events);
-
-	size_t num_events = 0;
-
 	// Add LEMON
-	state->events[num_events] = (event_s) { 0 };
-	state->events[num_events].ev_type = CHILD_LEMON;
-	state->events[num_events].fd_type = FD_OUT;
-	state->events[num_events].data    = &state->lemon;
-	state->events[num_events].fd      = state->lemon.child.fp[FD_OUT] ?
-				fileno(state->lemon.child.fp[FD_OUT]) : -1;
-	num_events += 1;
+	// TODO do we also need to add an event for FD_ERR and/or FD_IN?
+	add_event(state, CHILD_LEMON, FD_OUT, &state->lemon);
 
 	// Add LIVE blocks
 	block_s *block = NULL;
@@ -1134,13 +1142,7 @@ size_t create_events(state_s *state)
 		}
 
 		fprintf(stderr, "Creating event for BLOCK %s\n", block->sid);
-		state->events[num_events] = (event_s) { 0 };
-		state->events[num_events].ev_type = CHILD_BLOCK;
-		state->events[num_events].fd_type = FD_OUT;
-		state->events[num_events].data    = (void*) block;
-		state->events[num_events].fd      = block->child.fp[FD_OUT] ?
-					fileno(block->child.fp[FD_OUT]) : -1;
-		num_events += 1;
+		add_event(state, CHILD_BLOCK, FD_OUT, block);
 	}
 
 	// Add SPARKs
@@ -1150,19 +1152,10 @@ size_t create_events(state_s *state)
 		spark = &state->sparks[i];
 
 		fprintf(stderr, "Creating event for SPARK %s\n", spark->child.cmd);
-		state->events[num_events] = (event_s) { 0 };
-		state->events[num_events].ev_type = CHILD_SPARK;
-		state->events[num_events].fd_type = FD_OUT;
-		state->events[num_events].data    = (void*) spark;
-		state->events[num_events].fd      = spark->child.fp[FD_OUT] ?
-					fileno(spark->child.fp[FD_OUT]) : -1;
-		num_events += 1;
+		add_event(state, CHILD_SPARK, FD_OUT, spark);
 	}
 	
-	// Resize to whatever amount of memory we actually needed
-	state->events = realloc(state->events, sizeof(event_s) * num_events);
-	state->num_events = num_events;
-	return num_events;
+	return state->num_events;
 }
 
 size_t create_sparks(state_s *state)
@@ -1183,16 +1176,17 @@ size_t create_sparks(state_s *state)
 	{
 		block = &state->blocks[i];
 		
-		// Block that's triggered by another program's output
-		if (block->type == BLOCK_SPARKED)
+		// We only care about triggered/sparked blocks
+		if (block->type != BLOCK_SPARKED)
 		{
-			state->sparks[num_sparks] = (spark_s) { 0 };
-			init_spark(&state->sparks[num_sparks]);
-			state->sparks[num_sparks].child.cmd = strdup(block->block_cfg.trigger);
-			state->sparks[num_sparks].data = (void*) block;
-			num_sparks += 1;
 			continue;
 		}
+
+		state->sparks[num_sparks] = (spark_s) { 0 };
+		init_spark(&state->sparks[num_sparks]);
+		state->sparks[num_sparks].child.cmd = strdup(block->block_cfg.trigger);
+		state->sparks[num_sparks].data = (void*) block;
+		num_sparks += 1;
 	}
 
 	// Resize to whatever amount of memory we actually needed
