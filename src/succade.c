@@ -226,7 +226,7 @@ int open_child(child_s *child, int in, int out, int err)
 	// Remember the time of this invocation
 	// TODO - or should this be set by the calling context?
 	//      - or should this only be set after READING from the child?
-	child->last = get_time();
+	child->last_run = get_time();
 
 	return 0;
 }
@@ -449,18 +449,31 @@ void free_sparks(state_s *state)
 	}
 }
 
+double block_due_in(block_s *block, double now)
+{
+	return block->type == BLOCK_TIMED ? 
+		block->block_cfg.reload - (now - block->child.last_run) :
+		DBL_MAX;
+}
+
 int block_due(block_s *block, double now)
 {
+	if (block == NULL)
+	{
+		fprintf(stderr, "block_due(): block == NULL\n");
+		return 0;
+	}
+
 	// One-shot blocks are due if they have never been run before
 	if (block->type == BLOCK_ONCE)
 	{
-		return block->child.last == 0.0;
+		return block->child.last_run == 0.0;
 	}
 
 	// Timed blocks are due if their reload time has elapsed
 	if (block->type == BLOCK_TIMED)
 	{
-		double elapsed = now - block->child.last;
+		double elapsed = now - block->child.last_run;
 		return elapsed > block->block_cfg.reload;
 	}
 
@@ -469,13 +482,18 @@ int block_due(block_s *block, double now)
 	{
 		// TODO - currently, the output is never cleared I think?
 		//      - or should we check for the block's input instead?
+		if (block->spark == NULL)
+		{
+			fprintf(stderr, "block_due(): spark missing for block '%s'\n", block->sid);
+			return 0;
+		}
 		return block->spark->child.output != NULL;
 	}
 
 	// Live blocks are due if they have unread data available
 	if (block->type == BLOCK_LIVE)
 	{	
-		return block->child.ready;
+		return block->child.ready || block->child.last_read == 0.0;
 	}
 
 	// Unknown block type (WTF?)
@@ -495,6 +513,11 @@ int read_child(child_s *child, size_t len)
 	// TODO we need to figure out if all use-cases are okay with just 
 	//      calling fgets() once; at least one use-case was using the
 	//      while-loop approach; not sure if that might now break?
+	//      In particular, isn't it bad if we don't consume all the 
+	//      data that is available for read? But the issue is that if
+	//      we use the while approach with live blocks or sparks, then 
+	//      the while will keep on looping forever...
+
 	/*
 	while (fgets(buf, len, child->fp[FD_OUT]) != NULL)
 	{
@@ -521,6 +544,7 @@ int read_child(child_s *child, size_t len)
 	buf[strcspn(buf, "\n")] = 0; // Remove '\n'
 	child->output = buf; // Copy pointer to result over
 
+	child->last_read = get_time();
 	return 0;
 }
 
@@ -764,6 +788,33 @@ char *barstr(const state_s *state)
 	return bar_str;
 }
 
+int feed_child(child_s *child, const char *input)
+{
+	// Child has no open stdin file pointer
+	if (child->fp[FD_IN] == NULL)
+	{
+		return -1;
+	}
+
+	// Input given, use that (it takes precedence)
+	if (input)
+	{
+		return fputs(input, child->fp[FD_IN]);
+	}
+
+	// No input given, but child has input available, use that
+	if (child->input)
+	{
+		int ret = fputs(child->input, child->fp[FD_IN]);
+		free(child->input);
+		child->input = NULL;
+		return ret;
+	}
+
+	// No input given, nor does child have any
+	return -1;
+}
+
 /*
  * TODO add comment, possibly some refactoring
  */
@@ -803,7 +854,7 @@ size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
 
 		// Updated the time this block hasn't been run
 		//blocks[i].waited += delta;
-		waited = get_time() - block->child.last;
+		waited = get_time() - block->child.last_run;
 
 		// Calc how long until this block should be run
 		//idle_left = blocks[i].reload - blocks[i].waited;
@@ -811,7 +862,7 @@ size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
 
 		// Block was never run before OR block has input waiting OR
 		// it's time to run this block according to it's reload option
-		if (block->child.last == 0.0 || block->child.input || 
+		if (block->child.last_run == 0.0 || block->child.input || 
 				(block->block_cfg.reload > 0.0 && idle_left < tolerance))
 		{
 			num_blocks_executed += 
@@ -819,7 +870,7 @@ size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
 		}
 
 		//idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
-		waited = get_time() - block->child.last;
+		waited = get_time() - block->child.last_run;
 		idle_left = block->block_cfg.reload - waited;
 
 		// Possibly update the time until we should run feed_lemon again
@@ -1217,6 +1268,11 @@ size_t create_events(state_s *state)
 	return state->num_events;
 }
 
+// TODO I'd like to have an `add_spark()` function, just like we have 
+//      for blocks and events (yes, that means one realloc() per spark
+//      instead of only one at the end, but since this only happens at
+//      startup, I think we can afford this perfomance penalty for the
+//      cleaner and more reusable / modular code)
 size_t create_sparks(state_s *state)
 {
 	// No need for sparks if there aren't any blocks
@@ -1243,13 +1299,38 @@ size_t create_sparks(state_s *state)
 
 		state->sparks[num_sparks] = (spark_s) { 0 };
 		state->sparks[num_sparks].child.cmd = strdup(block->block_cfg.trigger);
+		state->sparks[num_sparks].type  = CHILD_BLOCK;
 		state->sparks[num_sparks].thing = (void*) block;
+		
 		num_sparks += 1;
 	}
 
 	// Resize to whatever amount of memory we actually needed
 	state->sparks = realloc(state->sparks, sizeof(spark_s) * num_sparks);
 	state->num_sparks = num_sparks;
+
+	// Since realloc() can change memory addresses of the sparks, we can't 
+	// save references to the sparks in the associated blocks before the 
+	// call to it, hence we will do that now...
+
+	spark_s *spark = NULL;	
+	for (size_t i = 0; i < state->num_sparks; ++i)
+	{
+		fprintf(stderr, ">>> LOL %zu\n", i);
+
+		spark = &state->sparks[i];
+
+		// Currently, there should only be sparks for blocks
+		if (spark->type != CHILD_BLOCK)
+		{
+			// But just in case...
+			continue;
+		}
+	
+		block_s *b = (block_s*) spark->thing;
+		b->spark = spark;	
+	}
+
 	return num_sparks;
 }
 
@@ -1771,7 +1852,6 @@ int main(int argc, char **argv)
 
 			fprintf(stderr, "*** RUNNING SPARK: %s\n", spark->child.cmd);
 			run_spark(spark);
-			spark->child.last = now; // TODO where/when to set this d00d?
 		}
 
 		// Handle BLOCKS
@@ -1782,6 +1862,7 @@ int main(int argc, char **argv)
 			
 			if (!block_due(block, now))
 			{
+				fprintf(stderr, "No block due (wait = %f)\n", wait);
 				continue;
 			}
 
@@ -1796,9 +1877,25 @@ int main(int argc, char **argv)
 			{
 				run_block(block, BUFFER_SIZE);
 			}
-			block->child.last = now; // TODO this is already set by run_block() AND open_child()...
 			block->child.ready = 0;
 		}
+
+		// Figure out when we need to run next (timed blocks)
+		double due = DBL_MAX;
+		double thing_due = DBL_MAX;
+		for (size_t i = 0; i < state.num_blocks; ++i)
+		{
+			block = &state.blocks[i];
+			thing_due = block_due_in(block, now);
+
+			if (thing_due < due)
+			{
+				due = thing_due;
+			}
+		}
+
+		// Update `wait` accordingly (-1 = not waiting on any blocks)
+		wait = due == DBL_MAX ? -1 : due;
 
 		/*
 		// Let's see if Lemonbar produced any output
@@ -1827,13 +1924,12 @@ int main(int argc, char **argv)
 		// Let's update bar! 
 		//feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
 
-		char *lemonbar_str = barstr(&state);
+		char *lemon_input = barstr(&state);
 		// TODO add error handling (EOF => bar dead?)
-		fputs(lemonbar_str, lemon->child.fp[FD_IN]);
-		free(lemonbar_str);
+		feed_child(&lemon->child, lemon_input);
+		free(lemon_input);
 		
 		//fputs("HELLO WORLD\n", state.lemon.child.fp[FD_IN]);
-		wait = 2.0;
 	}
 
 	/*

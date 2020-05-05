@@ -150,7 +150,8 @@ struct succade_child
 	char *input;           // input for the next invocation
 	char *output;          // output of the last invocation
 
-	double last;           // time of last invocation (0.0 for never) TODO or time of last READ?
+	double last_run;       // time of last invocation (0.0 for never)
+	double last_read;      // time of last read from stdout (TODO what about stderr)
 	unsigned ready : 1;    // fd has new data available for reading TODO maybe make it int and save the fp index that is ready?
 
 	child_type_e  type;    // type of data: lemon, block or spark
