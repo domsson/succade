@@ -23,7 +23,6 @@ static volatile int sigchld;   // SIGCHLD has been received, please handle
 static void init_block(block_s *block)
 {
 	block->block_cfg.offset = -1;
-	//block->block_cfg.reload = 5.0;
 }
 
 /*
@@ -31,24 +30,7 @@ static void init_block(block_s *block)
  */
 static void free_lemon(lemon_s *lemon)
 {
-	/*
-	free(lemon->name);
-	free(lemon->bin);
-	free(lemon->fg);
-	free(lemon->bg);
-	free(lemon->lc);
-	free(lemon->prefix);
-	free(lemon->suffix);
-	free(lemon->format);
-	free(lemon->block_font);
-	free(lemon->label_font);
-	free(lemon->affix_font);
-	free(lemon->block_bg);
-	free(lemon->label_fg);
-	free(lemon->label_bg);
-	free(lemon->affix_fg);
-	free(lemon->affix_bg);
-	*/
+	// TODO implement!
 }
 
 /*
@@ -56,77 +38,7 @@ static void free_lemon(lemon_s *lemon)
  */
 static void free_block(block_s *block)
 {
-	/*
-	free(block->name);
-	free(block->bin);
-	free(block->fg);
-	free(block->bg);
-	free(block->lc);
-	free(block->label_fg);
-	free(block->label_bg);
-	free(block->affix_fg);
-	free(block->affix_bg);
-	free(block->label);
-	free(block->trigger);
-	free(block->cmd_lmb);
-	free(block->cmd_mmb);
-	free(block->cmd_rmb);
-	free(block->cmd_sup);
-	free(block->cmd_sdn);
-	free(block->input);
-	free(block->result);
-	*/
-}
-
-/*
- * Constructs the command string for running the bar, ready to be used with 
- * popen_noshell() or similar, and places it in the provided buffer `buf`, 
- * whose length is assumed to be `buf_len`. If the buffer size is not large 
- * enough to hold the entire command string, truncation will occur. 
- * Returns the strlen() of the constructed string.
- */
-int lemon_cmd(lemon_s *lemon, char *buf, size_t buf_len)
-{
-	lemon_cfg_s *lcfg = &lemon->lemon_cfg;
-	block_cfg_s *bcfg = &lemon->block_cfg;
-
-	// https://stackoverflow.com/questions/3919995/
-	char w[8]; // TODO hardcoded value
-	char h[8];
-
-	snprintf(w, 8, "%d", lcfg->w);
-	snprintf(h, 8, "%d", lcfg->h);
-
-	char *block_font = optstr('f', lcfg->block_font, 0);
-	char *label_font = optstr('f', lcfg->label_font, 0);
-	char *affix_font = optstr('f', lcfg->affix_font, 0);
-	char *name_str   = optstr('n', lcfg->name, 0);
-
-	int cmd_len = snprintf(buf, buf_len,
-		"%s -g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
-		lcfg->bin,                                   // strlen
-		(lcfg->w > 0) ? w : "",                      // max 8
-		(lcfg->h > 0) ? h : "",                      // max 8
-		lcfg->x,                                     // max 8
-		lcfg->y,                                     // max 8
-		(bcfg->fg && bcfg->fg[0]) ? bcfg->fg : "-",  // strlen, max 9
-		(lcfg->bg && lcfg->bg[0]) ? lcfg->bg : "-",  // strlen, max 9
-		(bcfg->lc && bcfg->lc[0]) ? bcfg->lc : "-",  // strlen, max 9
-		lcfg->lw,                                    // max 4
-		(lcfg->bottom) ? "-b" : "",                  // max 2
-		(lcfg->force)  ? "-d" : "",                  // max 2
-		block_font,                                  // strlen
-		label_font,                                  // strlen
-		affix_font,                                  // strlen
-		name_str                                     // strlen
-	);
-
-	free(block_font);
-	free(label_font);
-	free(affix_font);
-	free(name_str);
-
-	return cmd_len;
+	// TODO implement!
 }
 
 /*
@@ -272,6 +184,7 @@ int open_block(block_s *block)
 		child->cmd = block->block_cfg.bin ? strdup(block->block_cfg.bin) : strdup(block->sid);
 	}
 
+	/*
 	if (child->input)
 	{
 		// Place a quoted version of `input` into `arg`
@@ -280,6 +193,7 @@ int open_block(block_s *block)
 		child->arg = malloc(sizeof(char) * arg_len);
 		snprintf(child->arg, arg_len, "'%s'", child->input);
 	}
+	*/
 
 	// Execute the block and retrieve its PID
 	int success = open_child(child, 0, 1, 0);
@@ -456,7 +370,7 @@ double block_due_in(block_s *block, double now)
 		DBL_MAX;
 }
 
-int block_due(block_s *block, double now)
+int block_is_due(block_s *block, double now, double tolerance)
 {
 	if (block == NULL)
 	{
@@ -474,7 +388,9 @@ int block_due(block_s *block, double now)
 	if (block->type == BLOCK_TIMED)
 	{
 		double elapsed = now - block->child.last_run;
-		return elapsed > block->block_cfg.reload;
+		double time_left = block->block_cfg.reload - elapsed;
+		//return elapsed > block->block_cfg.reload;
+		return time_left < tolerance;
 	}
 
 	// Sparked blocks are due if their spark has new output
@@ -506,6 +422,13 @@ int block_due(block_s *block, double now)
  */
 int read_child(child_s *child, size_t len)
 {
+	// Can't read from child if its `stdout` is dead
+	if (child->fp[FD_OUT] == NULL)
+	{
+		fprintf(stderr, "read_child(): stdout dead: `%s`\n", child->cmd);
+		return -1;
+	}
+	
 	// TODO maybe use getline() instead? It allocates a suitable buffer!
 	char *buf = malloc(len);
 	size_t num_lines = 0;
@@ -529,7 +452,7 @@ int read_child(child_s *child, size_t len)
 
 	if (fgets(buf, len, child->fp[FD_OUT]) == NULL)
 	{
-		fprintf(stderr, "read_child(): fgets() failed\n");
+		fprintf(stderr, "read_child(): fgets() failed: `%s`\n", child->cmd);
 		if (feof(child->fp[FD_OUT]))   fprintf(stderr, "\t(EOF)\n");
 		if (ferror(child->fp[FD_OUT])) fprintf(stderr, "\t(err)\n");
 		return -1;
@@ -548,6 +471,13 @@ int read_child(child_s *child, size_t len)
 	return 0;
 }
 
+int block_can_consume(block_s *b)
+{
+	return b->type == BLOCK_SPARKED
+		&& b->block_cfg.consume
+		&& !empty(b->spark->child.output);
+}
+
 /*
  * Executes the given block by calling open_block() on it and saves the output 
  * of the block, if any, in its `result` field. If the block was run for the 
@@ -558,35 +488,34 @@ int read_child(child_s *child, size_t len)
  */
 int run_block(block_s *b, size_t result_length)
 {
+	fprintf(stderr, "run_block(): running `%s`\n", b->sid);
+	
+	// Live blocks should be open already, we just read them
 	if (b->type == BLOCK_LIVE)
 	{
-		fprintf(stderr, "run_block(): not running live block `%s`\n", b->sid);
-		return -1;
+		return read_child(&b->child, result_length);
 	}
 
-	fprintf(stderr, "run_block(): attempting to open block `%s`\n", b->sid);
-
-	open_block(b);
-	if (b->child.fp[FD_OUT] == NULL)
+	// Sparked blocks will be run with the spark's output, if any, as `arg`
+	if (b->type == BLOCK_SPARKED && block_can_consume(b))
 	{
-		fprintf(stderr, "Block is dead: `%s`\n", b->sid);
-		close_block(b); // In case it has a PID already    TODO does this make sense?
-		return -1;
+		b->child.arg = strdup(b->spark->child.output);
 	}
 
-	read_child(&b->child, result_length);
+	int success = 0;
+	// TODO can we be sure there will be something to read IMMEDIATELY?
+	success += open_block(b);                        // -1 on error
+	success += read_child(&b->child, result_length); // -1 on error
+	close_block(b); // TODO does this also return error indication?
 
-	// Update the block's state accordingly
-	// TODO should open_child() set this instead? currently both do...
-	//b->child.last = get_time();
+	// If this was a sparked block, free it's `arg` again
+	if (b->type == BLOCK_SPARKED)
+	{
+		free(b->child.arg);
+		b->child.arg = NULL;
+	}
 
-	// Discard block's input, as it has now been processed
-	free(b->child.input);
-	b->child.input = NULL;
-
-	// Close the block
-	close_block(b);
-	return 0;
+	return success;
 }
 
 /*
@@ -749,14 +678,6 @@ char *barstr(const state_s *state)
 	for (int i = 0; i < num_blocks; ++i)
 	{
 		block = &blocks[i];
-		// TODO just quick hack to get this working, this shouldn't be required here!
-		/*
-		if (blocks[i].bin == NULL)
-		{
-			fprintf(stderr, "Block binary not given for '%s', skipping\n", blocks[i].name);
-			continue;
-		}
-		*/
 
 		// Live blocks might not have a result available
 		if (block->child.output == NULL)
@@ -796,103 +717,13 @@ int feed_child(child_s *child, const char *input)
 		return -1;
 	}
 
-	// Input given, use that (it takes precedence)
-	if (input)
-	{
-		return fputs(input, child->fp[FD_IN]);
-	}
-
-	// No input given, but child has input available, use that
-	if (child->input)
-	{
-		int ret = fputs(child->input, child->fp[FD_IN]);
-		free(child->input);
-		child->input = NULL;
-		return ret;
-	}
-
-	// No input given, nor does child have any
-	return -1;
-}
-
-/*
- * TODO add comment, possibly some refactoring
- */
-size_t feed_lemon(state_s *state, double delta, double tolerance, double *next)
-{
-	// Can't pipe to bar if its file descriptor isn't available
-	if (state->lemon.child.fp[FD_IN] == NULL)
+	// No input given, or input is empty 
+	if (empty(input))
 	{
 		return -1;
 	}
-	
-	// For convenience...
-	lemon_s *bar = &state->lemon;
-	block_s *blocks = state->blocks;
-	size_t num_blocks = state->num_blocks;
 
-	size_t num_blocks_executed = 0;	
-	double until_next = DBL_MAX;
-	double idle_left;
-
-	block_s *block = NULL;
-	double waited = 0.0;
-	for (size_t i = 0; i < num_blocks; ++i)
-	{
-		block = &blocks[i];
-
-		// Skip live blocks, they will update based on their output
-		//if (blocks[i].live && blocks[i].result)
-		// ^-- why did we do the '&& block[i].result' thing?
-		if (block->type == BLOCK_LIVE)
-		{
-			// However, we count them as executed block so that
-			// we actually end up updating the bar further down
-			++num_blocks_executed;
-			continue;
-		}
-
-		// Updated the time this block hasn't been run
-		//blocks[i].waited += delta;
-		waited = get_time() - block->child.last_run;
-
-		// Calc how long until this block should be run
-		//idle_left = blocks[i].reload - blocks[i].waited;
-		idle_left = block->block_cfg.reload - waited;
-
-		// Block was never run before OR block has input waiting OR
-		// it's time to run this block according to it's reload option
-		if (block->child.last_run == 0.0 || block->child.input || 
-				(block->block_cfg.reload > 0.0 && idle_left < tolerance))
-		{
-			num_blocks_executed += 
-				(run_block(block, BUFFER_SIZE) == 0) ? 1 : 0;
-		}
-
-		//idle_left = blocks[i].reload - blocks[i].waited; // Recalc!
-		waited = get_time() - block->child.last_run;
-		idle_left = block->block_cfg.reload - waited;
-
-		// Possibly update the time until we should run feed_lemon again
-		if (block->child.input == NULL && idle_left < until_next)
-		{
-			// If reload is 0, this block idles forever
-			if (block->block_cfg.reload > 0.0)
-			{
-				until_next = (idle_left > 0.0) ? idle_left : 0.0;
-			}
-		}
-	}
-	*next = until_next;
-
-	if (num_blocks_executed)
-	{
-		char *lemonbar_str = barstr(state);
-		// TODO add error handling (EOF => bar dead?)
-		fputs(lemonbar_str, bar->child.fp[FD_IN]);
-		free(lemonbar_str);
-	}
-	return num_blocks_executed;
+	return fputs(input, child->fp[FD_IN]);
 }
 
 /*
@@ -1189,9 +1020,6 @@ size_t register_events(state_s *state)
 event_s *add_event(state_s *state, child_type_e ev_type, fdesc_type_e fd_type, void *thing)
 {
 	// See if there is an existing event that matches the given params
-	// TODO this iterates over all events, every time we call this function
-	//      when that's not needed when we call it from create_events();
-	//      hence we should make this optional via a flag or something...
 	event_s *ee = get_event(state, thing, ev_type, fd_type);
 	if (ee)
 	{
@@ -1268,70 +1096,69 @@ size_t create_events(state_s *state)
 	return state->num_events;
 }
 
-// TODO I'd like to have an `add_spark()` function, just like we have 
-//      for blocks and events (yes, that means one realloc() per spark
-//      instead of only one at the end, but since this only happens at
-//      startup, I think we can afford this perfomance penalty for the
-//      cleaner and more reusable / modular code)
-size_t create_sparks(state_s *state)
+spark_s *get_spark(state_s *state, void *block, const char *cmd)
 {
-	// No need for sparks if there aren't any blocks
-	if (state->num_blocks == 0)
+	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		return 0;
+		if (state->sparks[i].block != block)
+		{
+			continue;
+		}
+		if (!equals(state->sparks[i].child.cmd, cmd))
+		{
+			continue;
+		}
+		return &state->sparks[i];
+	}
+	return NULL;
+}
+
+spark_s *add_spark(state_s *state, block_s *block, const char *cmd)
+{
+	// See if there is an existing spark that matches the given params
+	spark_s *es = get_spark(state, block, cmd);
+	if (es)
+	{
+		return es;
 	}
 
-	// Use number of blocks as initial size 
-	state->sparks = malloc(sizeof(spark_s) * state->num_blocks);
-	size_t num_sparks = 0;
-	
+	// Resize the spark array to be able to hold one more spark
+	int current = state->num_sparks;
+	state->num_sparks += 1;
+	state->sparks = realloc(state->sparks, sizeof(spark_s) * state->num_sparks);
+	 
+	state->sparks[current] = (spark_s) { 0 };
+	state->sparks[current].child.cmd = strdup(cmd);
+	state->sparks[current].block = block;
+
+	// Add a reference of this spark to the block we've created it for
+	block->spark = &state->sparks[current];
+
+	// Return a pointer to the new spark
+	return &state->sparks[current];
+}
+
+size_t create_sparks(state_s *state)
+{
 	block_s *block = NULL;
-	// Go through all blocks, create sparks as appropriate
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
 		block = &state->blocks[i];
-		
-		// We only care about triggered/sparked blocks
+
 		if (block->type != BLOCK_SPARKED)
 		{
 			continue;
 		}
 
-		state->sparks[num_sparks] = (spark_s) { 0 };
-		state->sparks[num_sparks].child.cmd = strdup(block->block_cfg.trigger);
-		state->sparks[num_sparks].type  = CHILD_BLOCK;
-		state->sparks[num_sparks].thing = (void*) block;
-		
-		num_sparks += 1;
-	}
-
-	// Resize to whatever amount of memory we actually needed
-	state->sparks = realloc(state->sparks, sizeof(spark_s) * num_sparks);
-	state->num_sparks = num_sparks;
-
-	// Since realloc() can change memory addresses of the sparks, we can't 
-	// save references to the sparks in the associated blocks before the 
-	// call to it, hence we will do that now...
-
-	spark_s *spark = NULL;	
-	for (size_t i = 0; i < state->num_sparks; ++i)
-	{
-		fprintf(stderr, ">>> LOL %zu\n", i);
-
-		spark = &state->sparks[i];
-
-		// Currently, there should only be sparks for blocks
-		if (spark->type != CHILD_BLOCK)
+		if (empty(block->block_cfg.trigger))
 		{
-			// But just in case...
+			fprintf(stderr, "create_sparks(): missing trigger for sparked block '%s'\n", block->sid);
 			continue;
 		}
-	
-		block_s *b = (block_s*) spark->thing;
-		b->spark = spark;	
-	}
 
-	return num_sparks;
+		add_spark(state, block, block->block_cfg.trigger);
+	}
+	return state->num_sparks;
 }
 
 /*
@@ -1346,32 +1173,18 @@ size_t run_spark(spark_s *spark)
 		return 0;
 	}
 
-	// We're only going to deal with BLOCK sparks for now... TODO
-	// ... (actually, will there ever be any OTHER sparks?!)
-	if (spark->type != CHILD_BLOCK)
-	{
-		return 0;
-	}
-
-	// Sparks should only be associated with sparked blocks...
-	/*
-	block_s *block = (block_s*) spark->thing;
-	if (block->type != BLOCK_SPARKED)
-	{
-		return 0;
-	}
-	*/
-
 	size_t num_lines = read_child(&spark->child, BUFFER_SIZE);
 
 	// TODO should we really save the result BOTH in the block child 
 	//      as well as in the spark child!? quite redundant, isn't it...
+	/*
 	if (num_lines)
 	{
-		block_s *block = (block_s*) spark->thing;
+		block_s *block = spark->block;
 		free(block->child.input);
 		block->child.input = strdup(spark->child.output);
 	}
+	*/
 	
 	return num_lines;
 }
@@ -1461,7 +1274,7 @@ int process_action(const state_s *state, const char *action)
  * meaning left, center or right, accordingly (indicating where the block is 
  * supposed to be displayed on the bar).
  */
-static void found_block_handler(const char *name, int align, int n, void *data)
+static void on_block_found(const char *name, int align, int n, void *data)
 {
 	// 'Unpack' the data
 	state_s *state = (state_s*) data;
@@ -1669,7 +1482,7 @@ int main(int argc, char **argv)
 	 */
 
 	// Create blocks by parsing the format string
-	size_t parsed = parse_format(lemon->lemon_cfg.format, found_block_handler, &state);
+	size_t parsed = parse_format(lemon->lemon_cfg.format, on_block_found, &state);
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
 			parsed, state.num_blocks);
@@ -1860,7 +1673,7 @@ int main(int argc, char **argv)
 		{
 			block = &state.blocks[i];
 			
-			if (!block_due(block, now))
+			if (!block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
 			{
 				fprintf(stderr, "No block due (wait = %f)\n", wait);
 				continue;
@@ -1881,21 +1694,21 @@ int main(int argc, char **argv)
 		}
 
 		// Figure out when we need to run next (timed blocks)
-		double due = DBL_MAX;
+		double lemon_due = DBL_MAX;
 		double thing_due = DBL_MAX;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block = &state.blocks[i];
 			thing_due = block_due_in(block, now);
 
-			if (thing_due < due)
+			if (thing_due < lemon_due)
 			{
-				due = thing_due;
+				lemon_due = thing_due;
 			}
 		}
 
 		// Update `wait` accordingly (-1 = not waiting on any blocks)
-		wait = due == DBL_MAX ? -1 : due;
+		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
 
 		/*
 		// Let's see if Lemonbar produced any output

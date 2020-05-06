@@ -118,8 +118,8 @@ struct succade_block_cfg
 	unsigned ol : 1;       // Draw overline?
 	unsigned ul : 1;       // Draw underline?
 
-	size_t width: 8;       // Minimum width of result in chars (previously 'padding')
-	int offset : 16;       // Offset to next block in px
+	size_t   width : 8;    // Minimum width of result in chars (previously 'padding')
+	int      offset : 16;  // Offset to next block in px
 	unsigned align;        // -1, 0, 1 (left, center, right)
 	
 	char *prefix;          // Prepend this to the block's result [TODO] this was previously on bar-level only, implement
@@ -127,9 +127,10 @@ struct succade_block_cfg
 	char *label;           // Prefixes the result string
 	char *unit;            // Will be appended to the result string [TODO] implement
 
-	char *trigger;         // Run block based on this cmd's output
-	double reload;         // Interval between runs 
-	unsigned live : 1;     // This block is its own trigger
+	char     *trigger;     // Run block based on this cmd's output
+	unsigned  consume : 1; // Consume the trigger's output, if any
+	double    reload;      // Interval between runs, in seconds 
+	unsigned  live : 1;    // This block is its own trigger
 };
 
 struct succade_click_cfg
@@ -147,7 +148,6 @@ struct succade_child
 	char *arg;             // additional argument string (optional)
 	pid_t pid;             // process ID
 	FILE *fp[3];           // stdin/stdout/stderr file pointers
-	char *input;           // input for the next invocation
 	char *output;          // output of the last invocation
 
 	double last_run;       // time of last invocation (0.0 for never)
@@ -179,10 +179,7 @@ struct succade_block
 struct succade_spark
 {
 	child_s       child;     // associated child process
-	child_type_e  type;      // type of data: lemon or block
-	void         *thing;     // associated lemon or block struct
-
-	//unsigned ready : 1;    // fd has new data available for reading
+	block_s      *block;     // associated lemon or block struct
 };
 
 struct succade_event

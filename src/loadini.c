@@ -257,6 +257,11 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 		bc->reload = 0.0;
 		return 1;
 	}
+	if (equals(name, "consume"))
+	{
+		bc->consume = equals(value, "true");
+		return 1;
+	}
 	if (equals(name, "live"))
 	{
 		block->type = BLOCK_LIVE;
