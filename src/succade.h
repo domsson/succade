@@ -118,7 +118,7 @@ struct succade_block_cfg
 	unsigned ol : 1;       // Draw overline?
 	unsigned ul : 1;       // Draw underline?
 
-	size_t   width : 8;    // Minimum width of result in chars (previously 'padding')
+	size_t   width  :  8;  // Minimum width of result in chars (previously 'padding')
 	int      offset : 16;  // Offset to next block in px
 	unsigned align;        // -1, 0, 1 (left, center, right)
 	
@@ -130,7 +130,7 @@ struct succade_block_cfg
 	char     *trigger;     // Run block based on this cmd's output
 	unsigned  consume : 1; // Consume the trigger's output, if any
 	double    reload;      // Interval between runs, in seconds 
-	unsigned  live : 1;    // This block is its own trigger
+	unsigned  live    : 1; // This block is its own trigger
 };
 
 struct succade_click_cfg
@@ -148,6 +148,7 @@ struct succade_child
 	char *arg;             // additional argument string (optional)
 	pid_t pid;             // process ID
 	FILE *fp[3];           // stdin/stdout/stderr file pointers
+
 	char *output;          // output of the last invocation
 
 	double last_run;       // time of last invocation (0.0 for never)

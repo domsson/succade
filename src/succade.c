@@ -184,17 +184,6 @@ int open_block(block_s *block)
 		child->cmd = block->block_cfg.bin ? strdup(block->block_cfg.bin) : strdup(block->sid);
 	}
 
-	/*
-	if (child->input)
-	{
-		// Place a quoted version of `input` into `arg`
-		free(child->arg);
-		size_t arg_len = strlen(child->input) + 3;
-		child->arg = malloc(sizeof(char) * arg_len);
-		snprintf(child->arg, arg_len, "'%s'", child->input);
-	}
-	*/
-
 	// Execute the block and retrieve its PID
 	int success = open_child(child, 0, 1, 0);
 	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
@@ -332,13 +321,6 @@ void close_sparks(state_s *state)
 void free_spark(spark_s *t)
 {
 	// TODO
-	/*
-	free(t->cmd);
-	t->cmd = NULL;
-
-	t->block = NULL;
-	t->lemon = NULL;
-	*/
 }
 
 /*
@@ -361,6 +343,13 @@ void free_sparks(state_s *state)
 	{
 		free_spark(&state->sparks[i]);
 	}
+}
+
+int block_can_consume(block_s *b)
+{
+	return b->type == BLOCK_SPARKED
+		&& b->block_cfg.consume
+		&& !empty(b->spark->child.output);
 }
 
 double block_due_in(block_s *block, double now)
@@ -387,13 +376,15 @@ int block_is_due(block_s *block, double now, double tolerance)
 	// Timed blocks are due if their reload time has elapsed
 	if (block->type == BLOCK_TIMED)
 	{
-		double elapsed = now - block->child.last_run;
-		double time_left = block->block_cfg.reload - elapsed;
-		//return elapsed > block->block_cfg.reload;
-		return time_left < tolerance;
+		//double elapsed = now - block->child.last_run;
+		//double time_left = block->block_cfg.reload - elapsed;
+		//return time_left < tolerance;
+		double due_in = block_due_in(block, now);
+		return due_in < tolerance;
 	}
 
-	// Sparked blocks are due if their spark has new output
+	// Sparked blocks are due if their spark has new output, or if 
+	// they don't consume output and have never been run
 	if (block->type == BLOCK_SPARKED)
 	{
 		// TODO - currently, the output is never cleared I think?
@@ -431,7 +422,6 @@ int read_child(child_s *child, size_t len)
 	
 	// TODO maybe use getline() instead? It allocates a suitable buffer!
 	char *buf = malloc(len);
-	size_t num_lines = 0;
 
 	// TODO we need to figure out if all use-cases are okay with just 
 	//      calling fgets() once; at least one use-case was using the
@@ -442,6 +432,7 @@ int read_child(child_s *child, size_t len)
 	//      the while will keep on looping forever...
 
 	/*
+	size_t num_lines = 0;
 	while (fgets(buf, len, child->fp[FD_OUT]) != NULL)
 	{
 		++num_lines;
@@ -469,13 +460,6 @@ int read_child(child_s *child, size_t len)
 
 	child->last_read = get_time();
 	return 0;
-}
-
-int block_can_consume(block_s *b)
-{
-	return b->type == BLOCK_SPARKED
-		&& b->block_cfg.consume
-		&& !empty(b->spark->child.output);
 }
 
 /*
@@ -602,6 +586,11 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
         const int offset = (block->block_cfg.offset >= 0) ? block->block_cfg.offset : bar->block_cfg.offset;	
 	const int ol = block->block_cfg.ol ? 1 : (bar->block_cfg.ol ? 1 : 0);
 	const int ul = block->block_cfg.ul ? 1 : (bar->block_cfg.ul ? 1 : 0);
+
+	// TODO somewhere I've seen someone use a combined syntax, something
+	//      like this, for example: '%{T- F- B-}' instead of having them 
+	//      all seperate like we do: '%{T-}%{F-}%{B-}'; let's test that!
+	//      If that actually works, then we can save some bytes here. :)
 
 	char *str = malloc(buf_len);
 	snprintf(str, buf_len,
@@ -1637,15 +1626,16 @@ int main(int argc, char **argv)
 			switch (event->ev_type)
 			{
 				case CHILD_LEMON:
-					fprintf(stderr, "*** LEMON EVENT\n");
-					// TODO make us log or print lemonbar's output
+					fprintf(stderr, "*** LEMON EVENT (stream %d)\n", event->fd_type);
+					// TODO - stdout = handle action 
+					//      - stderr = log or print or ignore
 					break;
 				case CHILD_BLOCK:
-					fprintf(stderr, "*** BLOCK EVENT\n");
+					fprintf(stderr, "*** BLOCK EVENT (stream %d)\n", event->fd_type);
 					((block_s*)event->thing)->child.ready = 1;
 					break;
 				case CHILD_SPARK:
-					fprintf(stderr, "*** SPARK EVENT\n");
+					fprintf(stderr, "*** SPARK EVENT (stream %d)\n", event->fd_type);
 					((spark_s*)event->thing)->child.ready = 1;
 					break;
 			}
