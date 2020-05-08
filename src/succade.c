@@ -112,8 +112,9 @@ int open_child(child_s *child, int in, int out, int err)
 		size_t len = strlen(child->cmd) + strlen(child->arg) + 4;
 		cmd = malloc(sizeof(char) * len);
 		snprintf(cmd, len, "%s %s", child->cmd, child->arg);
-		fprintf(stderr, "open_child(): %s\n", cmd);
 	}
+	
+	fprintf(stderr, "open_child(): %s\n", cmd ? cmd : child->cmd);
 
 	// Execute the block and retrieve its PID
 	child->pid = popen_noshell(
@@ -122,7 +123,7 @@ int open_child(child_s *child, int in, int out, int err)
 			out ? &(child->fp[FD_OUT]) : NULL,
 		        err ? &(child->fp[FD_ERR]) : NULL);
 	free(cmd);
-	
+
 	// Check if that worked
 	if (child->pid == -1)
 	{
@@ -186,7 +187,8 @@ int open_block(block_s *block)
 
 	// Execute the block and retrieve its PID
 	int success = open_child(child, 0, 1, 0);
-	fprintf(stderr, "OPENED %s: PID = %d, FD %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
+	// TODO why are we seeing PID != 0, but with a dead FP?
+	fprintf(stderr, "OPENED %s: PID = %d, FP %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
 
 	// TODO should we clear out child->arg here?
 
@@ -345,11 +347,11 @@ void free_sparks(state_s *state)
 	}
 }
 
-int block_can_consume(block_s *b)
+int block_can_consume(block_s *block)
 {
-	return b->type == BLOCK_SPARKED
-		&& b->block_cfg.consume
-		&& !empty(b->spark->child.output);
+	return block->type == BLOCK_SPARKED
+		&& block->block_cfg.consume
+		&& !empty(block->spark->child.output);
 }
 
 double block_due_in(block_s *block, double now)
@@ -376,9 +378,6 @@ int block_is_due(block_s *block, double now, double tolerance)
 	// Timed blocks are due if their reload time has elapsed
 	if (block->type == BLOCK_TIMED)
 	{
-		//double elapsed = now - block->child.last_run;
-		//double time_left = block->block_cfg.reload - elapsed;
-		//return time_left < tolerance;
 		double due_in = block_due_in(block, now);
 		return due_in < tolerance;
 	}
@@ -416,7 +415,7 @@ int read_child(child_s *child, size_t len)
 	// Can't read from child if its `stdout` is dead
 	if (child->fp[FD_OUT] == NULL)
 	{
-		fprintf(stderr, "read_child(): stdout dead: `%s`\n", child->cmd);
+		//fprintf(stderr, "read_child(): stdout dead: `%s`\n", child->cmd);
 		return -1;
 	}
 	
@@ -444,8 +443,25 @@ int read_child(child_s *child, size_t len)
 	if (fgets(buf, len, child->fp[FD_OUT]) == NULL)
 	{
 		fprintf(stderr, "read_child(): fgets() failed: `%s`\n", child->cmd);
-		if (feof(child->fp[FD_OUT]))   fprintf(stderr, "\t(EOF)\n");
-		if (ferror(child->fp[FD_OUT])) fprintf(stderr, "\t(err)\n");
+		if (feof(child->fp[FD_OUT]))
+		{
+			fprintf(stderr, "\t(EOF - nothing to read)\n");
+		}
+		if (ferror(child->fp[FD_OUT]))
+		{
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+			{
+				// Expected when trying to read from 
+				// non-blocking streams with no data to read.
+				fprintf(stderr, "\t(ERR - no data to read)\n");
+			}
+			else
+			{
+				// Some other error
+				fprintf(stderr, "\t(ERR - %d)\n", errno);
+			}
+			clearerr(child->fp[FD_OUT]);
+		}
 		return -1;
 	}
 
@@ -1055,6 +1071,7 @@ size_t create_events(state_s *state)
 	// Add LEMON
 	// TODO do we also need to add an event for FD_ERR and/or FD_IN?
 	fprintf(stderr, "Creating event for LEMONBAR\n");
+	add_event(state, CHILD_LEMON, FD_IN, &state->lemon);
 	add_event(state, CHILD_LEMON, FD_OUT, &state->lemon);
 
 	// Add LIVE blocks
@@ -1290,23 +1307,83 @@ void sigchld_handler(int sig)
 	sigchld = 1;
 }
 
+void kill_child(child_s *child)
+{
+	if (child->pid > 1)
+	{
+		// SIGTERM can be caught (and even ignored), it allows 
+		// the child to do clean-up; SIGKILL is immediate
+		kill(child->pid, SIGTERM);
+
+		// We do not set the child's PID to 0 here, because the 
+		// child might not immediately terminate (clean-up, etc). 
+		// Instead, we should catch SIGCHLD, then use waitpid()
+		// to determine the termination and to set PID to 0.
+	}
+}
+
+/*
+ * Close the child's file pointers via fclose(), then set them to NULL.
+ */
+void close_child(child_s *child)
+{
+	if (child->fp[FD_IN] != NULL)
+	{
+		fclose(child->fp[FD_IN]);
+		child->fp[FD_IN] = NULL;
+	}
+	if (child->fp[FD_OUT] != NULL)
+	{
+		fclose(child->fp[FD_OUT]);
+		child->fp[FD_OUT] = NULL;
+	}
+	if (child->fp[FD_ERR] != NULL)
+	{
+		fclose(child->fp[FD_ERR]);
+		child->fp[FD_ERR] = NULL;
+	}
+}
+
 void reap_children(state_s *state)
 {
 	int pid = 0;
 	while((pid = waitpid(-1, NULL, WNOHANG)))
 	{
-		fprintf(stderr, "This guy quit on us: %d\n", pid);
+		// BLOCKS
 		block_s *block = NULL;
 		for (size_t i = 0; i < state->num_blocks; ++i)
 		{
 			block = &state->blocks[i];
-			if (block->child.pid != pid)
+
+			if (block->child.pid == pid)
 			{
-				continue;
+				fprintf(stderr, "reap_children(): reaping block, PID %d\n", pid);
+				close_child(&block->child);
+				block->child.pid = 0;
 			}
-			fprintf(stderr, "waitpid(): %s (pid=%d) dead\n", block->sid, block->child.pid);
-			close_block(block);
-			block->child.pid = 0;
+		}
+
+		// SPARKS
+		spark_s *spark = NULL;
+		for (size_t i = 0; i < state->num_sparks; ++i)
+		{
+			spark = &state->sparks[i];
+
+			if (spark->child.pid == pid)
+			{
+				fprintf(stderr, "reap_children(): reaping spark, PID %d\n", pid);
+				close_child(&spark->child);
+				block->child.pid = 0;
+			}
+		}
+
+		// LEMON
+		lemon_s *lemon = &state->lemon;
+		if (lemon->child.pid == pid)
+		{
+			fprintf(stderr, "reap_children(): reaping lemon, PID %d\n", pid);
+			close_child(&lemon->child);
+			lemon->child.pid = 0;
 		}
 	}
 }
@@ -1594,6 +1671,11 @@ int main(int argc, char **argv)
 			if (tev[i].events & EPOLLIN)
 			{
 				fprintf(stderr, "*** EPOLLIN\n");
+				ev->dirty = 1;
+			}
+			if (tev[i].events & EPOLLOUT)
+			{
+				fprintf(stderr, "*** EPOLLOUT\n");
 				ev->dirty = 1;
 			}
 			if (tev[i].events & EPOLLERR)
