@@ -44,7 +44,6 @@ static void free_block(block_s *block)
 /*
  * Command line options and arguments string for lemonbar.
  * Allocated with malloc(), so please free() it at some point.
- * TODO not in use yet, should eventually replace lemon_cmd()
  */
 char *lemon_arg(lemon_s *lemon)
 {
@@ -139,7 +138,7 @@ int open_child(child_s *child, int in, int out, int err)
 	// Remember the time of this invocation
 	// TODO - or should this be set by the calling context?
 	//      - or should this only be set after READING from the child?
-	child->last_run = get_time();
+	child->last_open = get_time();
 
 	return 0;
 }
@@ -357,7 +356,7 @@ int block_can_consume(block_s *block)
 double block_due_in(block_s *block, double now)
 {
 	return block->type == BLOCK_TIMED ? 
-		block->block_cfg.reload - (now - block->child.last_run) :
+		block->block_cfg.reload - (now - block->child.last_open) :
 		DBL_MAX;
 }
 
@@ -372,7 +371,7 @@ int block_is_due(block_s *block, double now, double tolerance)
 	// One-shot blocks are due if they have never been run before
 	if (block->type == BLOCK_ONCE)
 	{
-		return block->child.last_run == 0.0;
+		return block->child.last_open == 0.0;
 	}
 
 	// Timed blocks are due if their reload time has elapsed
@@ -1676,7 +1675,8 @@ int main(int argc, char **argv)
 			if (tev[i].events & EPOLLOUT)
 			{
 				fprintf(stderr, "*** EPOLLOUT\n");
-				ev->dirty = 1;
+				// TODO this should only happen once, for when
+				//      we open bar - nothing to do I guess...?
 			}
 			if (tev[i].events & EPOLLERR)
 			{
