@@ -126,7 +126,7 @@ int open_child(child_s *child, int in, int out, int err)
 	// Check if that worked
 	if (child->pid == -1)
 	{
-		// FAILED TO OPEN
+		// popen_noshell() failed to open it
 		return -1;
 	}
 	
@@ -136,10 +136,7 @@ int open_child(child_s *child, int in, int out, int err)
 	fp_linebuffered(child->fp[FD_ERR]);
 
 	// Remember the time of this invocation
-	// TODO - or should this be set by the calling context?
-	//      - or should this only be set after READING from the child?
 	child->last_open = get_time();
-
 	return 0;
 }
 
@@ -172,7 +169,6 @@ int open_lemon(lemon_s *lemon)
 /*
  * Runs a block and creates a file descriptor (stream) for reading.
  * Returns 0 on success, -1 if block could not be executed.
- * TODO: Should this function check if the block is already open?
  */
 int open_block(block_s *block)
 {
