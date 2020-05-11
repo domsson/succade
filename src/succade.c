@@ -18,14 +18,6 @@ static volatile int handled;   // The last signal that has been handled
 static volatile int sigchld;   // SIGCHLD has been received, please handle
 
 /*
- * Init the given block struct to a well defined state using sensible defaults.
- */
-static void init_block(block_s *block)
-{
-	block->block_cfg.offset = -1;
-}
-
-/*
  * Frees all members of the given bar that need freeing.
  */
 static void free_lemon(lemon_s *lemon)
@@ -192,18 +184,10 @@ int open_block(block_s *block)
 }
 
 /*
- * Closes the given bar by killing the process, closing its file descriptors
- * and setting them to NULL after.
+ * Close the child's file pointers via fclose(), then set them to NULL.
  */
-void close_lemon(lemon_s *lemon)
+void close_child(child_s *child)
 {
-	child_s *child = &lemon->child;
-
-	if (child->pid > 1)
-	{
-		kill(child->pid, SIGKILL);
-		child->pid = 0;
-	}
 	if (child->fp[FD_IN] != NULL)
 	{
 		fclose(child->fp[FD_IN]);
@@ -214,26 +198,60 @@ void close_lemon(lemon_s *lemon)
 		fclose(child->fp[FD_OUT]);
 		child->fp[FD_OUT] = NULL;
 	}
+	if (child->fp[FD_ERR] != NULL)
+	{
+		fclose(child->fp[FD_ERR]);
+		child->fp[FD_ERR] = NULL;
+	}
+}
+
+int kill_child(child_s *child)
+{
+	if (child->pid > 1)
+	{
+		// SIGTERM can be caught (and even ignored), it allows 
+		// the child to do clean-up; SIGKILL would be immediate
+		return kill(child->pid, SIGTERM);
+
+		// We do not set the child's PID to 0 here, because the 
+		// child might not immediately terminate (clean-up, etc). 
+		// Instead, we should catch SIGCHLD, then use waitpid()
+		// to determine the termination and to set PID to 0.
+	}
+	return -1;
 }
 
 /*
- * Closes the given block by killing the process, closing its file descriptor
- * and settings them to NULL after.
+ * Send a kill signal to the lemon's child process, then close its streams.
+ */
+void close_lemon(lemon_s *lemon)
+{
+	child_s *child = &lemon->child;
+
+	kill_child(child);
+	close_child(child);
+}
+
+/*
+ * Send a kill signal to the block's child process, then close its streams.
  */
 void close_block(block_s *block)
 {
 	child_s *child = &block->child;
 
-	if (child->pid > 1)
-	{
-		kill(child->pid, SIGTERM);
-		//b->pid = 0; // TODO revert this, probably, just for testing!
-	}
-	if (child->fp[FD_OUT] != NULL)
-	{
-		fclose(child->fp[FD_OUT]);
-		child->fp[FD_OUT] = NULL;
-	}
+	kill_child(child);
+	close_child(child);	
+}
+
+/*
+ * Send a kill signal to the spark's child process, then close its streams.
+ */
+void close_spark(spark_s *spark)
+{
+	child_s *child = &spark->child;
+
+	kill_child(child);
+	close_child(child);
 }
 
 /*
@@ -259,35 +277,6 @@ int open_spark(spark_s *spark)
 
 	fp_nonblocking(child->fp[FD_OUT]);
 	return 0;
-}
-
-/*
- * Closes the trigger by closing its file descriptor
- * and sending a SIGTERM to the trigger command.
- * Also sets the file descriptor to NULL.
- */
-void close_spark(spark_s *spark)
-{
-	child_s *child = &spark->child;
-
-	// Is the trigger's command still running?
-	if (child->pid > 1)
-	{
-		kill(child->pid, SIGTERM); // Politely ask to terminate
-	}
-	// If bar is set, then fd is a copy and will be closed elsewhere
-	if (child->type == CHILD_LEMON) 
-	//if (child->lemon)
-	{
-		return;
-	}
-	// Looks like we should actually close/free this fd after all
-	if (child->fp[FD_OUT])
-	{
-		fclose(child->fp[FD_OUT]);
-		child->fp[FD_OUT] = NULL;
-		child->pid = 0;
-	}
 }
 
 /*
@@ -814,7 +803,6 @@ block_s *add_block(state_s *state, const char *sid)
 	
 	// Create the block, setting its name and default values
 	state->blocks[current] = (block_s) { .sid = strdup(sid) };
-	init_block(&state->blocks[current]);
 
 	// Return a pointer to the new block
 	return &state->blocks[current];
@@ -1302,42 +1290,6 @@ void sigchld_handler(int sig)
 	sigchld = 1;
 }
 
-void kill_child(child_s *child)
-{
-	if (child->pid > 1)
-	{
-		// SIGTERM can be caught (and even ignored), it allows 
-		// the child to do clean-up; SIGKILL is immediate
-		kill(child->pid, SIGTERM);
-
-		// We do not set the child's PID to 0 here, because the 
-		// child might not immediately terminate (clean-up, etc). 
-		// Instead, we should catch SIGCHLD, then use waitpid()
-		// to determine the termination and to set PID to 0.
-	}
-}
-
-/*
- * Close the child's file pointers via fclose(), then set them to NULL.
- */
-void close_child(child_s *child)
-{
-	if (child->fp[FD_IN] != NULL)
-	{
-		fclose(child->fp[FD_IN]);
-		child->fp[FD_IN] = NULL;
-	}
-	if (child->fp[FD_OUT] != NULL)
-	{
-		fclose(child->fp[FD_OUT]);
-		child->fp[FD_OUT] = NULL;
-	}
-	if (child->fp[FD_ERR] != NULL)
-	{
-		fclose(child->fp[FD_ERR]);
-		child->fp[FD_ERR] = NULL;
-	}
-}
 
 void reap_children(state_s *state)
 {
