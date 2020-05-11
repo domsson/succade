@@ -3,8 +3,8 @@ bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
 #        SPARKED   ONCE   LIVE     TIMED
-#format = "desktop | user datetime | temp"
-format = "desktop || temp"
+format = "desktop | user datetime | temp"
+#format = "desktop || temp"
 # dock defines bar's position: 'top' or 'bottom'
 dock = top
 # height of the bar in pixel

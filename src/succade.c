@@ -53,7 +53,7 @@ char *lemon_arg(lemon_s *lemon)
 	char *affix_font = optstr('f', lcfg->affix_font, 0);
 	char *name_str   = optstr('n', lcfg->name, 0);
 
-	char *arg = malloc(sizeof(char) * 1024); // TODO hardcoded (1024 is what we want tho)
+	char *arg = malloc(sizeof(char) * BUFFER_LEMON_ARG); 
 
 	snprintf(arg, 1024,
 		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
@@ -174,8 +174,14 @@ int open_block(block_s *block)
 
 	// Execute the block and retrieve its PID
 	int success = open_child(child, 0, 1, 0);
-	// TODO why are we seeing PID != 0, but with a dead FP?
-	fprintf(stderr, "OPENED %s: PID = %d, FP %s\n", block->sid, child->pid, (child->fp[FD_OUT]==NULL?"dead":"okay"));
+	//
+	// TODO why are we sometimes seeing PID != 0 (open_child() worked fine)
+	//      but the file pointer of the child is immediately dead (NULL)?
+	fprintf(stderr, "OPENED %s: PID = %d, FP %s\n", 
+			block->sid, 
+			child->pid, 
+			(child->fp[FD_OUT]==NULL ? "dead" : "okay")
+	);
 
 	// TODO should we clear out child->arg here?
 
@@ -729,7 +735,7 @@ size_t parse_format(const char *format, create_block_callback cb, void *data)
 	}
 
 	size_t format_len = strlen(format) + 1;
-	char block_name[BLOCK_NAME_MAX];
+	char block_name[BUFFER_BLOCK_NAME];
 	block_name[0] = '\0';
 	size_t block_name_len = 0;
 	int block_align = -1;
@@ -831,14 +837,8 @@ int block_cfg_handler(void *data, const char *section, const char *name, const c
 {
 	state_s *state = (state_s*) data;
 
-	// Abort if section is empty
-	if (empty(section))
-	{
-		return 1;
-	}
-	
-	// Abort if section is specifically for bar, not a block
-	if (equals(section, state->lemon.sid))
+	// Abort if section is empty or specifically for bar
+	if (empty(section) || (equals(section, state->lemon.sid)))
 	{
 		return 1;
 	}
@@ -1053,9 +1053,9 @@ size_t create_events(state_s *state)
 {
 	// Add LEMON
 	// TODO do we also need to add an event for FD_ERR and/or FD_IN?
-	fprintf(stderr, "Creating event for LEMONBAR\n");
 	add_event(state, CHILD_LEMON, FD_IN, &state->lemon);
 	add_event(state, CHILD_LEMON, FD_OUT, &state->lemon);
+	add_event(state, CHILD_LEMON, FD_ERR, &state->lemon);
 
 	// Add LIVE blocks
 	block_s *block = NULL;
@@ -1068,7 +1068,7 @@ size_t create_events(state_s *state)
 			continue;
 		}
 
-		fprintf(stderr, "Creating event for BLOCK %s\n", block->sid);
+		fprintf(stderr, "Creating event for block `%s`\n", block->sid);
 		add_event(state, CHILD_BLOCK, FD_OUT, block);
 	}
 
@@ -1078,7 +1078,7 @@ size_t create_events(state_s *state)
 	{
 		spark = &state->sparks[i];
 
-		fprintf(stderr, "Creating event for SPARK %s\n", spark->child.cmd);
+		fprintf(stderr, "Creating event for spark `%s`\n", spark->child.cmd);
 		add_event(state, CHILD_SPARK, FD_OUT, spark);
 	}
 	
@@ -1151,6 +1151,7 @@ size_t create_sparks(state_s *state)
 }
 
 /*
+ * TODO comment outdated
  * Read all pending lines from the given trigger and store only the last line 
  * in the corresponding block's input field. Previous lines will be discarded.
  * Returns the number of lines read from the trigger's file descriptor.
@@ -1162,20 +1163,7 @@ size_t run_spark(spark_s *spark)
 		return 0;
 	}
 
-	size_t num_lines = read_child(&spark->child, BUFFER_SIZE);
-
-	// TODO should we really save the result BOTH in the block child 
-	//      as well as in the spark child!? quite redundant, isn't it...
-	/*
-	if (num_lines)
-	{
-		block_s *block = spark->block;
-		free(block->child.input);
-		block->child.input = strdup(spark->child.output);
-	}
-	*/
-	
-	return num_lines;
+	return read_child(&spark->child, BUFFER_SIZE);
 }
 
 /*
@@ -1695,7 +1683,6 @@ int main(int argc, char **argv)
 			
 			if (!block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
 			{
-				fprintf(stderr, "No block due (wait = %f)\n", wait);
 				continue;
 			}
 
