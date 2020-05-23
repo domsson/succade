@@ -154,6 +154,9 @@ int open_lemon(lemon_s *lemon)
 	{
 		fprintf(stderr, "Bar command: %s %s\n", child->cmd, child->arg);
 	}
+
+	// TODO don't we need to set stdout and stderr to non-blocking?
+	// fp_nonblocking(child->fp[FD_OUT]);
 	
 	return open_child(child, 1, 1, 0);
 }
@@ -174,6 +177,15 @@ int open_block(block_s *block)
 
 	// Execute the block and retrieve its PID
 	int success = open_child(child, 0, 1, 0);
+	
+	// TODO don't we need to set the stream to non-blocking for
+	//      LIVE blocks? Maybe if we do that, we can change read_child()
+	//      to use a while loop for reading again?
+	if (block->type == BLOCK_LIVE)
+	{
+		fp_nonblocking(child->fp[FD_OUT]);
+	}
+	
 	//
 	// TODO why are we sometimes seeing PID != 0 (open_child() worked fine)
 	//      but the file pointer of the child is immediately dead (NULL)?
