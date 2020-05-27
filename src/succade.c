@@ -81,184 +81,48 @@ char *lemon_arg(lemon_s *lemon)
 	return arg;
 }
 
-// TODO would be nice if we didn't have to hand in `in`, `out` and `err`
-int open_child(child_s *child, int in, int out, int err)
-{
-	if (child->pid > 0)
-	{
-		// ALREADY OPEN
-		return -1;
-	}
-
-	if (empty(child->cmd))
-	{
-		// NO COMMAND GIVEN
-		return -1;
-	}
-
-	// Construct the command, if there is an additional argument string
-	char *cmd = NULL;
-	if (child->arg)
-	{
-		size_t len = strlen(child->cmd) + strlen(child->arg) + 4;
-		cmd = malloc(sizeof(char) * len);
-		snprintf(cmd, len, "%s %s", child->cmd, child->arg);
-	}
-	
-	fprintf(stderr, "open_child(): %s\n", cmd ? cmd : child->cmd);
-
-	// Execute the block and retrieve its PID
-	child->pid = popen_noshell(
-			cmd ? cmd : child->cmd, 
-			in  ? &(child->fp[FD_IN])  : NULL,
-			out ? &(child->fp[FD_OUT]) : NULL,
-		        err ? &(child->fp[FD_ERR]) : NULL);
-	free(cmd);
-
-	// Check if that worked
-	if (child->pid == -1)
-	{
-		// popen_noshell() failed to open it
-		return -1;
-	}
-	
-	// TODO do we really ALWAYS want linebuf for ALL THREE streams?
-	fp_linebuffered(child->fp[FD_IN]);
-	fp_linebuffered(child->fp[FD_OUT]);
-	fp_linebuffered(child->fp[FD_ERR]);
-
-	// Remember the time of this invocation
-	child->last_open = get_time();
-	return 0;
-}
-
 /*
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
 int open_lemon(lemon_s *lemon)
 {
-	child_s *child = &lemon->child;
+	char *old_arg = kita_child_get_arg(lemon->child);
+	free(old_arg);
 
-	if (empty(child->cmd))
-	{
-		child->cmd = strdup(lemon->lemon_cfg.bin);
-	}
-
-	if (empty(child->arg))
-	{
-		child->arg = lemon_arg(lemon);
-	}
-
-	if (DEBUG)
-	{
-		fprintf(stderr, "Bar command: %s %s\n", child->cmd, child->arg);
-	}
-
-	// TODO don't we need to set stdout and stderr to non-blocking?
-	// fp_nonblocking(child->fp[FD_OUT]);
-	
-	return open_child(child, 1, 1, 0);
+	kita_child_set_arg(lemon->child, lemon_arg(lemon));
+	return kita_child_open(lemon->child);
 }
 
 /*
- * Runs a block and creates a file descriptor (stream) for reading.
- * Returns 0 on success, -1 if block could not be executed.
+ *
  */
 int open_block(block_s *block)
 {
-	child_s *child = &block->child;
-
-	// If no cmd given for child, use `bin` from config or `sid` from block
-	if (empty(child->cmd))
-	{
-		child->cmd = block->block_cfg.bin ? strdup(block->block_cfg.bin) : strdup(block->sid);
-	}
-
-	// Execute the block and retrieve its PID
-	int success = open_child(child, 0, 1, 0);
-	
-	// TODO don't we need to set the stream to non-blocking for
-	//      LIVE blocks? Maybe if we do that, we can change read_child()
-	//      to use a while loop for reading again?
-	if (block->type == BLOCK_LIVE)
-	{
-		fp_nonblocking(child->fp[FD_OUT]);
-	}
-	
-	//
-	// TODO why are we sometimes seeing PID != 0 (open_child() worked fine)
-	//      but the file pointer of the child is immediately dead (NULL)?
-	fprintf(stderr, "OPENED %s: PID = %d, FP %s\n", 
-			block->sid, 
-			child->pid, 
-			(child->fp[FD_OUT]==NULL ? "dead" : "okay")
-	);
-
 	// TODO should we clear out child->arg here?
 
-	// Return 0 on success, -1 on error
-	return success; 
-}
-
-/*
- * Close the child's file pointers via fclose(), then set them to NULL.
- */
-void close_child(child_s *child)
-{
-	if (child->fp[FD_IN] != NULL)
+	if (kita_child_open(block->child) == 0)
 	{
-		fclose(child->fp[FD_IN]);
-		child->fp[FD_IN] = NULL;
-	}
-	if (child->fp[FD_OUT] != NULL)
-	{
-		fclose(child->fp[FD_OUT]);
-		child->fp[FD_OUT] = NULL;
-	}
-	if (child->fp[FD_ERR] != NULL)
-	{
-		fclose(child->fp[FD_ERR]);
-		child->fp[FD_ERR] = NULL;
-	}
-}
-
-int kill_child(child_s *child)
-{
-	if (child->pid > 1)
-	{
-		// SIGTERM can be caught (and even ignored), it allows 
-		// the child to do clean-up; SIGKILL would be immediate
-		return kill(child->pid, SIGTERM);
-
-		// We do not set the child's PID to 0 here, because the 
-		// child might not immediately terminate (clean-up, etc). 
-		// Instead, we should catch SIGCHLD, then use waitpid()
-		// to determine the termination and to set PID to 0.
+		block->last_open = get_time();
+		return 0;
 	}
 	return -1;
 }
 
 /*
- * Send a kill signal to the lemon's child process, then close its streams.
+ * Send a kill signal to the lemon's child process.
  */
 void close_lemon(lemon_s *lemon)
 {
-	child_s *child = &lemon->child;
-
-	kill_child(child);
-	close_child(child);
+	kita_child_term(lemon->child);
 }
 
 /*
- * Send a kill signal to the block's child process, then close its streams.
+ * Send a kill signal to the block's child process.
  */
 void close_block(block_s *block)
 {
-	child_s *child = &block->child;
-
-	kill_child(child);
-	close_child(child);	
+	kita_child_term(block->child);
 }
 
 /*
@@ -266,10 +130,7 @@ void close_block(block_s *block)
  */
 void close_spark(spark_s *spark)
 {
-	child_s *child = &spark->child;
-
-	kill_child(child);
-	close_child(child);
+	kita_child_term(spark->child);
 }
 
 /*
@@ -285,16 +146,7 @@ void close_blocks(state_s *state)
 
 int open_spark(spark_s *spark)
 {
-	child_s *child = &spark->child;
-
-	open_child(child, 0, 1, 0);
-	if (child->pid == -1)
-	{
-		return -1;
-	}
-
-	fp_nonblocking(child->fp[FD_OUT]);
-	return 0;
+	return kita_child_open(spark->child);
 }
 
 /*
@@ -353,13 +205,13 @@ int block_can_consume(block_s *block)
 {
 	return block->type == BLOCK_SPARKED
 		&& block->block_cfg.consume
-		&& !empty(block->spark->child.output);
+		&& !empty(block->spark->output);
 }
 
 double block_due_in(block_s *block, double now)
 {
 	return block->type == BLOCK_TIMED ? 
-		block->block_cfg.reload - (now - block->child.last_open) :
+		block->block_cfg.reload - (now - block->last_open) :
 		DBL_MAX;
 }
 
@@ -374,7 +226,7 @@ int block_is_due(block_s *block, double now, double tolerance)
 	// One-shot blocks are due if they have never been run before
 	if (block->type == BLOCK_ONCE)
 	{
-		return block->child.last_open == 0.0;
+		return block->last_open == 0.0;
 	}
 
 	// Timed blocks are due if their reload time has elapsed
@@ -395,129 +247,17 @@ int block_is_due(block_s *block, double now, double tolerance)
 			fprintf(stderr, "block_due(): spark missing for block '%s'\n", block->sid);
 			return 0;
 		}
-		return block->spark->child.output != NULL;
+		return block->spark->output != NULL;
 	}
 
 	// Live blocks are due if they have unread data available
 	if (block->type == BLOCK_LIVE)
 	{	
-		return block->child.ready || block->child.last_read == 0.0;
+		return block->last_read == 0.0;
 	}
 
 	// Unknown block type (WTF?)
 	return 0;
-}
-
-/*
- * Attempt to read from the child's stdout file pointer, and store the result, 
- * if any, in the child's `output` field.
- */
-int read_child(child_s *child, size_t len)
-{
-	// Can't read from child if its `stdout` is dead
-	if (child->fp[FD_OUT] == NULL)
-	{
-		//fprintf(stderr, "read_child(): stdout dead: `%s`\n", child->cmd);
-		return -1;
-	}
-	
-	// TODO maybe use getline() instead? It allocates a suitable buffer!
-	char *buf = malloc(len);
-
-	// TODO we need to figure out if all use-cases are okay with just 
-	//      calling fgets() once; at least one use-case was using the
-	//      while-loop approach; not sure if that might now break?
-	//      In particular, isn't it bad if we don't consume all the 
-	//      data that is available for read? But the issue is that if
-	//      we use the while approach with live blocks or sparks, then 
-	//      the while will keep on looping forever...
-
-	/*
-	size_t num_lines = 0;
-	while (fgets(buf, len, child->fp[FD_OUT]) != NULL)
-	{
-		++num_lines;
-	}
-
-	if (num_lines == 0)
-	*/
-
-	if (fgets(buf, len, child->fp[FD_OUT]) == NULL)
-	{
-		fprintf(stderr, "read_child(): fgets() failed: `%s`\n", child->cmd);
-		if (feof(child->fp[FD_OUT]))
-		{
-			fprintf(stderr, "\t(EOF - nothing to read)\n");
-		}
-		if (ferror(child->fp[FD_OUT]))
-		{
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-			{
-				// Expected when trying to read from 
-				// non-blocking streams with no data to read.
-				fprintf(stderr, "\t(ERR - no data to read)\n");
-			}
-			else
-			{
-				// Some other error
-				fprintf(stderr, "\t(ERR - %d)\n", errno);
-			}
-			clearerr(child->fp[FD_OUT]);
-		}
-		return -1;
-	}
-
-	if (child->output)
-	{
-		free(child->output);
-		child->output = NULL;
-	}
-
-	buf[strcspn(buf, "\n")] = 0; // Remove '\n'
-	child->output = buf; // Copy pointer to result over
-
-	child->last_read = get_time();
-	return 0;
-}
-
-/*
- * Executes the given block by calling open_block() on it and saves the output 
- * of the block, if any, in its `result` field. If the block was run for the 
- * first time, it will be marked as `used`. The `result_length` argument gives
- * the size of the buffer that will be used to fetch the block's output.
- * Returns 0 on success, -1 if the block could not be run or its output could
- * not be fetched.
- */
-int run_block(block_s *b, size_t result_length)
-{
-	fprintf(stderr, "run_block(): running `%s`\n", b->sid);
-	
-	// Live blocks should be open already, we just read them
-	if (b->type == BLOCK_LIVE)
-	{
-		return read_child(&b->child, result_length);
-	}
-
-	// Sparked blocks will be run with the spark's output, if any, as `arg`
-	if (b->type == BLOCK_SPARKED && block_can_consume(b))
-	{
-		b->child.arg = strdup(b->spark->child.output);
-	}
-
-	int success = 0;
-	// TODO can we be sure there will be something to read IMMEDIATELY?
-	success += open_block(b);                        // -1 on error
-	success += read_child(&b->child, result_length); // -1 on error
-	close_block(b); // TODO does this also return error indication?
-
-	// If this was a sparked block, free it's `arg` again
-	if (b->type == BLOCK_SPARKED)
-	{
-		free(b->child.arg);
-		b->child.arg = NULL;
-	}
-
-	return success;
 }
 
 /*
@@ -573,7 +313,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	}
 
 	size_t diff;
-	char *result = escape(block->child.output, '%', &diff);
+	char *result = escape(block->output, '%', &diff);
 	int padding = block->block_cfg.width + diff;
 
 	size_t buf_len;
@@ -687,7 +427,7 @@ char *barstr(const state_s *state)
 		block = &blocks[i];
 
 		// Live blocks might not have a result available
-		if (block->child.output == NULL)
+		if (block->output == NULL)
 		{
 			continue;
 		}
@@ -714,23 +454,6 @@ char *barstr(const state_s *state)
 	strcat(bar_str, "\n");
 	bar_str = realloc(bar_str, strlen(bar_str) + 1);
 	return bar_str;
-}
-
-int feed_child(child_s *child, const char *input)
-{
-	// Child has no open stdin file pointer
-	if (child->fp[FD_IN] == NULL)
-	{
-		return -1;
-	}
-
-	// No input given, or input is empty 
-	if (empty(input))
-	{
-		return -1;
-	}
-
-	return fputs(input, child->fp[FD_IN]);
 }
 
 /*
@@ -782,6 +505,25 @@ size_t parse_format(const char *format, create_block_callback cb, void *data)
 	return num_blocks;
 }
 
+kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int err)
+{
+	// Create child process
+	kita_child_s *child = kita_child_new(cmd, 1, 1, 1);
+	if (child == NULL)
+	{
+		return NULL;
+	}
+
+	// Add the child to the kita 
+	if (kita_child_add(state->kita, child) == -1)
+	{
+		kita_child_free(&child);
+		return NULL;
+	}
+
+	return child;
+}
+
 /*
  * Finds and returns the block with the given `sid` -- or NULL.
  */
@@ -807,7 +549,6 @@ block_s *get_block(const state_s *state, const char *sid)
 block_s *add_block(state_s *state, const char *sid)
 {
 	// See if there is an existing block by this name (and return, if so)
-	//block_s *eb = get_block(state->blocks, state->num_blocks, name);
 	block_s *eb = get_block(state, sid);
 	if (eb)
 	{
@@ -815,12 +556,20 @@ block_s *add_block(state_s *state, const char *sid)
 	}
 
 	// Resize the block container to be able to hold one more block
-	int current = state->num_blocks;
-	state->num_blocks += 1;
-	state->blocks = realloc(state->blocks, sizeof(block_s) * state->num_blocks);
-	
+	size_t current  =   state->num_blocks;
+	size_t new_size = ++state->num_blocks * sizeof(block_s);
+	block_s *blocks = realloc(state->blocks, new_size);
+	if (blocks == NULL)
+	{
+		fprintf(stderr, "add_block(): realloc() failed!\n");
+		--state->num_blocks;
+		return NULL;
+	}
+	state->blocks = blocks;
+
 	// Create the block, setting its name and default values
-	state->blocks[current] = (block_s) { .sid = strdup(sid) };
+	state->blocks[current] = (block_s) { 0 };
+	state->blocks[current].sid = strdup(sid);
 
 	// Return a pointer to the new block
 	return &state->blocks[current];
@@ -903,200 +652,6 @@ static int load_block_cfg(state_s *state)
 	return ini_parse(state->prefs.config, block_cfg_handler, state);
 }
 
-/*
- * Find the event for the given lemon/block/spark or NULL if not found.
- */
-event_s *get_event(state_s *state, void *thing, child_type_e ev_type, fdesc_type_e fd_type)
-{
-	for (size_t i = 0; i < state->num_events; ++i)
-	{
-		if (state->events[i].ev_type != ev_type)
-		{
-			continue;
-		}
-		if (state->events[i].fd_type != fd_type)
-		{
-			continue;
-		}
-		if (state->events[i].thing == thing)
-		{
-			return &state->events[i];
-		}
-	}
-	return NULL;
-}
-
-/*
- * TODO We could theoretically use this function to register events that aren't 
- *      part of the state's event array, as we don't perform any checks in this 
- *      regard -- what can/should we do about this?
- */
-int register_event(state_s *state, event_s *ev)
-{
-	if (ev == NULL)
-	{
-		return -1;
-	}
-
-	if (ev->fd < 0)
-	{
-		return -1;
-	}
-
-	struct epoll_event eev = { 0 };
-	eev.data.ptr = ev;
-	eev.events = (ev->fd_type == FD_IN ? EPOLLOUT : EPOLLIN) | EPOLLET;
-
-	if (epoll_ctl(state->epfd, EPOLL_CTL_ADD, ev->fd, &eev) == 0)
-	{
-		// Success
-		ev->registered = 1;
-		return 0;
-	}
-	if (errno == EEXIST)
-	{
-		// fd was already registered!
-		ev->registered = 1;
-	}
-	// Some other error
-	return -1;
-}
-
-/*
- * 
- */
-int unregister_event(state_s *state, event_s *ev)
-{
-	if (ev == NULL)
-	{
-		return -1;
-	}
-
-	if (ev->fd < 0)
-	{
-		return -1;
-	}
-
-	if (epoll_ctl(state->epfd, EPOLL_CTL_DEL, ev->fd, NULL) == 0)
-	{
-		// Success!
-		ev->fd = -1;
-		ev->registered = 0;
-		return 0;
-	}
-	if (errno == EBADF)
-	{
-		// fd isn't valid
-		ev->fd = -1;
-		ev->registered = 0;
-	}
-	else if (errno == ENOENT)
-	{
-		// fd wasn't registered to begin with
-		ev->registered = 0;
-	}
-	// Some other error
-	return -1;
-}
-
-/*
- * Register all events that have a valid file descriptor.
- */
-size_t register_events(state_s *state)
-{
-	size_t num_registered = 0;
-
-	event_s *event = NULL;
-	for (size_t i = 0; i < state->num_events; ++i)
-	{
-		event = &state->events[i];
-		fprintf(stderr, "Registering for fd=%d (%d)\n", event->fd, event->ev_type);
-		int res = register_event(state, event);
-		num_registered += (res == 0);
-	}
-	return num_registered;
-}
-
-event_s *add_event(state_s *state, child_type_e ev_type, fdesc_type_e fd_type, void *thing)
-{
-	// See if there is an existing event that matches the given params
-	event_s *ee = get_event(state, thing, ev_type, fd_type);
-	if (ee)
-	{
-		return ee;
-	}
-
-	// Resize the event array to be able to hold one more event
-	int current = state->num_events;
-	state->num_events += 1;
-	state->events = realloc(state->events, sizeof(event_s) * state->num_events);
-	 
-	// Get the child of the thing
-	child_s *child = NULL;
-	switch (ev_type)
-	{
-		case CHILD_LEMON:
-			child = &((lemon_s *)thing)->child;
-			break;
-		case CHILD_BLOCK:
-			child = &((block_s *)thing)->child;
-			break;
-		case CHILD_SPARK:
-			child = &((spark_s *)thing)->child;
-			break;
-	}
-
-	// Create the event, setting all the important bits accordingly
-	state->events[current] = (event_s) { 0 };
-	state->events[current].ev_type = ev_type;
-	state->events[current].fd_type = fd_type;
-	state->events[current].thing   = thing;
-	state->events[current].fd      = child->fp[fd_type] ?
-				fileno(child->fp[fd_type]) : -1;
-
-	// Return a pointer to the new event
-	return &state->events[current];
-}
-
-/*
- *
- */
-size_t create_events(state_s *state)
-{
-	// Add LEMON
-	// TODO do we also need to add an event for FD_ERR and/or FD_IN?
-	add_event(state, CHILD_LEMON, FD_IN, &state->lemon);
-	add_event(state, CHILD_LEMON, FD_OUT, &state->lemon);
-	add_event(state, CHILD_LEMON, FD_ERR, &state->lemon);
-
-	// Add LIVE blocks
-	block_s *block = NULL;
-	for (size_t i = 0; i < state->num_blocks; ++i)
-	{
-		block = &state->blocks[i];
-
-		if (block->type != BLOCK_LIVE)
-		{
-			continue;
-		}
-
-		fprintf(stderr, "Creating event for block `%s`\n", block->sid);
-		add_event(state, CHILD_BLOCK, FD_OUT, block);
-	}
-
-	// Add SPARKs
-	spark_s *spark = NULL;
-	for (size_t i = 0; i < state->num_sparks; ++i)
-	{
-		spark = &state->sparks[i];
-
-		fprintf(stderr, "Creating event for spark `%s`\n", spark->child.cmd);
-		add_event(state, CHILD_SPARK, FD_OUT, spark);
-	}
-	
-	return state->num_events;
-}
-
 spark_s *get_spark(state_s *state, void *block, const char *cmd)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
@@ -1105,7 +660,7 @@ spark_s *get_spark(state_s *state, void *block, const char *cmd)
 		{
 			continue;
 		}
-		if (!equals(state->sparks[i].child.cmd, cmd))
+		if (!equals(state->sparks[i].child->cmd, cmd))
 		{
 			continue;
 		}
@@ -1124,12 +679,18 @@ spark_s *add_spark(state_s *state, block_s *block, const char *cmd)
 	}
 
 	// Resize the spark array to be able to hold one more spark
-	int current = state->num_sparks;
-	state->num_sparks += 1;
-	state->sparks = realloc(state->sparks, sizeof(spark_s) * state->num_sparks);
+	size_t current  =   state->num_sparks;
+	size_t new_size = ++state->num_sparks * sizeof(spark_s);
+	spark_s *sparks = realloc(state->sparks, new_size);
+	if (sparks == NULL)
+	{
+		fprintf(stderr, "add_spark(): realloc() failed!\n");
+		--state->num_sparks;
+		return NULL;
+	}
+	state->sparks = sparks; 
 	 
 	state->sparks[current] = (spark_s) { 0 };
-	state->sparks[current].child.cmd = strdup(cmd);
 	state->sparks[current].block = block;
 
 	// Add a reference of this spark to the block we've created it for
@@ -1159,23 +720,14 @@ size_t create_sparks(state_s *state)
 
 		add_spark(state, block, block->block_cfg.trigger);
 	}
-	return state->num_sparks;
-}
 
-/*
- * TODO comment outdated
- * Read all pending lines from the given trigger and store only the last line 
- * in the corresponding block's input field. Previous lines will be discarded.
- * Returns the number of lines read from the trigger's file descriptor.
- */
-size_t run_spark(spark_s *spark)
-{
-	if (spark->child.fp[FD_OUT] == NULL)
+	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		return 0;
+		state->sparks[i].child = kita_child_new(state->sparks[i].block->block_cfg.trigger, 0, 1, 0);
+		kita_child_add(state->kita, state->sparks[i].child);
 	}
 
-	return read_child(&spark->child, BUFFER_SIZE);
+	return state->num_sparks;
 }
 
 /*
@@ -1271,6 +823,11 @@ static void on_block_found(const char *name, int align, int n, void *data)
 	// Find or add the block with the given name
 	block_s *block = add_block(state, name);
 	
+	if (block == NULL)
+	{
+		fprintf(stderr, "on_block_found(): add_block() failed!\n");
+		return;
+	}
 	// Set the block's align to the given one
 	block->block_cfg.align = align;
 }
@@ -1279,60 +836,37 @@ static void on_block_found(const char *name, int align, int n, void *data)
  * Handles SIGINT signals (CTRL+C) by setting the static variable
  * `running` to 0, effectively ending the main loop, so that clean-up happens.
  */
-void sigint_handler(int sig)
+void on_sigint(int sig)
 {
 	running = 0;
 	handled = sig;
 }
 
-void sigchld_handler(int sig)
+void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
-	sigchld = 1;
+	char *output = kita_child_read(ke->child, ke->ios);
+	fprintf(stderr, "on_child_readok(): %s\n", output);
+	free(output);
 }
 
-
-void reap_children(state_s *state)
+void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 {
-	int pid = 0;
-	while((pid = waitpid(-1, NULL, WNOHANG)))
-	{
-		// BLOCKS
-		block_s *block = NULL;
-		for (size_t i = 0; i < state->num_blocks; ++i)
-		{
-			block = &state->blocks[i];
+	fprintf(stderr, "on_child_exited)\n");
+}
 
-			if (block->child.pid == pid)
-			{
-				fprintf(stderr, "reap_children(): reaping block, PID %d\n", pid);
-				close_child(&block->child);
-				block->child.pid = 0;
-			}
-		}
+void on_child_closed(kita_state_s *ks, kita_event_s *ke)
+{
+	fprintf(stderr, "on_child_closed()\n");
+}
 
-		// SPARKS
-		spark_s *spark = NULL;
-		for (size_t i = 0; i < state->num_sparks; ++i)
-		{
-			spark = &state->sparks[i];
+void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
+{
+	fprintf(stderr, "on_child_reaped()\n");
+}
 
-			if (spark->child.pid == pid)
-			{
-				fprintf(stderr, "reap_children(): reaping spark, PID %d\n", pid);
-				close_child(&spark->child);
-				block->child.pid = 0;
-			}
-		}
-
-		// LEMON
-		lemon_s *lemon = &state->lemon;
-		if (lemon->child.pid == pid)
-		{
-			fprintf(stderr, "reap_children(): reaping lemon, PID %d\n", pid);
-			close_child(&lemon->child);
-			lemon->child.pid = 0;
-		}
-	}
+void on_child_remove(kita_state_s *ks, kita_event_s *ke)
+{
+	fprintf(stderr, "on_child_remove()\n");
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
@@ -1356,28 +890,10 @@ int main(int argc, char **argv)
 	 * SIGNALS
 	 */
 
-	// Prevent zombie children during runtime
-	// https://en.wikipedia.org/wiki/Child_process#End_of_life
-	
-	// TODO However, maybe it would be a good idea to handle
-	//      this signal, as children will send it to the parent
-	//      process when they exit; so we could use this to detect
-	//      blocks that have died (prematurely/unexpectedly), for 
-	//      example those that failed the `execvp()` call from 
-	//      within `fork()` in `popen_noshell()`... not sure.
-	struct sigaction sa_chld = {
-	//	.sa_handler = SIG_IGN
-		.sa_handler = &sigchld_handler
-	};
-	if (sigaction(SIGCHLD, &sa_chld, NULL) == -1)
-	{
-		fprintf(stderr, "Failed to ignore children's signals\n");
-	}
-
 	// Make sure we still do clean-up on SIGINT (ctrl+c)
 	// and similar signals that indicate we should quit.
 	struct sigaction sa_int = {
-		.sa_handler = &sigint_handler
+		.sa_handler = &on_sigint
 	};
 	if (sigaction(SIGINT, &sa_int, NULL) == -1)
 	{
@@ -1413,7 +929,7 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	 * INITIALIZE SUCCADE STATE
+	 * SUCCADE STATE
 	 */
 
 	state_s  state = { 0 };
@@ -1421,7 +937,31 @@ int main(int argc, char **argv)
 	lemon_s *lemon = &(state.lemon); // For convenience
 
 	/*
-	 * PARSE COMMAND LINE ARGUMENTS
+	 * KITA STATE
+	 */
+
+	state.kita = kita_init();
+	if (state.kita == NULL)
+	{
+		fprintf(stderr, "Failed to initialize kita state, aborting.\n");
+		return EXIT_FAILURE;
+	}
+	kita_state_s *kita = state.kita; // For convenience
+
+	/* 
+	 * REGISTER CALLBACKS 
+	 */
+
+	kita_set_callback(kita, KITA_EVT_CHILD_CLOSED, on_child_closed);
+	kita_set_callback(kita, KITA_EVT_CHILD_REAPED, on_child_reaped);
+	kita_set_callback(kita, KITA_EVT_CHILD_HANGUP, on_child_exited);
+	kita_set_callback(kita, KITA_EVT_CHILD_EXITED, on_child_exited);
+	kita_set_callback(kita, KITA_EVT_CHILD_REMOVE, on_child_remove);
+	kita_set_callback(kita, KITA_EVT_CHILD_READOK, on_child_readok);
+
+
+	/*
+	 * COMMAND LINE ARGUMENTS
 	 */
 
 	parse_args(argc, argv, prefs);
@@ -1468,7 +1008,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to load config file: %s\n", prefs->config);
 		return EXIT_FAILURE;
 	}
-
 	// If no `bin` option was present in the config, set it to the default
 	if (empty(lemon->lemon_cfg.bin))
 	{
@@ -1481,6 +1020,14 @@ int main(int argc, char **argv)
 	{
 		// We use strdup() for consistency with free() later on
 		lemon->lemon_cfg.name = strdup(DEFAULT_LEMON_NAME);
+	}
+
+	// Create the child process and add it to the kita state
+	lemon->child = make_child(&state, lemon->lemon_cfg.bin, 1, 1, 1);
+	if (lemon->child == NULL)
+	{
+		fprintf(stderr, "Failed to create lemon process: %s\n", lemon->lemon_cfg.bin);
+		return EXIT_FAILURE;
 	}
 
 	// Open (run) the lemon
@@ -1507,6 +1054,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	// Parse the config again, this time processing block sections
 	if (load_block_cfg(&state) < 0)
 	{
 		fprintf(stderr, "Failed to load config file: %s\n", prefs->config);
@@ -1523,7 +1071,17 @@ int main(int argc, char **argv)
 		}
 	}
 
-	// Actually run all LIVE blocks, so we can register their events
+	// Create child processes and add them to the kita state
+	block_s *block = NULL;
+	for (size_t i = 0; i < state.num_blocks; ++i)
+	{
+		block = &state.blocks[i];
+		char *block_cmd = block->block_cfg.bin ? block->block_cfg.bin : block->sid;
+		block->child = make_child(&state, block_cmd, 0, 1, 1);
+	}
+
+	/*
+	// Run all LIVE blocks
 	for (int i = 0; i < state.num_blocks; ++i)
 	{
 		if (state.blocks[i].type == BLOCK_LIVE)
@@ -1531,12 +1089,15 @@ int main(int argc, char **argv)
 			open_block(&state.blocks[i]);
 		}
 	}
+	*/
 
 	/*
-	 * SPARKS - fire when their respective commands produce output
+	 * SPARKS
 	 */
 
 	create_sparks(&state);
+	
+	/*
 	size_t num_sparks_opened = open_sparks(&state);
 	
 	if (DEBUG)
@@ -1544,35 +1105,7 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Number of sparks: parsed = %zu, opened = %zu\n", 
 				state.num_sparks, num_sparks_opened);
 	}
-
-	/* 
-	 * EVENTS - create epoll instance and save it in the state
-	 */
-
-	state.epfd = epoll_create(1);
-	if (state.epfd < 0)
-	{
-		fprintf(stderr, "Could not create epoll file descriptor\n");
-		return EXIT_FAILURE;
-	}
-
-	/*
-	 * EVENTS - create event structs for all things that need 'em
-	 */
-
-	create_events(&state);
-
-	/*
-	 * EVENTS - register events with a valid file descriptor
-	 */
-
-	size_t num_events_registered = register_events(&state);
-	
-	if (DEBUG)
-	{
-		fprintf(stderr, "Number of events: created = %zu, registered = %zu\n",
-				state.num_events, num_events_registered);
-	}
+	*/
 
 	/*
 	 * MAIN LOOP
@@ -1582,9 +1115,6 @@ int main(int argc, char **argv)
 	double before = get_time();
 	double delta;
 	double wait = 0.0; // Will later be set to suitable value by feed_lemon()
-
-	int max_events = state.num_sparks + 1;
-	struct epoll_event tev[max_events];
 
 	//char bar_output[BUFFER_SIZE];
 	//bar_output[0] = '\0';
@@ -1598,119 +1128,33 @@ int main(int argc, char **argv)
 		before = now;
 
 		fprintf(stderr, "> wait = %f, delta = %f\n", wait, delta);
-		if (sigchld)
-		{
-			reap_children(&state);
-			sigchld = 0;
-		}
-		
-		// Wait for trigger input - at least bartrig is always present
-		// First time we call it, wait is 0, which is nice, because it allows us to 
-		// start up all the blocks and shit without a delay
-		int num_events = epoll_wait(state.epfd, tev, max_events, wait * MILLISEC_PER_SEC);
 
-		// Mark all events with activity as dirty
-		event_s *ev = NULL;
-		for (int i = 0; i < num_events; ++i)
-		{
-			ev = tev[i].data.ptr;
-
-			if (tev[i].events & EPOLLIN)
-			{
-				fprintf(stderr, "*** EPOLLIN\n");
-				ev->dirty = 1;
-			}
-			if (tev[i].events & EPOLLOUT)
-			{
-				fprintf(stderr, "*** EPOLLOUT\n");
-				// TODO this should only happen once, for when
-				//      we open bar - nothing to do I guess...?
-			}
-			if (tev[i].events & EPOLLERR)
-			{
-				fprintf(stderr, "*** EPOLLERR\n");
-				// TODO deal with this... but how?
-			}
-			if (tev[i].events & EPOLLHUP)
-			{
-				fprintf(stderr, "*** EPOLLHUP\n");
-				// TODO deal with this... but how?
-			}
-		}
-
-		// TODO Handle dirty events
-		//      - why don't we do this in the previous loop!? 
-		//        do we even need the 'dirty' flag?!
-
-		event_s *event = NULL;
-		for (size_t i = 0; i < state.num_events; ++i)
-		{
-			event = &state.events[i];
-
-			if (!event->dirty)
-			{
-				continue;
-			}
-
-			//handle_event(&state.events[i]);
-			switch (event->ev_type)
-			{
-				case CHILD_LEMON:
-					fprintf(stderr, "*** LEMON EVENT (stream %d)\n", event->fd_type);
-					// TODO - stdout = handle action 
-					//      - stderr = log or print or ignore
-					break;
-				case CHILD_BLOCK:
-					fprintf(stderr, "*** BLOCK EVENT (stream %d)\n", event->fd_type);
-					((block_s*)event->thing)->child.ready = 1;
-					break;
-				case CHILD_SPARK:
-					fprintf(stderr, "*** SPARK EVENT (stream %d)\n", event->fd_type);
-					((spark_s*)event->thing)->child.ready = 1;
-					break;
-			}
-			event->dirty = 0;
-		}
-
-		// Handle SPARKS
-		spark_s *spark = NULL;
-		for (size_t i = 0; i < state.num_sparks; ++i)
-		{
-			spark = &state.sparks[i];
-		
-			if (!spark->child.ready)
-			{
-				continue;
-			}
-
-			fprintf(stderr, "*** RUNNING SPARK: %s\n", spark->child.cmd);
-			run_spark(spark);
-		}
-
-		// Handle BLOCKS
+		// start all blocks that haven't been run yet (exception: sparked blocks)
 		block_s *block = NULL;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block = &state.blocks[i];
-			
-			if (!block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
+			if (block->last_open == 0.0 && block->type != BLOCK_SPARKED)
 			{
-				continue;
+				kita_child_open(block->child);
+				block->last_open = get_time();
 			}
-
-			fprintf(stderr, "*** RUNNING BLOCK: %s\n", block->sid);
-			if (block->type == BLOCK_LIVE)
-			{
-				// TODO should run_block() take care of this as well?
-				//      it would be consistent with run_spark()
-				read_child(&block->child, BUFFER_SIZE);
-			}
-			else
-			{
-				run_block(block, BUFFER_SIZE);
-			}
-			block->child.ready = 0;
 		}
+
+		// start all sparks that haven't been run yet
+		spark_s *spark = NULL;
+		for (size_t i = 0; i < state.num_sparks; ++i)
+		{
+			spark = &state.sparks[i];
+			if (spark->last_open == 0.0)
+			{
+				kita_child_open(spark->child);
+				spark->last_open = get_time();
+			}
+		}
+
+		//kita_tick(kita, 1000);
+		kita_tick(kita, wait * 1000);
 
 		// Figure out when we need to run next (timed blocks)
 		double lemon_due = DBL_MAX;
@@ -1729,16 +1173,36 @@ int main(int argc, char **argv)
 		// Update `wait` accordingly (-1 = not waiting on any blocks)
 		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
 
+		// TODO - feed lemonbar
+		//      - figure out time till next tick
+
+
+
 		/*
+		// Figure out when we need to run next (timed blocks)
+		double lemon_due = DBL_MAX;
+		double thing_due = DBL_MAX;
+		for (size_t i = 0; i < state.num_blocks; ++i)
+		{
+			block = &state.blocks[i];
+			thing_due = block_due_in(block, now);
+
+			if (thing_due < lemon_due)
+			{
+				lemon_due = thing_due;
+			}
+		}
+
+		// Update `wait` accordingly (-1 = not waiting on any blocks)
+		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
+
 		// Let's see if Lemonbar produced any output
 		if (bartrig.ready)
 		{
 			fgets(bar_output, BUFFER_SIZE, lemonbar.fp[FD_OUT]);
 			bartrig.ready = 0;
 		}
-		*/
 
-		/*
 		// Let's process bar's output, if any
 		if (strlen(bar_output))
 		{
@@ -1751,17 +1215,12 @@ int main(int argc, char **argv)
 			}
 			bar_output[0] = '\0';
 		}
-		*/
 
 		// Let's update bar! 
-		//feed_lemon(&state, delta, BLOCK_WAIT_TOLERANCE, &wait);
-
 		char *lemon_input = barstr(&state);
-		// TODO add error handling (EOF => bar dead?)
 		feed_child(&lemon->child, lemon_input);
 		free(lemon_input);
-		
-		//fputs("HELLO WORLD\n", state.lemon.child.fp[FD_IN]);
+		*/
 	}
 
 	/*
@@ -1769,7 +1228,6 @@ int main(int argc, char **argv)
 	 */
 
 	fprintf(stderr, "Performing clean-up ...\n");
-	close(state.epfd);
 
 	free(default_cfg_path);
 

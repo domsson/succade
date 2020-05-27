@@ -1,6 +1,7 @@
 #ifndef SUCCADE_H
 #define SUCCADE_H
 
+#include "libkita.h"
 #include <unistd.h> // STDOUT_FILENO, STDIN_FILENO, STDERR_FILENO
 
 #define DEBUG 1
@@ -58,25 +59,21 @@ typedef enum succade_fdesc_type fdesc_type_e;
  * STRUCTS
  */
 
-struct succade_child;
 struct succade_lemon;
 struct succade_block;
 struct succade_spark;
 struct succade_prefs;
 struct succade_state;
-struct succade_event;
 
 struct succade_lemon_cfg;
 struct succade_block_cfg;
 struct succade_click_cfg;
 
-typedef struct succade_child child_s;
 typedef struct succade_lemon lemon_s;
 typedef struct succade_block block_s;
 typedef struct succade_spark spark_s;
 typedef struct succade_prefs prefs_s;
 typedef struct succade_state state_s;
-typedef struct succade_event event_s;
 
 typedef struct succade_lemon_cfg lemon_cfg_s;
 typedef struct succade_block_cfg block_cfg_s;
@@ -143,27 +140,10 @@ struct succade_click_cfg
 	char *sdn;             // Command to run on scroll down
 };
 
-struct succade_child
-{
-	char *cmd;             // command/binary to run (could have arguments)
-	char *arg;             // additional argument string (optional)
-	pid_t pid;             // process ID
-	FILE *fp[3];           // stdin/stdout/stderr file pointers
-
-	char *output;          // output of the last invocation
-
-	double last_open;      // time of last invocation (0.0 for never)
-	double last_read;      // time of last read from stdout (TODO what about stderr)
-	unsigned ready : 1;    // fd has new data available for reading TODO maybe make it int and save the fp index that is ready?
-
-	child_type_e  type;    // type of data: lemon, block or spark
-	void         *thing;   // associated lemon, block or spark struct 
-};
-
 struct succade_lemon
 {
 	char         *sid;       // section ID (config section name)
-	child_s       child;     // associated child process
+	kita_child_s *child;     // associated child process
 	lemon_cfg_s   lemon_cfg; // associated lemon config
 	block_cfg_s   block_cfg; // associated common block config
 };
@@ -171,27 +151,25 @@ struct succade_lemon
 struct succade_block
 {
 	char         *sid;       // section ID (config section name)
-	child_s       child;     // associated child process
+	kita_child_s *child;     // associated child process
 	block_type_e  type;      // type of block (one-shot, reload, sparked, live)
 	block_cfg_s   block_cfg; // associated block config
 	click_cfg_s   click_cfg; // associated action commands
 	spark_s      *spark;     // asosciated spark, if any
+
+	char         *output;
+	double last_open;      // time of last invocation (0.0 for never)
+	double last_read;      // time of last read from stdout (TODO what about stderr)
 };
 
 struct succade_spark
 {
-	child_s       child;     // associated child process
+	kita_child_s *child;     // associated child process
 	block_s      *block;     // associated lemon or block struct
-};
+	char         *output;
 
-struct succade_event
-{
-	fdesc_type_e fd_type;    // stdin, stdout, stderr?
-	child_type_e ev_type;    // Type of data
-	void *thing;             // Ptr to lemon, a block or a spark
-	int fd;                  // File descriptor of data->fp[0], [1] or [2]
-	unsigned registered : 1; // Registered with epoll?
-	unsigned dirty : 1;      // Unhandled activity has occurred
+	double last_open;      // time of last invocation (0.0 for never)
+	double last_read;      // time of last read from stdout (TODO what about stderr)
 };
 
 struct succade_prefs
@@ -208,11 +186,9 @@ struct succade_state
 	lemon_s  lemon;    // Lemon (prev. 'bar')
 	block_s *blocks;   // Reference to block array
 	spark_s *sparks;   // Reference to spark array (prev. 'trigger')
-	event_s *events;   // Reference to events array
 	size_t num_blocks; // Number of blocks in blocks array
 	size_t num_sparks; // Number of sparks in sparks array
-	size_t num_events; // Number of events in events array
-	int epfd;          // epoll file descriptor
+	kita_state_s *kita;
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
