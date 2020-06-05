@@ -208,14 +208,12 @@ void free_sparks(state_s *state)
 	}
 }
 
-/*
 int block_can_consume(block_s *block)
 {
 	return block->type == BLOCK_SPARKED
 		&& block->block_cfg.consume
 		&& !empty(block->spark->output);
 }
-*/
 
 double block_due_in(block_s *block, double now)
 {
@@ -229,6 +227,12 @@ int block_is_due(block_s *block, double now, double tolerance)
 	if (block == NULL)
 	{
 		fprintf(stderr, "block_due(): block == NULL\n");
+		return 0;
+	}
+
+	// block is currently running
+	if (block->alive)
+	{
 		return 0;
 	}
 
@@ -266,7 +270,6 @@ int block_is_due(block_s *block, double now, double tolerance)
 		}
 
 		// spark has output waiting to be processed
-		// TODO this requires the spark's output to be cleared somewhere
 		return block->spark->output != NULL;
 	}
 
@@ -1069,6 +1072,7 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 	kita_state_s *kita = state.kita; // For convenience
+	kita_set_option(kita, KITA_OPT_NO_NEWLINE, 1);
 
 	/* 
 	 * REGISTER CALLBACKS 
@@ -1237,13 +1241,20 @@ int main(int argc, char **argv)
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block = &state.blocks[i];
-			if (block->type == BLOCK_SPARKED)
+			if (block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
 			{
-				continue;
-			}
-			if (block->last_open == 0.0)
-			{
-				open_block(block);
+				if (block_can_consume(block))
+				{
+					kita_child_set_arg(block->child, block->spark->output);
+					open_block(block);
+					kita_child_set_arg(block->child, NULL);
+					free(block->spark->output);
+					block->spark->output = NULL;
+				}
+				else
+				{
+					open_block(block);
+				}
 			}
 		}
 
@@ -1261,71 +1272,31 @@ int main(int argc, char **argv)
 		// let kita check for child events
 		kita_tick(kita, wait * MILLISEC_PER_SEC);
 
-		// Figure out when we need to run next (timed blocks)
-		double lemon_due = DBL_MAX;
-		double thing_due = DBL_MAX;
-		for (size_t i = 0; i < state.num_blocks; ++i)
-		{
-			block = &state.blocks[i];
-			thing_due = block_due_in(block, now);
-
-			if (thing_due < lemon_due)
-			{
-				lemon_due = thing_due;
-			}
-		}
-
-		// Update `wait` accordingly (-1 = not waiting on any blocks)
-		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
-
-		// TODO - feed lemonbar
-		//      - figure out time till next tick
-
-
-
-		/*
-		// Figure out when we need to run next (timed blocks)
-		double lemon_due = DBL_MAX;
-		double thing_due = DBL_MAX;
-		for (size_t i = 0; i < state.num_blocks; ++i)
-		{
-			block = &state.blocks[i];
-			thing_due = block_due_in(block, now);
-
-			if (thing_due < lemon_due)
-			{
-				lemon_due = thing_due;
-			}
-		}
-
-		// Update `wait` accordingly (-1 = not waiting on any blocks)
-		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
-
-		// Let's see if Lemonbar produced any output
-		if (bartrig.ready)
-		{
-			fgets(bar_output, BUFFER_SIZE, lemonbar.fp[FD_OUT]);
-			bartrig.ready = 0;
-		}
-
-		// Let's process bar's output, if any
-		if (strlen(bar_output))
-		{
-			if (process_action(&state, bar_output) < 0)
-			{
-				// It wasn't a recognized command, so chances are
-				// that is was some debug/error output of bar.
-				// TODO just use stderr in addition to stdout
-				fprintf(stderr, "Lemonbar: %s", bar_output);
-			}
-			bar_output[0] = '\0';
-		}
-
-		// Let's update bar! 
+		// feed the bar!
 		char *lemon_input = barstr(&state);
-		feed_child(&lemon->child, lemon_input);
+		fprintf(stderr, "[BARSTR] %s\n", lemon_input);
+		if (kita_child_feed(lemon->child, lemon_input) != 0)
+		{
+			fprintf(stderr, "error feeding bar :-(\n");
+		}
 		free(lemon_input);
-		*/
+
+		// Figure out when we need to run next (timed blocks)
+		double lemon_due = DBL_MAX;
+		double thing_due = DBL_MAX;
+		for (size_t i = 0; i < state.num_blocks; ++i)
+		{
+			block = &state.blocks[i];
+			thing_due = block_due_in(block, now);
+
+			if (thing_due < lemon_due)
+			{
+				lemon_due = thing_due;
+			}
+		}
+
+		// Update `wait` accordingly (-1 = not waiting on any blocks)
+		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
 	}
 
 	/*
