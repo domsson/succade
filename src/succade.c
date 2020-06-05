@@ -432,7 +432,6 @@ char *barstr(const state_s *state)
 {
 	// For convenience...
 	const lemon_s *bar = &state->lemon;
-	const block_s *blocks = state->blocks;
 	size_t num_blocks = state->num_blocks;
 
 	// Short blocks like temperature, volume or battery, will usually use 
@@ -447,7 +446,7 @@ char *barstr(const state_s *state)
 	const block_s *block = NULL;
 	for (int i = 0; i < num_blocks; ++i)
 	{
-		block = &blocks[i];
+		block = &state->blocks[i];
 
 		// Live blocks might not have a result available
 		if (block->output == NULL)
@@ -531,7 +530,7 @@ size_t parse_format(const char *format, create_block_callback cb, void *data)
 kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int err)
 {
 	// Create child process
-	kita_child_s *child = kita_child_new(cmd, 1, 1, 1);
+	kita_child_s *child = kita_child_new(cmd, in, out, err);
 	if (child == NULL)
 	{
 		return NULL;
@@ -894,9 +893,19 @@ spark_s *spark_by_child(state_s *state, kita_child_s *child)
 	return NULL;
 }
 
+void on_child_error(kita_state_s *ks, kita_event_s *ke)
+{
+	fprintf(stderr, "on_child_error(): %s\n", ke->child->cmd);
+}
+
+void on_child_feedok(kita_state_s *ks, kita_event_s *ke)
+{
+	fprintf(stderr, "on_child_feedok(): %s\n", ke->child->cmd);
+}
+
 void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_readok()\n");
+	fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
 
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
 	lemon_s *lemon = NULL;
@@ -943,17 +952,17 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 
 void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_exited()\n");
+	fprintf(stderr, "on_child_exited(): %s\n", ke->child->cmd);
 }
 
 void on_child_closed(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_closed()\n");
+	fprintf(stderr, "on_child_closed(): %s\n", ke->child->cmd);
 }
 
 void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_reaped()\n");
+	fprintf(stderr, "on_child_reaped(): %s\n", ke->child->cmd);
 	
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
 	lemon_s *lemon = NULL;
@@ -1083,7 +1092,9 @@ int main(int argc, char **argv)
 	kita_set_callback(kita, KITA_EVT_CHILD_HANGUP, on_child_exited);
 	kita_set_callback(kita, KITA_EVT_CHILD_EXITED, on_child_exited);
 	kita_set_callback(kita, KITA_EVT_CHILD_REMOVE, on_child_remove);
+	kita_set_callback(kita, KITA_EVT_CHILD_FEEDOK, on_child_feedok);
 	kita_set_callback(kita, KITA_EVT_CHILD_READOK, on_child_readok);
+	kita_set_callback(kita, KITA_EVT_CHILD_ERROR,  on_child_error);
 
 	/*
 	 * COMMAND LINE ARGUMENTS
@@ -1243,6 +1254,7 @@ int main(int argc, char **argv)
 			block = &state.blocks[i];
 			if (block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
 			{
+				fprintf(stderr, "block '%s' is due!\n", block->sid);
 				if (block_can_consume(block))
 				{
 					kita_child_set_arg(block->child, block->spark->output);
@@ -1269,17 +1281,19 @@ int main(int argc, char **argv)
 			}
 		}
 
-		// let kita check for child events
-		kita_tick(kita, wait * MILLISEC_PER_SEC);
-
 		// feed the bar!
 		char *lemon_input = barstr(&state);
-		fprintf(stderr, "[BARSTR] %s\n", lemon_input);
+		//fprintf(stderr, "[BARSTR] %s\n", lemon_input);
 		if (kita_child_feed(lemon->child, lemon_input) != 0)
 		{
 			fprintf(stderr, "error feeding bar :-(\n");
 		}
 		free(lemon_input);
+
+		// let kita check for child events
+		int wait_s = wait * MILLISEC_PER_SEC;
+		fprintf(stderr, "wait = %d\n", wait_s);
+		kita_tick(kita, wait_s);
 
 		// Figure out when we need to run next (timed blocks)
 		double lemon_due = DBL_MAX;
