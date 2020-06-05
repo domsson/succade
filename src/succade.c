@@ -104,6 +104,7 @@ int open_block(block_s *block)
 	if (kita_child_open(block->child) == 0)
 	{
 		block->last_open = get_time();
+		block->alive = 1;
 		return 0;
 	}
 	return -1;
@@ -146,7 +147,13 @@ void close_blocks(state_s *state)
 
 int open_spark(spark_s *spark)
 {
-	return kita_child_open(spark->child);
+	if (kita_child_open(spark->child) == 0)
+	{
+		spark->last_open = get_time();
+		spark->alive = 1;
+		return 0;
+	}
+	return -1;
 }
 
 /*
@@ -201,12 +208,14 @@ void free_sparks(state_s *state)
 	}
 }
 
+/*
 int block_can_consume(block_s *block)
 {
 	return block->type == BLOCK_SPARKED
 		&& block->block_cfg.consume
 		&& !empty(block->spark->output);
 }
+*/
 
 double block_due_in(block_s *block, double now)
 {
@@ -230,8 +239,13 @@ int block_is_due(block_s *block, double now, double tolerance)
 	}
 
 	// Timed blocks are due if their reload time has elapsed
+	// or if they've never been run before
 	if (block->type == BLOCK_TIMED)
 	{
+		if (block->last_open == 0.0)
+		{
+			return 1;
+		}
 		double due_in = block_due_in(block, now);
 		return due_in < tolerance;
 	}
@@ -240,20 +254,26 @@ int block_is_due(block_s *block, double now, double tolerance)
 	// they don't consume output and have never been run
 	if (block->type == BLOCK_SPARKED)
 	{
-		// TODO - currently, the output is never cleared I think?
-		//      - or should we check for the block's input instead?
 		if (block->spark == NULL)
 		{
 			fprintf(stderr, "block_due(): spark missing for block '%s'\n", block->sid);
 			return 0;
 		}
+		// doesn't consume and has never been run before
+		if (block->block_cfg.consume == 0)
+		{
+			return block->last_open == 0.0;
+		}
+
+		// spark has output waiting to be processed
+		// TODO this requires the spark's output to be cleared somewhere
 		return block->spark->output != NULL;
 	}
 
-	// Live blocks are due if they have unread data available
+	// Live blocks are due if they haven't been run yet 
 	if (block->type == BLOCK_LIVE)
 	{	
-		return block->last_read == 0.0;
+		return block->last_open == 0.0;
 	}
 
 	// Unknown block type (WTF?)
@@ -521,6 +541,7 @@ kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int e
 		return NULL;
 	}
 
+	kita_child_set_context(child, state);
 	return child;
 }
 
@@ -723,8 +744,7 @@ size_t create_sparks(state_s *state)
 
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		state->sparks[i].child = kita_child_new(state->sparks[i].block->block_cfg.trigger, 0, 1, 0);
-		kita_child_add(state->kita, state->sparks[i].child);
+		state->sparks[i].child = make_child(state, state->sparks[i].block->block_cfg.trigger, 0, 1, 0);
 	}
 
 	return state->num_sparks;
@@ -842,16 +862,85 @@ void on_sigint(int sig)
 	handled = sig;
 }
 
+lemon_s *lemon_by_child(state_s *state, kita_child_s *child)
+{
+	return (state->lemon.child == child) ? &state->lemon : NULL;
+}
+
+block_s *block_by_child(state_s *state, kita_child_s *child)
+{
+	for (size_t i = 0; i < state->num_blocks; ++i)
+	{
+		if (state->blocks[i].child == child)
+		{
+			return &state->blocks[i];
+		}
+	}
+	return NULL;
+}
+
+spark_s *spark_by_child(state_s *state, kita_child_s *child)
+{
+	for (size_t i = 0; i < state->num_sparks; ++i)
+	{
+		if (state->sparks[i].child == child)
+		{
+			return &state->sparks[i];
+		}
+	}
+	return NULL;
+}
+
 void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
+	fprintf(stderr, "on_child_readok()\n");
+
+	state_s *state = (state_s*) kita_child_get_context(ke->child);
+	lemon_s *lemon = NULL;
+	block_s *block = NULL;
+	spark_s *spark = NULL;
+	
+	if ((lemon = lemon_by_child(state, ke->child)))
+	{
+		if (ke->ios == KITA_IOS_ERR)
+		{
+			fprintf(stderr, "%s\n", kita_child_read(ke->child, ke->ios));
+		}
+		else
+		{
+			char *output = kita_child_read(ke->child, ke->ios);
+			process_action(state, output);
+			free(output);
+		}
+		return;
+	}
+
+	if ((block = block_by_child(state, ke->child)))
+	{
+		free(block->output); // just in case, free'ing NULL is fine
+		block->output = kita_child_read(ke->child, ke->ios);
+		block->last_read = get_time();
+		return;
+	}
+
+	if ((spark = spark_by_child(state, ke->child)))
+	{
+		free(spark->output); // just in case, free'ing NULL is fine
+		spark->output = kita_child_read(ke->child, ke->ios);
+		spark->last_read = get_time();
+		return;
+	}
+
+	/*
 	char *output = kita_child_read(ke->child, ke->ios);
 	fprintf(stderr, "on_child_readok(): %s\n", output);
 	free(output);
+	*/
 }
 
 void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_exited)\n");
+	fprintf(stderr, "on_child_exited()\n");
 }
 
 void on_child_closed(kita_state_s *ks, kita_event_s *ke)
@@ -862,6 +951,39 @@ void on_child_closed(kita_state_s *ks, kita_event_s *ke)
 void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
 {
 	fprintf(stderr, "on_child_reaped()\n");
+	
+	state_s *state = (state_s*) kita_child_get_context(ke->child);
+	lemon_s *lemon = NULL;
+	block_s *block = NULL;
+	spark_s *spark = NULL;
+	
+	if ((lemon = lemon_by_child(state, ke->child)))
+	{
+		fprintf(stderr, "lemonbar gone -- bye\n");
+		running = 0;
+		return;
+	}
+
+	// TODO blocks
+	//      - sparked blocks, we expect to die, so all good
+	//      - timed blocks, we expect to die, so all good
+	//      - live blocks, we don't expect to die
+	//        - restart them or just mark them as dead?
+	if ((block = block_by_child(state, ke->child)))
+	{
+		block->alive = 0;
+		return;
+	}
+	
+	// TODO sparks
+	//      - we don't expect them to die
+	//        - restart them or just mark them as dead?
+	//      - the associated block will never be run again
+	if ((spark = spark_by_child(state, ke->child)))
+	{
+		spark->alive = 0;
+		return;
+	}
 }
 
 void on_child_remove(kita_state_s *ks, kita_event_s *ke)
@@ -959,7 +1081,6 @@ int main(int argc, char **argv)
 	kita_set_callback(kita, KITA_EVT_CHILD_REMOVE, on_child_remove);
 	kita_set_callback(kita, KITA_EVT_CHILD_READOK, on_child_readok);
 
-
 	/*
 	 * COMMAND LINE ARGUMENTS
 	 */
@@ -1001,6 +1122,7 @@ int main(int argc, char **argv)
 
 	// Copy the Section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
+	lemon->cfg = malloc((LEMON_OPT_COUNT + BLOCK_OPT_COUNT) * sizeof(cfg_value_u));
 
 	// Read the config file and parse bar's section
 	if (load_lemon_cfg(&state) < 0)
@@ -1037,11 +1159,16 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	fprintf(stderr, "BAR NAME: %s\n", lemon->cfg[LEMON_OPT_NAME].s);
+
 	/*
 	 * BLOCKS
 	 */
 
 	// Create blocks by parsing the format string
+	// TODO I'd like to make this into a two-step thing:
+	//      1. parse the format string, creating an array of requested block names
+	//      2. iterate through the requested block names, creating blocks as we go
 	size_t parsed = parse_format(lemon->lemon_cfg.format, on_block_found, &state);
 
 	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
@@ -1081,32 +1208,11 @@ int main(int argc, char **argv)
 	}
 
 	/*
-	// Run all LIVE blocks
-	for (int i = 0; i < state.num_blocks; ++i)
-	{
-		if (state.blocks[i].type == BLOCK_LIVE)
-		{
-			open_block(&state.blocks[i]);
-		}
-	}
-	*/
-
-	/*
 	 * SPARKS
 	 */
 
 	create_sparks(&state);
 	
-	/*
-	size_t num_sparks_opened = open_sparks(&state);
-	
-	if (DEBUG)
-	{
-		fprintf(stderr, "Number of sparks: parsed = %zu, opened = %zu\n", 
-				state.num_sparks, num_sparks_opened);
-	}
-	*/
-
 	/*
 	 * MAIN LOOP
 	 */
@@ -1114,10 +1220,7 @@ int main(int argc, char **argv)
 	double now;
 	double before = get_time();
 	double delta;
-	double wait = 0.0; // Will later be set to suitable value by feed_lemon()
-
-	//char bar_output[BUFFER_SIZE];
-	//bar_output[0] = '\0';
+	double wait = 0.0; 
 
 	running = 1;
 	
@@ -1127,17 +1230,20 @@ int main(int argc, char **argv)
 		delta  = now - before;
 		before = now;
 
-		fprintf(stderr, "> wait = %f, delta = %f\n", wait, delta);
+		fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
 
 		// start all blocks that haven't been run yet (exception: sparked blocks)
 		block_s *block = NULL;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block = &state.blocks[i];
-			if (block->last_open == 0.0 && block->type != BLOCK_SPARKED)
+			if (block->type == BLOCK_SPARKED)
 			{
-				kita_child_open(block->child);
-				block->last_open = get_time();
+				continue;
+			}
+			if (block->last_open == 0.0)
+			{
+				open_block(block);
 			}
 		}
 
@@ -1148,13 +1254,12 @@ int main(int argc, char **argv)
 			spark = &state.sparks[i];
 			if (spark->last_open == 0.0)
 			{
-				kita_child_open(spark->child);
-				spark->last_open = get_time();
+				open_spark(spark);
 			}
 		}
 
-		//kita_tick(kita, 1000);
-		kita_tick(kita, wait * 1000);
+		// let kita check for child events
+		kita_tick(kita, wait * MILLISEC_PER_SEC);
 
 		// Figure out when we need to run next (timed blocks)
 		double lemon_due = DBL_MAX;
