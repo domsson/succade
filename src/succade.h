@@ -282,6 +282,7 @@ struct succade_state
 	size_t num_blocks; // Number of blocks in blocks array
 	size_t num_sparks; // Number of sparks in sparks array
 	kita_state_s *kita;
+	unsigned char due : 1;
 };
 
 typedef void (*create_block_callback)(const char *name, int align, int n, void *data);

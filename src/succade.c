@@ -91,7 +91,12 @@ int open_lemon(lemon_s *lemon)
 	free(old_arg);
 
 	kita_child_set_arg(lemon->child, lemon_arg(lemon));
-	return kita_child_open(lemon->child);
+	if (kita_child_open(lemon->child) == 0)
+	{
+		return kita_child_set_buf_type(lemon->child, KITA_IOS_IN, KITA_BUF_LINE);
+	}
+
+	return -1;
 }
 
 /*
@@ -263,14 +268,18 @@ int block_is_due(block_s *block, double now, double tolerance)
 			fprintf(stderr, "block_due(): spark missing for block '%s'\n", block->sid);
 			return 0;
 		}
+
+		// spark has output waiting to be processed
+		if (block->spark->output)
+		{
+			return 1;
+		}
+
 		// doesn't consume and has never been run before
 		if (block->block_cfg.consume == 0)
 		{
 			return block->last_open == 0.0;
 		}
-
-		// spark has output waiting to be processed
-		return block->spark->output != NULL;
 	}
 
 	// Live blocks are due if they haven't been run yet 
@@ -911,6 +920,11 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 	lemon_s *lemon = NULL;
 	block_s *block = NULL;
 	spark_s *spark = NULL;
+
+	if (ke->ios == KITA_IOS_OUT)
+	{
+		state->due = 1;
+	}
 	
 	if ((lemon = lemon_by_child(state, ke->child)))
 	{
@@ -929,9 +943,13 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 
 	if ((block = block_by_child(state, ke->child)))
 	{
+		// TODO check if the new output is the same as the old
+		//      if so, don't set state->due to 1
+
 		free(block->output); // just in case, free'ing NULL is fine
 		block->output = kita_child_read(ke->child, ke->ios);
 		block->last_read = get_time();
+		//fprintf(stderr, "[B %s] %s\n", block->sid, block->output);
 		return;
 	}
 
@@ -940,14 +958,9 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 		free(spark->output); // just in case, free'ing NULL is fine
 		spark->output = kita_child_read(ke->child, ke->ios);
 		spark->last_read = get_time();
+		//fprintf(stderr, "[S %s] %s\n", spark->child->cmd, spark->output);
 		return;
 	}
-
-	/*
-	char *output = kita_child_read(ke->child, ke->ios);
-	fprintf(stderr, "on_child_readok(): %s\n", output);
-	free(output);
-	*/
 }
 
 void on_child_exited(kita_state_s *ks, kita_event_s *ke)
@@ -1254,18 +1267,22 @@ int main(int argc, char **argv)
 			block = &state.blocks[i];
 			if (block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
 			{
-				fprintf(stderr, "block '%s' is due!\n", block->sid);
+				fprintf(stderr, "> open_block() '%s'\n", block->sid);
 				if (block_can_consume(block))
 				{
 					kita_child_set_arg(block->child, block->spark->output);
 					open_block(block);
 					kita_child_set_arg(block->child, NULL);
-					free(block->spark->output);
-					block->spark->output = NULL;
 				}
 				else
 				{
 					open_block(block);
+				}
+				if (block->type == BLOCK_SPARKED)
+				{
+					free(block->spark->output);
+					block->spark->output = NULL;
+
 				}
 			}
 		}
@@ -1282,17 +1299,21 @@ int main(int argc, char **argv)
 		}
 
 		// feed the bar!
-		char *lemon_input = barstr(&state);
-		//fprintf(stderr, "[BARSTR] %s\n", lemon_input);
-		if (kita_child_feed(lemon->child, lemon_input) != 0)
+		if (state.due)
 		{
-			fprintf(stderr, "error feeding bar :-(\n");
+			char *lemon_input = barstr(&state);
+			fprintf(stderr, "[BARSTR] %s\n", lemon_input);
+			if (kita_child_feed(lemon->child, lemon_input) != 0)
+			{
+				fprintf(stderr, "error feeding bar :-(\n");
+			}
+			free(lemon_input);
+			state.due = 0;
 		}
-		free(lemon_input);
 
 		// let kita check for child events
-		int wait_s = wait * MILLISEC_PER_SEC;
-		fprintf(stderr, "wait = %d\n", wait_s);
+		int wait_s = wait == -1 ? wait : wait * MILLISEC_PER_SEC;
+		fprintf(stderr, "> kita_tick() with wait = %d\n", wait_s);
 		kita_tick(kita, wait_s);
 
 		// Figure out when we need to run next (timed blocks)
