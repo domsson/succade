@@ -115,6 +115,29 @@ int open_block(block_s *block)
 	return -1;
 }
 
+int read_block(block_s *block)
+{
+	char *old = block->output ? strdup(block->output) : NULL;
+
+	free(block->output); // just in case, free'ing NULL is fine
+	block->output = kita_child_read(block->child, KITA_IOS_OUT);
+	block->last_read = get_time();
+	
+	int same = (old && equals(old, block->output));
+	free(old);
+
+	return !same;
+}
+
+int read_spark(spark_s *spark)
+{
+	free(spark->output); // just in case, free'ing NULL is fine
+	spark->output = kita_child_read(spark->child, KITA_IOS_OUT);
+	spark->last_read = get_time();
+
+	return !empty(spark->output);
+}
+
 /*
  * Send a kill signal to the lemon's child process.
  */
@@ -376,6 +399,11 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
         const int offset = (block->block_cfg.offset >= 0) ? block->block_cfg.offset : bar->block_cfg.offset;	
 	const int ol = block->block_cfg.ol ? 1 : (bar->block_cfg.ol ? 1 : 0);
 	const int ul = block->block_cfg.ul ? 1 : (bar->block_cfg.ul ? 1 : 0);
+
+	// TODO currently we are adding the format thingies for label, 
+	//      prefix and suffix, even if those are empty anyway, which
+	//      makes the string much longer than it needs to be, hence 
+	//      also increasing the parsing workload for lemonbar, fix this
 
 	// TODO somewhere I've seen someone use a combined syntax, something
 	//      like this, for example: '%{T- F- B-}' instead of having them 
@@ -864,10 +892,10 @@ static void on_block_found(const char *name, int align, int n, void *data)
 }
 
 /*
- * Handles SIGINT signals (CTRL+C) by setting the static variable
+ * Handles SIGINT (CTRL+C) and similar signals by setting the static variable
  * `running` to 0, effectively ending the main loop, so that clean-up happens.
  */
-void on_sigint(int sig)
+void on_signal(int sig)
 {
 	running = 0;
 	handled = sig;
@@ -905,6 +933,7 @@ spark_s *spark_by_child(state_s *state, kita_child_s *child)
 void on_child_error(kita_state_s *ks, kita_event_s *ke)
 {
 	fprintf(stderr, "on_child_error(): %s\n", ke->child->cmd);
+	// TODO possibly log this to a file or something
 }
 
 void on_child_feedok(kita_state_s *ks, kita_event_s *ke)
@@ -921,44 +950,50 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 	block_s *block = NULL;
 	spark_s *spark = NULL;
 
-	if (ke->ios == KITA_IOS_OUT)
-	{
-		state->due = 1;
-	}
-	
 	if ((lemon = lemon_by_child(state, ke->child)))
 	{
-		if (ke->ios == KITA_IOS_ERR)
-		{
-			fprintf(stderr, "%s\n", kita_child_read(ke->child, ke->ios));
-		}
-		else
+		if (ke->ios == KITA_IOS_OUT)
 		{
 			char *output = kita_child_read(ke->child, ke->ios);
 			process_action(state, output);
 			free(output);
+		}
+		else
+		{
+			// TODO user should be able to choose whether this ...
+			//      - ... will be ignored
+			//      - ... will be printed to stderr
+			//      - ... will be logged to a file
+			fprintf(stderr, "%s\n", kita_child_read(ke->child, ke->ios));
 		}
 		return;
 	}
 
 	if ((block = block_by_child(state, ke->child)))
 	{
-		// TODO check if the new output is the same as the old
-		//      if so, don't set state->due to 1
+		if (ke->ios == KITA_IOS_OUT)
+		{
+			// schedule an update if the block's output was
+			// different from its previous output
+			if (read_block(block))
+			{
+				state->due = 1;
+			}
+		}
+		else
+		{
+			// TODO implement block mode switch logic
 
-		free(block->output); // just in case, free'ing NULL is fine
-		block->output = kita_child_read(ke->child, ke->ios);
-		block->last_read = get_time();
-		//fprintf(stderr, "[B %s] %s\n", block->sid, block->output);
+		}
 		return;
 	}
 
 	if ((spark = spark_by_child(state, ke->child)))
 	{
-		free(spark->output); // just in case, free'ing NULL is fine
-		spark->output = kita_child_read(ke->child, ke->ios);
-		spark->last_read = get_time();
-		//fprintf(stderr, "[S %s] %s\n", spark->child->cmd, spark->output);
+		if (ke->ios == KITA_IOS_OUT)
+		{
+			read_spark(spark);
+		}
 		return;
 	}
 }
@@ -966,11 +1001,15 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 {
 	fprintf(stderr, "on_child_exited(): %s\n", ke->child->cmd);
+	// TODO sometimes we don't see the reaped event, so maybe
+	//      we should also set block->alive to 0 here?
 }
 
 void on_child_closed(kita_state_s *ks, kita_event_s *ke)
 {
 	fprintf(stderr, "on_child_closed(): %s\n", ke->child->cmd);
+	// TODO sometimes we don't see the reaped event, so maybe
+	//      we should also set block->alive to 0 here?
 }
 
 void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
@@ -1017,75 +1056,51 @@ void on_child_remove(kita_state_s *ks, kita_event_s *ke)
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
-void help(const char *invocation)
+void help(const char *invocation, FILE *where)
 {
-	fprintf(stderr, "USAGE\n");
-	fprintf(stderr, "\t%s [OPTIONS...]\n", invocation);
-	fprintf(stderr, "\n");
-	fprintf(stderr, "OPTIONS\n");
-	fprintf(stderr, "\t-e\n");
-	fprintf(stderr, "\t\tRun bar even if it is empty (no blocks).\n");
-	fprintf(stderr, "\t-h\n");
-	fprintf(stderr, "\t\tPrint this help text and exit.\n");
-	fprintf(stderr, "\t-s\n");
-	fprintf(stderr, "\t\tINI section name for the bar.\n");
+	fprintf(where, "USAGE\n");
+	fprintf(where, "\t%s [OPTIONS...]\n", invocation);
+	fprintf(where, "\n");
+	fprintf(where, "OPTIONS\n");
+	fprintf(where, "\t-e\tRun bar even if it is empty (no blocks).\n");
+	fprintf(where, "\t-h\tPrint this help text and exit.\n");
+	fprintf(where, "\t-s\tINI section name for the bar.\n");
 }
 
 int main(int argc, char **argv)
 {
-	/*
-	 * SIGNALS
-	 */
+	//
+	// SIGNAL HANDLING
+	//
 
-	// Make sure we still do clean-up on SIGINT (ctrl+c)
-	// and similar signals that indicate we should quit.
-	struct sigaction sa_int = {
-		.sa_handler = &on_sigint
-	};
-	if (sigaction(SIGINT, &sa_int, NULL) == -1)
-	{
-		fprintf(stderr, "Failed to register SIGINT handler\n");
-	}
-	if (sigaction(SIGQUIT, &sa_int, NULL) == -1)
-	{
-		fprintf(stderr, "Failed to register SIGQUIT handler\n");
-	}
-	if (sigaction (SIGTERM, &sa_int, NULL) == -1)
-	{
-		fprintf(stderr, "Failed to register SIGTERM handler\n");
-	}
-	if (sigaction (SIGPIPE, &sa_int, NULL) == -1)
-	{
-		fprintf(stderr, "Failed to register SIGPIPE handler\n");
-	}
+	struct sigaction sa_int = { .sa_handler = &on_signal };
 
-	/*
-	 * CHECK IF X IS RUNNING
-	 */
+	sigaction(SIGINT,  &sa_int, NULL);
+	sigaction(SIGQUIT, &sa_int, NULL);
+	sigaction(SIGTERM, &sa_int, NULL);
+	sigaction(SIGPIPE, &sa_int, NULL);
+	
+	//
+	// CHECK FOR X 
+	//
 
-	char *display = getenv("DISPLAY");
-	if (!display)
+	if (!x_is_running())
 	{
-		fprintf(stderr, "DISPLAY environment variable not set, aborting.\n");
-		return EXIT_FAILURE;
-	}
-	if (!strstr(display, ":"))
-	{
-		fprintf(stderr, "DISPLAY environment variable invalid, aborting.\n");
+		fprintf(stderr, "It looks like X isn't running, aborting.\n");
 		return EXIT_FAILURE;
 	}
 
-	/*
-	 * SUCCADE STATE
-	 */
+	//
+	// SUCCADE STATE
+	//
 
 	state_s  state = { 0 };
 	prefs_s *prefs = &(state.prefs); // For convenience
 	lemon_s *lemon = &(state.lemon); // For convenience
 
-	/*
-	 * KITA STATE
-	 */
+	//
+	// KITA STATE
+	//
 
 	state.kita = kita_init();
 	if (state.kita == NULL)
@@ -1093,12 +1108,13 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Failed to initialize kita state, aborting.\n");
 		return EXIT_FAILURE;
 	}
+
 	kita_state_s *kita = state.kita; // For convenience
 	kita_set_option(kita, KITA_OPT_NO_NEWLINE, 1);
 
-	/* 
-	 * REGISTER CALLBACKS 
-	 */
+	// 
+	// KITA CALLBACKS 
+	//
 
 	kita_set_callback(kita, KITA_EVT_CHILD_CLOSED, on_child_closed);
 	kita_set_callback(kita, KITA_EVT_CHILD_REAPED, on_child_reaped);
@@ -1109,26 +1125,26 @@ int main(int argc, char **argv)
 	kita_set_callback(kita, KITA_EVT_CHILD_READOK, on_child_readok);
 	kita_set_callback(kita, KITA_EVT_CHILD_ERROR,  on_child_error);
 
-	/*
-	 * COMMAND LINE ARGUMENTS
-	 */
+	//
+	// COMMAND LINE ARGUMENTS
+	//
 
 	parse_args(argc, argv, prefs);
 	char *default_cfg_path = NULL;
 
-	/*
-	 * PRINT HELP AND EXIT, MAYBE
-	 */
+	//
+	// PRINT HELP AND EXIT, MAYBE
+	//
 
 	if (prefs->help)
 	{
-		help(argv[0]);
+		help(argv[0], stdout);
 		return EXIT_SUCCESS;
 	}
 
-	/*
-	 * PREFERENCES / DEFAULTS
-	 */
+	//
+	// PREFERENCES / DEFAULTS
+	//
 
 	// If no custom config file given, set it to the default
 	if (prefs->config == NULL)
@@ -1144,9 +1160,9 @@ int main(int argc, char **argv)
 		prefs->section = DEFAULT_LEMON_SECTION;
 	}
 
-	/*
-	 * BAR
-	 */
+	//
+	// BAR
+	//
 
 	// Copy the Section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
@@ -1189,19 +1205,16 @@ int main(int argc, char **argv)
 
 	fprintf(stderr, "BAR NAME: %s\n", lemon->cfg[LEMON_OPT_NAME].s);
 
-	/*
-	 * BLOCKS
-	 */
+	//
+	// BLOCKS
+	//
 
 	// Create blocks by parsing the format string
 	// TODO I'd like to make this into a two-step thing:
 	//      1. parse the format string, creating an array of requested block names
 	//      2. iterate through the requested block names, creating blocks as we go
-	size_t parsed = parse_format(lemon->lemon_cfg.format, on_block_found, &state);
-
-	fprintf(stderr, "Number of blocks: parsed = %zu, configured = %zu\n", 
-			parsed, state.num_blocks);
-
+	parse_format(lemon->lemon_cfg.format, on_block_found, &state);
+	
 	// Exit if no blocks could be loaded and 'empty' option isn't present
 	if (state.num_blocks == 0 && prefs->empty == 0)
 	{
@@ -1216,16 +1229,6 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	if (DEBUG)
-	{
-		for (size_t i = 0; i < state.num_blocks; ++i)
-		{
-			fprintf(stderr, "Block #%zu: %s -> %s\n", i, 
-					state.blocks[i].sid,
-					state.blocks[i].block_cfg.bin);
-		}
-	}
-
 	// Create child processes and add them to the kita state
 	block_s *block = NULL;
 	for (size_t i = 0; i < state.num_blocks; ++i)
@@ -1235,15 +1238,16 @@ int main(int argc, char **argv)
 		block->child = make_child(&state, block_cmd, 0, 1, 1);
 	}
 
-	/*
-	 * SPARKS
-	 */
+	//
+	// SPARKS
+	//
 
 	create_sparks(&state);
+	open_sparks(&state);
 	
-	/*
-	 * MAIN LOOP
-	 */
+	//
+	// MAIN LOOP
+	//
 
 	double now;
 	double before = get_time();
@@ -1288,6 +1292,7 @@ int main(int argc, char **argv)
 		}
 
 		// start all sparks that haven't been run yet
+		/*
 		spark_s *spark = NULL;
 		for (size_t i = 0; i < state.num_sparks; ++i)
 		{
@@ -1297,26 +1302,22 @@ int main(int argc, char **argv)
 				open_spark(spark);
 			}
 		}
+		*/
 
-		// feed the bar!
+		// feed the bar, if there is any new block output 
 		if (state.due)
 		{
-			char *lemon_input = barstr(&state);
-			fprintf(stderr, "[BARSTR] %s\n", lemon_input);
-			if (kita_child_feed(lemon->child, lemon_input) != 0)
-			{
-				fprintf(stderr, "error feeding bar :-(\n");
-			}
-			free(lemon_input);
+			char *input = barstr(&state);
+			//fprintf(stderr, "_ %s\n", input);
+			kita_child_feed(lemon->child, input);
+			free(input);
 			state.due = 0;
 		}
 
 		// let kita check for child events
-		int wait_s = wait == -1 ? wait : wait * MILLISEC_PER_SEC;
-		fprintf(stderr, "> kita_tick() with wait = %d\n", wait_s);
-		kita_tick(kita, wait_s);
+		kita_tick(kita, (wait == -1 ? wait : wait * MILLISEC_PER_SEC));
 
-		// Figure out when we need to run next (timed blocks)
+		// figure out how long we can idle, based on timed blocks
 		double lemon_due = DBL_MAX;
 		double thing_due = DBL_MAX;
 		for (size_t i = 0; i < state.num_blocks; ++i)
@@ -1334,9 +1335,9 @@ int main(int argc, char **argv)
 		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
 	}
 
-	/*
-	 * CLEAN UP
-	 */
+	//
+	// CLEAN UP
+	//
 
 	fprintf(stderr, "Performing clean-up ...\n");
 
@@ -1348,11 +1349,6 @@ int main(int argc, char **argv)
 	free_sparks(&state);
 	free(state.sparks);
 	
-	/*
-	close_spark(&bartrig);
-	free_spark(&bartrig);
-	*/
-
 	// Close blocks
 	close_blocks(&state);
 	free_blocks(&state);

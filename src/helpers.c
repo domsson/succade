@@ -241,3 +241,16 @@ double get_time()
 	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
+int x_is_running()
+{
+	char *display = getenv("DISPLAY");
+	if (!display)
+	{
+		return 0;
+	}
+	if (!strstr(display, ":"))
+	{
+		return 0;
+	}
+	return 1;
+}
