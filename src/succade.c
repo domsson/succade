@@ -252,12 +252,6 @@ double block_due_in(block_s *block, double now)
 
 int block_is_due(block_s *block, double now, double tolerance)
 {
-	if (block == NULL)
-	{
-		fprintf(stderr, "block_due(): block == NULL\n");
-		return 0;
-	}
-
 	// block is currently running
 	if (block->alive)
 	{
@@ -286,9 +280,9 @@ int block_is_due(block_s *block, double now, double tolerance)
 	// they don't consume output and have never been run
 	if (block->type == BLOCK_SPARKED)
 	{
+		// spark missing
 		if (block->spark == NULL)
 		{
-			fprintf(stderr, "block_due(): spark missing for block '%s'\n", block->sid);
 			return 0;
 		}
 
@@ -812,11 +806,11 @@ int process_action(const state_s *state, const char *action)
 
 	// Extract the type suffix, including the underscore
 	char type[5]; 
-	snprintf(type, 5, "%s", action + len - 5);
+	snprintf(type, 5, "%s", action + len - 4);
 
 	// Extract everything _before_ the suffix (this is the block name)
-	char block[len-4];
-	snprintf(block, len - 4, "%s", action); 
+	char block[len-3];
+	snprintf(block, len - 3, "%s", action); 
 
 	// We check if the action type is valid (see types)
 	int b = 0;
@@ -932,18 +926,18 @@ spark_s *spark_by_child(state_s *state, kita_child_s *child)
 
 void on_child_error(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_error(): %s\n", ke->child->cmd);
+	//fprintf(stderr, "on_child_error(): %s\n", ke->child->cmd);
 	// TODO possibly log this to a file or something
 }
 
 void on_child_feedok(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_feedok(): %s\n", ke->child->cmd);
+	//fprintf(stderr, "on_child_feedok(): %s\n", ke->child->cmd);
 }
 
 void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
+	//fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
 
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
 	lemon_s *lemon = NULL;
@@ -955,6 +949,7 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 		if (ke->ios == KITA_IOS_OUT)
 		{
 			char *output = kita_child_read(ke->child, ke->ios);
+			fprintf(stderr, "action: %s\n", output);
 			process_action(state, output);
 			free(output);
 		}
@@ -1000,21 +995,7 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 
 void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_exited(): %s\n", ke->child->cmd);
-	// TODO sometimes we don't see the reaped event, so maybe
-	//      we should also set block->alive to 0 here?
-}
-
-void on_child_closed(kita_state_s *ks, kita_event_s *ke)
-{
-	fprintf(stderr, "on_child_closed(): %s\n", ke->child->cmd);
-	// TODO sometimes we don't see the reaped event, so maybe
-	//      we should also set block->alive to 0 here?
-}
-
-void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
-{
-	fprintf(stderr, "on_child_reaped(): %s\n", ke->child->cmd);
+	//fprintf(stderr, "on_child_exited(): %s\n", ke->child->cmd);
 	
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
 	lemon_s *lemon = NULL;
@@ -1023,26 +1004,16 @@ void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
 	
 	if ((lemon = lemon_by_child(state, ke->child)))
 	{
-		fprintf(stderr, "lemonbar gone -- bye\n");
 		running = 0;
 		return;
 	}
 
-	// TODO blocks
-	//      - sparked blocks, we expect to die, so all good
-	//      - timed blocks, we expect to die, so all good
-	//      - live blocks, we don't expect to die
-	//        - restart them or just mark them as dead?
 	if ((block = block_by_child(state, ke->child)))
 	{
 		block->alive = 0;
 		return;
 	}
 	
-	// TODO sparks
-	//      - we don't expect them to die
-	//        - restart them or just mark them as dead?
-	//      - the associated block will never be run again
 	if ((spark = spark_by_child(state, ke->child)))
 	{
 		spark->alive = 0;
@@ -1050,9 +1021,20 @@ void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
 	}
 }
 
+void on_child_closed(kita_state_s *ks, kita_event_s *ke)
+{
+	//fprintf(stderr, "on_child_closed(): %s\n", ke->child->cmd);
+}
+
+void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
+{
+	//fprintf(stderr, "on_child_reaped(): %s\n", ke->child->cmd);
+	on_child_exited(ks, ke);
+}
+
 void on_child_remove(kita_state_s *ks, kita_event_s *ke)
 {
-	fprintf(stderr, "on_child_remove()\n");
+	//fprintf(stderr, "on_child_remove()\n");
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
@@ -1086,7 +1068,7 @@ int main(int argc, char **argv)
 
 	if (!x_is_running())
 	{
-		fprintf(stderr, "It looks like X isn't running, aborting.\n");
+		fprintf(stderr, "Failed to detect X\n");
 		return EXIT_FAILURE;
 	}
 
@@ -1105,7 +1087,7 @@ int main(int argc, char **argv)
 	state.kita = kita_init();
 	if (state.kita == NULL)
 	{
-		fprintf(stderr, "Failed to initialize kita state, aborting.\n");
+		fprintf(stderr, "Failed to initialize kita state\n");
 		return EXIT_FAILURE;
 	}
 
@@ -1146,15 +1128,15 @@ int main(int argc, char **argv)
 	// PREFERENCES / DEFAULTS
 	//
 
-	// If no custom config file given, set it to the default
+	// if no custom config file given, set it to the default
 	if (prefs->config == NULL)
 	{
-		// We use the additional variable for consistency with free()
+		// we use an additional variable for consistency with free()
 		default_cfg_path = config_path(DEFAULT_CFG_FILE, SUCCADE_NAME);
 		prefs->config = default_cfg_path; 
 	}
 
-	// If no custom INI section for bar given, set it to default
+	// if no custom INI section for bar given, set it to default
 	if (prefs->section == NULL)
 	{
 		prefs->section = DEFAULT_LEMON_SECTION;
@@ -1164,72 +1146,71 @@ int main(int argc, char **argv)
 	// BAR
 	//
 
-	// Copy the Section ID from the config for convenience and consistency
+	// copy the section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
 	lemon->cfg = malloc((LEMON_OPT_COUNT + BLOCK_OPT_COUNT) * sizeof(cfg_value_u));
 
-	// Read the config file and parse bar's section
+	// read the config file and parse bar's section
 	if (load_lemon_cfg(&state) < 0)
 	{
 		fprintf(stderr, "Failed to load config file: %s\n", prefs->config);
 		return EXIT_FAILURE;
 	}
-	// If no `bin` option was present in the config, set it to the default
+	
+	// if no `bin` option was present in the config, set it to the default
 	if (empty(lemon->lemon_cfg.bin))
 	{
 		// We use strdup() for consistency with free() later on
 		lemon->lemon_cfg.bin = strdup(DEFAULT_LEMON_BIN);
 	}
 
-	// If no `name` option was present in the config, set it to the default
+	// if no `name` option was present in the config, set it to the default
 	if (empty(lemon->lemon_cfg.name))
 	{
 		// We use strdup() for consistency with free() later on
 		lemon->lemon_cfg.name = strdup(DEFAULT_LEMON_NAME);
 	}
 
-	// Create the child process and add it to the kita state
+	// create the child process and add it to the kita state
 	lemon->child = make_child(&state, lemon->lemon_cfg.bin, 1, 1, 1);
 	if (lemon->child == NULL)
 	{
-		fprintf(stderr, "Failed to create lemon process: %s\n", lemon->lemon_cfg.bin);
+		fprintf(stderr, "Failed to create bar process: %s\n", lemon->lemon_cfg.bin);
 		return EXIT_FAILURE;
 	}
 
-	// Open (run) the lemon
+	// open (run) the lemon
 	if (open_lemon(lemon) == -1)
 	{
 		fprintf(stderr, "Failed to open bar: %s\n", lemon->sid);
 		return EXIT_FAILURE;
 	}
 
-	fprintf(stderr, "BAR NAME: %s\n", lemon->cfg[LEMON_OPT_NAME].s);
-
 	//
 	// BLOCKS
 	//
 
-	// Create blocks by parsing the format string
+	// create blocks by parsing the format string
 	// TODO I'd like to make this into a two-step thing:
 	//      1. parse the format string, creating an array of requested block names
 	//      2. iterate through the requested block names, creating blocks as we go
 	parse_format(lemon->lemon_cfg.format, on_block_found, &state);
 	
-	// Exit if no blocks could be loaded and 'empty' option isn't present
+	// exit if no blocks could be loaded and 'empty' option isn't present
 	if (state.num_blocks == 0 && prefs->empty == 0)
 	{
-		fprintf(stderr, "No blocks loaded, stopping %s.\n", SUCCADE_NAME);
+		fprintf(stderr, "Failed to load any blocks\n");
 		return EXIT_FAILURE;
 	}
 
-	// Parse the config again, this time processing block sections
+	// parse the config again, this time processing block sections
 	if (load_block_cfg(&state) < 0)
 	{
 		fprintf(stderr, "Failed to load config file: %s\n", prefs->config);
 		return EXIT_FAILURE;
 	}
 
-	// Create child processes and add them to the kita state
+	// create child processes and add them to the kita state
 	block_s *block = NULL;
 	for (size_t i = 0; i < state.num_blocks; ++i)
 	{
@@ -1264,14 +1245,14 @@ int main(int argc, char **argv)
 
 		fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
 
-		// start all blocks that haven't been run yet (exception: sparked blocks)
+		// open all blocks that are due
 		block_s *block = NULL;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block = &state.blocks[i];
 			if (block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
 			{
-				fprintf(stderr, "> open_block() '%s'\n", block->sid);
+				//fprintf(stderr, "> open_block() '%s'\n", block->sid);
 				if (block_can_consume(block))
 				{
 					kita_child_set_arg(block->child, block->spark->output);
@@ -1290,19 +1271,6 @@ int main(int argc, char **argv)
 				}
 			}
 		}
-
-		// start all sparks that haven't been run yet
-		/*
-		spark_s *spark = NULL;
-		for (size_t i = 0; i < state.num_sparks; ++i)
-		{
-			spark = &state.sparks[i];
-			if (spark->last_open == 0.0)
-			{
-				open_spark(spark);
-			}
-		}
-		*/
 
 		// feed the bar, if there is any new block output 
 		if (state.due)
