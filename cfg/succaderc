@@ -16,7 +16,7 @@ background = "#ce7942"
 # display underline? true or false
 underline = true
 # display overline? true or false
-overline = false
+overline = false 
 # thickness of the line(s) in pixel
 line-width = 3
 # color of the line(s), if any

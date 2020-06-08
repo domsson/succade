@@ -17,12 +17,55 @@ static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
 static volatile int sigchld;   // SIGCHLD has been received, please handle
 
+static void free_lemon_cfg(lemon_cfg_s *cfg)
+{
+	free(cfg->name);
+	free(cfg->bin);
+	free(cfg->format);
+	free(cfg->bg);
+	free(cfg->block_font);
+	free(cfg->label_font);
+	free(cfg->affix_font);
+}
+
+static void free_block_cfg(block_cfg_s *cfg)
+{
+	free(cfg->bin);
+	free(cfg->fg);
+	free(cfg->bg);
+	free(cfg->label_fg);
+	free(cfg->label_bg);
+	free(cfg->affix_fg);
+	free(cfg->affix_bg);
+	free(cfg->lc);
+	free(cfg->prefix);
+	free(cfg->suffix);
+	free(cfg->label);
+	free(cfg->unit);
+	free(cfg->trigger);
+}
+
+static void free_click_cfg(click_cfg_s *cfg)
+{
+	free(cfg->lmb);
+	free(cfg->mmb);
+	free(cfg->rmb);
+	free(cfg->sup);
+	free(cfg->sdn);
+}
+
 /*
  * Frees all members of the given bar that need freeing.
  */
 static void free_lemon(lemon_s *lemon)
 {
-	// TODO implement!
+	free(lemon->cfg);
+	free(lemon->sid);
+	free_lemon_cfg(&lemon->lemon_cfg);
+	free_block_cfg(&lemon->block_cfg);
+
+	char *arg = kita_child_get_arg(lemon->child);
+	free(arg);
 }
 
 /*
@@ -30,7 +73,21 @@ static void free_lemon(lemon_s *lemon)
  */
 static void free_block(block_s *block)
 {
-	// TODO implement!
+	free(block->sid);
+	free(block->output);
+	free_block_cfg(&block->block_cfg);
+	free_click_cfg(&block->click_cfg);
+
+	char *arg = kita_child_get_arg(block->child);
+	free(arg);
+}
+
+void free_spark(spark_s *spark)
+{
+	free(spark->output);
+
+	char *arg = kita_child_get_arg(spark->child);
+	free(arg);
 }
 
 /*
@@ -104,8 +161,6 @@ int open_lemon(lemon_s *lemon)
  */
 int open_block(block_s *block)
 {
-	// TODO should we clear out child->arg here?
-
 	if (kita_child_open(block->child) == 0)
 	{
 		block->last_open = get_time();
@@ -155,7 +210,7 @@ void close_block(block_s *block)
 }
 
 /*
- * Send a kill signal to the spark's child process, then close its streams.
+ * Send a kill signal to the spark's child process.
  */
 void close_spark(spark_s *spark)
 {
@@ -207,11 +262,6 @@ void close_sparks(state_s *state)
 	{
 		close_spark(&state->sparks[i]);
 	}
-}
-
-void free_spark(spark_s *t)
-{
-	// TODO
 }
 
 /*
@@ -309,6 +359,22 @@ int block_is_due(block_s *block, double now, double tolerance)
 	return 0;
 }
 
+char *prefixstr(const char *affix, const char *fg, const char *bg)
+{
+	size_t len = empty(affix) ? 0 : strlen(affix) + 32;
+	char *prefix = malloc(len * sizeof(char) + 1);
+
+	if (len == 0)
+	{
+		prefix = malloc(1);
+		prefix[0] = 0;
+		return prefix;
+	}
+
+	snprintf(prefix, len, "%%{T3 F%s B%s}%s", fg ? fg : "-", bg ? bg : "-", affix);
+	return prefix;
+}
+
 /*
  * Given a block, it returns a pointer to a string that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
@@ -375,7 +441,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	else
 	{
 		// Required buffer mainly depends on the result and name of a block
-		buf_len = 239; // format str = 100, known stuff = 138, '\0' = 1
+		buf_len = 209;   // format str = 70, known stuff = 138, '\0' = 1
 		buf_len += strlen(action_start);
 		buf_len += bar->block_cfg.prefix ? strlen(bar->block_cfg.prefix) : 0;
 		buf_len += bar->block_cfg.suffix ? strlen(bar->block_cfg.suffix) : 0;
@@ -383,6 +449,10 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 		buf_len += strlen(result);
 	}
 
+	// TODO bug! if the user decides to set underline TRUE for the bar
+	//      buf turn it FALSE for individual blocks, it will not work.
+	//	similarly, the 'offset' option currently only works when set 
+	//	on a block, not when set for the entire bar
 	const char *fg = strsel(block->block_cfg.fg, NULL, NULL);
 	const char *bg = strsel(block->block_cfg.bg, bar->block_cfg.bg, NULL);
 	const char *lc = strsel(block->block_cfg.lc, NULL, NULL);
@@ -394,24 +464,23 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	const int ol = block->block_cfg.ol ? 1 : (bar->block_cfg.ol ? 1 : 0);
 	const int ul = block->block_cfg.ul ? 1 : (bar->block_cfg.ul ? 1 : 0);
 
+	//const char *prefix = prefixstr(bar->block_cfg.prefix, affix_fg, affix_bg);
+
 	// TODO currently we are adding the format thingies for label, 
 	//      prefix and suffix, even if those are empty anyway, which
 	//      makes the string much longer than it needs to be, hence 
-	//      also increasing the parsing workload for lemonbar, fix this
-
-	// TODO somewhere I've seen someone use a combined syntax, something
-	//      like this, for example: '%{T- F- B-}' instead of having them 
-	//      all seperate like we do: '%{T-}%{F-}%{B-}'; let's test that!
-	//      If that actually works, then we can save some bytes here. :)
+	//      also increasing the parsing workload for lemonbar.
+	//      but of course, replacing a couple bytes with lots of malloc
+	//      would not be great either, so... not sure about it yet.
 
 	char *str = malloc(buf_len);
 	snprintf(str, buf_len,
-		"%s%%{O%d}%%{F%s}%%{B%s}%%{U%s}%%{%co%cu}"        // start:  21
-		"%%{T3}%%{F%s}%%{B%s}%s"                          // prefix: 13
-		"%%{T2}%%{F%s}%%{B%s}%s"                          // label:  13
-		"%%{T1}%%{F%s}%%{B%s}%*s"                         // block:  13
-		"%%{T3}%%{F%s}%%{B%s}%s"                          // suffix: 13
-		"%%{T-}%%{F-}%%{B-}%%{U-}%%{-o-u}%s",             // end:    27
+		"%s%%{O%d F%s B%s U%s %co %cu}"                   // 14
+		"%%{T3 F%s B%s}%s"                                //  9
+		"%%{T2 F%s B%s}%s"                                //  9
+		"%%{T1 F%s B%s}%*s"                               //  9
+		"%%{T3 F%s B%s}%s"                                //  9
+		"%%{T- F- B- U- -o -u}%s",                        // 20
 		// Start
 		action_start,                                     // strlen
 		offset,                                           // max 4
@@ -1243,7 +1312,7 @@ int main(int argc, char **argv)
 		delta  = now - before;
 		before = now;
 
-		fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
+		//fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
 
 		// open all blocks that are due
 		block_s *block = NULL;
@@ -1276,7 +1345,7 @@ int main(int argc, char **argv)
 		if (state.due)
 		{
 			char *input = barstr(&state);
-			//fprintf(stderr, "_ %s\n", input);
+			fprintf(stderr, "_ %s\n", input);
 			kita_child_feed(lemon->child, input);
 			free(input);
 			state.due = 0;
@@ -1311,20 +1380,25 @@ int main(int argc, char **argv)
 
 	free(default_cfg_path);
 
+	//kita_kill(kita);
+	
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
-	close_sparks(&state);
+	//close_sparks(&state);
 	free_sparks(&state);
 	free(state.sparks);
 	
 	// Close blocks
-	close_blocks(&state);
+	//close_blocks(&state);
 	free_blocks(&state);
 	free(state.blocks);
 
 	// Close bar
-	close_lemon(&state.lemon);
+	//close_lemon(&state.lemon);
 	free_lemon(&state.lemon);
+
+	kita_free(&kita);
+	kita = NULL;
 
 	fprintf(stderr, "Clean-up finished, see you next time!\n");
 
