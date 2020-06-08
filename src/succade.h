@@ -118,14 +118,14 @@ typedef enum succade_click_opt click_opt_e;
 // UNIONS
 // 
 
-union succade_cfg_value
+union succade_opt
 {
-	char *s;
-	int   i;
-	float f;
+	const char *s;
+	int         i;
+	float       f;
 };
 
-typedef union succade_cfg_value cfg_value_u;
+typedef union succade_opt cfg_opt_u;
 
 //
 // STRUCTS
@@ -137,6 +137,7 @@ struct succade_spark;
 struct succade_prefs;
 struct succade_state;
 
+struct succade_cfg;
 struct succade_lemon_cfg;
 struct succade_block_cfg;
 struct succade_click_cfg;
@@ -147,9 +148,18 @@ typedef struct succade_spark spark_s;
 typedef struct succade_prefs prefs_s;
 typedef struct succade_state state_s;
 
+typedef struct succade_cfg cfg_s;
 typedef struct succade_lemon_cfg lemon_cfg_s;
 typedef struct succade_block_cfg block_cfg_s;
 typedef struct succade_click_cfg click_cfg_s;
+
+struct succade_cfg
+{
+	char         *name;
+	cfg_opt_u    *opts;
+	unsigned char *set;
+	size_t        size;
+};
 
 struct succade_lemon_cfg
 {
@@ -218,7 +228,6 @@ struct succade_lemon
 	kita_child_s *child;     // associated child process
 	lemon_cfg_s   lemon_cfg; // associated lemon config
 	block_cfg_s   block_cfg; // associated common block config
-	cfg_value_u  *cfg;
 };
 
 struct succade_block

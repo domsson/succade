@@ -59,7 +59,7 @@ static void free_click_cfg(click_cfg_s *cfg)
  */
 static void free_lemon(lemon_s *lemon)
 {
-	free(lemon->cfg);
+	//free(lemon->cfg);
 	free(lemon->sid);
 	free_lemon_cfg(&lemon->lemon_cfg);
 	free_block_cfg(&lemon->block_cfg);
@@ -88,6 +88,61 @@ void free_spark(spark_s *spark)
 
 	char *arg = kita_child_get_arg(spark->child);
 	free(arg);
+}
+
+cfg_s *cfg_init(cfg_s *cfg, const char *name, size_t size)
+{
+	//cfg = (cfg_s *) { 0 };
+
+	cfg->name = strdup(name);
+	cfg->size = size;
+	cfg->opts = malloc(size * sizeof(cfg_s));
+	cfg->set  = malloc(size * sizeof(int));
+
+	for (size_t i = 0; i < size; ++i)
+	{
+		cfg->opts[i] = (cfg_opt_u) { 0 };
+		cfg->set[i]  = 0;
+	}
+
+	return cfg;
+}
+
+int cfg_has(cfg_s *cfg, size_t idx)
+{
+	return (idx < cfg->size && cfg->set[idx]);
+}
+
+void cfg_set_int(cfg_s *cfg, size_t idx, int val)
+{
+	if (idx >= cfg->size)
+		return;
+
+	cfg->opts[idx].i = val;
+	cfg->set[idx] = 1;
+}
+
+void cfg_set_float(cfg_s *cfg, size_t idx, float val)
+{
+	if (idx >= cfg->size)
+		return;
+
+	cfg->opts[idx].f = val;
+	cfg->set[idx] = 1;
+}
+
+void cfg_set_str(cfg_s *cfg, size_t idx, const char *val)
+{
+	if (idx >= cfg->size)
+		return;
+
+	cfg->opts[idx].s = val;
+	cfg->set[idx] = 1;
+}
+
+cfg_opt_u *cfg_get(cfg_s *cfg, size_t idx)
+{
+	return cfg_has(cfg, idx) ? &cfg->opts[idx] : NULL;
 }
 
 /*
@@ -1118,8 +1173,36 @@ void help(const char *invocation, FILE *where)
 	fprintf(where, "\t-s\tINI section name for the bar.\n");
 }
 
+void test_cfg()
+{
+	int i = 7;
+	int f = 13.37;
+	const char *s = "hello";
+
+	cfg_s cfg = { 0 };
+	cfg_init(&cfg, "test", 5);
+
+	cfg_set_int(&cfg, 0, i);
+	cfg_set_float(&cfg, 1, f);
+	cfg_set_str(&cfg, 2, s);
+
+	cfg_opt_u *opt_i = cfg_get(&cfg, 0);
+	cfg_opt_u *opt_f = cfg_get(&cfg, 1);
+	cfg_opt_u *opt_s = cfg_get(&cfg, 2);
+	cfg_opt_u *opt_n = cfg_get(&cfg, 3);
+
+	fprintf(stderr, "OPT i = %d\n", opt_i ? opt_i->i : -1);
+	fprintf(stderr, "OPT f = %f\n", opt_f ? opt_f->f : -1);
+	fprintf(stderr, "OPT s = %s\n", opt_s ? opt_s->s : "-");
+	fprintf(stderr, "OPT n = %s\n", opt_n ? opt_n->s : "-");
+
+}
+
 int main(int argc, char **argv)
 {
+	// test some stuff
+	test_cfg();
+
 	//
 	// SIGNAL HANDLING
 	//
@@ -1217,7 +1300,7 @@ int main(int argc, char **argv)
 
 	// copy the section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
-	lemon->cfg = malloc((LEMON_OPT_COUNT + BLOCK_OPT_COUNT) * sizeof(cfg_value_u));
+	//lemon->cfg = malloc((LEMON_OPT_COUNT + BLOCK_OPT_COUNT) * sizeof(cfg_opt_u));
 
 	// read the config file and parse bar's section
 	if (load_lemon_cfg(&state) < 0)
@@ -1345,7 +1428,7 @@ int main(int argc, char **argv)
 		if (state.due)
 		{
 			char *input = barstr(&state);
-			fprintf(stderr, "_ %s\n", input);
+			//fprintf(stderr, "_ %s\n", input);
 			kita_child_feed(lemon->child, input);
 			free(input);
 			state.due = 0;
@@ -1380,21 +1463,16 @@ int main(int argc, char **argv)
 
 	free(default_cfg_path);
 
-	//kita_kill(kita);
-	
 	// Close triggers - it's important we free these first as they might
 	// point to instances of bar and/or blocks, which will lead to errors
-	//close_sparks(&state);
 	free_sparks(&state);
 	free(state.sparks);
 	
 	// Close blocks
-	//close_blocks(&state);
 	free_blocks(&state);
 	free(state.blocks);
 
 	// Close bar
-	//close_lemon(&state.lemon);
 	free_lemon(&state.lemon);
 
 	kita_free(&kita);
