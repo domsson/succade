@@ -1122,9 +1122,6 @@ void help(const char *invocation, FILE *where)
 
 int main(int argc, char **argv)
 {
-	// test some stuff
-	test_cfg();
-
 	//
 	// SIGNAL HANDLING
 	//
