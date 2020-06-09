@@ -2,40 +2,26 @@
 bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
-#        SPARKED   ONCE   LIVE     TIMED
-format = "desktop user || datetime temp"
-# dock defines bar's position: 'top' or 'bottom'
+#         SPARKED   ONCE   TIMED
+format = "desktop | user | datetime"
 dock = top
-# height of the bar in pixel
 height = 24
-# default font color
 foreground = "#000000"
-# default background color for the entire bar
 background = "#ce7942"
-# display underline? true or false
 underline = true
-# display overline? true or false
 overline = false 
-# thickness of the line(s) in pixel
 line-width = 3
-# color of the line(s), if any
 line = "#333333"
-# defines a different font color for labels
 label-fg = "#333333"
-# string to display in front of every block
 prefix = " " 
-# string to display after every block
 suffix = " "
-# distance between any two blocks in pixel
 offset = 8
-# default font to use
 font = 6x13
 label-font = "-wuncon-siji-medium-r-normal--10-100-75-75-c-80-iso10646-1"
 
 [desktop]
 bin="bspc query -D -d focused --names"
 trigger="bspc subscribe"
-consume=false
 
 [user]
 bin="whoami"
@@ -43,13 +29,5 @@ bin="whoami"
 [datetime]
 bin="date +'%Y-%m-%d %H:%M:%S'"
 reload=1
-;bin="~/.local/bin/candies/datetime -m"
-;live=true
 mouse-left=xclock
-
-[temp]
-bin="~/.config/succade/blocks/temp"
-label=" "
-width=5
-reload=8
 

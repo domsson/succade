@@ -12,11 +12,11 @@
 #include "execute.c"   // Execute child processes
 #include "loadini.c"   // Handles loading/processing of INI cfg file
 
-static volatile int running;   // Used to stop main loop in case of SIGINT
-static volatile int handled;   // The last signal that has been handled 
+static volatile int running;   // used to stop main loop 
+static volatile int handled;   // last signal that has been handled 
 
 /*
- * Frees all members of the given bar that need freeing.
+ * Frees all members of the given thing that need freeing.
  */
 static void free_thing(thing_s *thing)
 {
@@ -51,7 +51,7 @@ static char *lemon_arg(thing_s *lemon)
 	char *bg = cfg_get_str(lcfg, LEMON_OPT_BG);
 	char *lc = cfg_get_str(lcfg, LEMON_OPT_LC);
 
-	char *arg = malloc(sizeof(char) * BUFFER_LEMON_ARG); 
+	char *arg = malloc(BUFFER_LEMON_ARG); 
 
 	snprintf(arg, BUFFER_LEMON_ARG,
 		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
@@ -80,8 +80,7 @@ static char *lemon_arg(thing_s *lemon)
 }
 
 /*
- * Runs the bar process and opens file descriptors for reading and writing.
- * Returns 0 on success, -1 if bar could not be started.
+ * Runs the lemon's child process. Returns 0 on success, -1 on error.
  */
 static int open_lemon(thing_s *lemon)
 {
@@ -98,7 +97,7 @@ static int open_lemon(thing_s *lemon)
 }
 
 /*
- *
+ * Runs the block's child process. Returns 0 on success, -1 on error.
  */
 static int open_block(thing_s *block)
 {
@@ -111,6 +110,22 @@ static int open_block(thing_s *block)
 	return -1;
 }
 
+static int open_spark(thing_s *spark)
+{
+	if (kita_child_open(spark->child) == 0)
+	{
+		spark->last_open = get_time();
+		spark->alive = 1;
+		return 0;
+	}
+	return -1;
+}
+
+/*
+ * Read from the block's stdout and save the read data, if any, in the block's 
+ * output field. Returns 0 if the read data was the same as the previous data
+ * already present in the output field, 1 if the newly read data is different.
+ */
 static int read_block(thing_s *block)
 {
 	char *old = block->output ? strdup(block->output) : NULL;
@@ -125,6 +140,10 @@ static int read_block(thing_s *block)
 	return !same;
 }
 
+/*
+ * Read from the spark's stdout and save the read data, if any, in the spark's
+ * output field. Returns 0 if no data (or an empty string) was read, else 1.
+ */
 static int read_spark(thing_s *spark)
 {
 	free(spark->output); // just in case, free'ing NULL is fine
@@ -132,17 +151,6 @@ static int read_spark(thing_s *spark)
 	spark->last_read = get_time();
 
 	return !empty(spark->output);
-}
-
-static int open_spark(thing_s *spark)
-{
-	if (kita_child_open(spark->child) == 0)
-	{
-		spark->last_open = get_time();
-		spark->alive = 1;
-		return 0;
-	}
-	return -1;
 }
 
 /*
