@@ -97,6 +97,11 @@ enum succade_block_opt
 	BLOCK_OPT_CONSUME,
 	BLOCK_OPT_RELOAD,
 	BLOCK_OPT_LIVE,
+	BLOCK_OPT_CMD_LMB,
+	BLOCK_OPT_CMD_MMB,
+	BLOCK_OPT_CMD_RMB,
+	BLOCK_OPT_CMD_SUP,
+	BLOCK_OPT_CMD_SDN,
 	BLOCK_OPT_COUNT
 };
 
@@ -151,8 +156,6 @@ struct succade_lemon
 {
 	char         *sid;       // section ID (config section name)
 	kita_child_s *child;     // associated child process
-	//lemon_cfg_s   lemon_cfg; // associated lemon config
-	//block_cfg_s   block_cfg; // associated common block config
 	cfg_s lemon_cfg;
 	cfg_s block_cfg;
 };
@@ -162,9 +165,8 @@ struct succade_block
 	char         *sid;       // section ID (config section name)
 	kita_child_s *child;     // associated child process
 	block_type_e  type;      // type of block (one-shot, reload, sparked, live)
-	//block_cfg_s   block_cfg; // associated block config
 	cfg_s         block_cfg;
-	click_cfg_s   click_cfg; // associated action commands
+	//click_cfg_s   click_cfg; // associated action commands
 	spark_s      *spark;     // asosciated spark, if any
 
 	char         *output;

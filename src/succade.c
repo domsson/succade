@@ -49,7 +49,7 @@ static void free_block(block_s *block)
 	free(block->sid);
 	free(block->output);
 	cfg_free(&block->block_cfg);
-	free_click_cfg(&block->click_cfg);
+	//free_click_cfg(&block->click_cfg);
 
 	char *arg = kita_child_get_arg(block->child);
 	free(arg);
@@ -370,35 +370,35 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	char action_end[21]; // (5 * 4) + 1
 	action_end[0] = 0;
 
-	if (block->click_cfg.lmb)
+	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_LMB))
 	{
 		strcat(action_start, "%{A1:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->click_cfg.mmb)
+	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_MMB))
 	{
 		strcat(action_start, "%{A2:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->click_cfg.rmb)
+	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_RMB))
 	{
 		strcat(action_start, "%{A3:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->click_cfg.sup)
+	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_SUP))
 	{
 		strcat(action_start, "%{A4:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_sup:}");
 		strcat(action_end, "%{A}");
 	}
-	if (block->click_cfg.sdn)
+	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_SDN))
 	{
 		strcat(action_start, "%{A5:");
 		strcat(action_start, block->sid);
@@ -921,19 +921,19 @@ int process_action(const state_s *state, const char *action)
 	// Now to fire the right command for the action type
 	switch (b) {
 		case 0:
-			run_cmd(source->click_cfg.lmb);
+			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_LMB));
 			return 0;
 		case 1:
-			run_cmd(source->click_cfg.mmb);
+			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_MMB));
 			return 0;
 		case 2:
-			run_cmd(source->click_cfg.rmb);
+			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_RMB));
 			return 0;
 		case 3:
-			run_cmd(source->click_cfg.sup);
+			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_SUP));
 			return 0;
 		case 4:
-			run_cmd(source->click_cfg.sdn);
+			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_SDN));
 			return 0;
 		default:
 			// Should never happen...
@@ -1030,7 +1030,6 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 		if (ke->ios == KITA_IOS_OUT)
 		{
 			char *output = kita_child_read(ke->child, ke->ios);
-			fprintf(stderr, "action: %s\n", output);
 			process_action(state, output);
 			free(output);
 		}

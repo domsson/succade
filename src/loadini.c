@@ -152,7 +152,7 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	// Unpack the data
 	block_s *block = (block_s*) data;
 	cfg_s *bc = &block->block_cfg;
-	click_cfg_s *cc = &block->click_cfg;
+	//click_cfg_s *cc = &block->click_cfg;
 
 	// Check the `name` and do the thing
 	if (equals(name, "bin") || equals(name, "cmd") || equals(name, "command"))
@@ -270,27 +270,27 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "mouse-left"))
 	{
-		cc->lmb = is_quoted(value) ? unquote(value) : strdup(value);
+		cfg_set_str(bc, BLOCK_OPT_CMD_LMB, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "mouse-middle"))
 	{
-		cc->mmb = is_quoted(value) ? unquote(value) : strdup(value);
+		cfg_set_str(bc, BLOCK_OPT_CMD_MMB, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "mouse-right"))
 	{
-		cc->rmb = is_quoted(value) ? unquote(value) : strdup(value);
+		cfg_set_str(bc, BLOCK_OPT_CMD_RMB, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "scroll-up"))
 	{
-		cc->sup = is_quoted(value) ? unquote(value) : strdup(value);
+		cfg_set_str(bc, BLOCK_OPT_CMD_SUP, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "scroll-down"))
 	{
-		cc->sdn = is_quoted(value) ? unquote(value) : strdup(value);
+		cfg_set_str(bc, BLOCK_OPT_CMD_SDN, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 
