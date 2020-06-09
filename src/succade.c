@@ -290,6 +290,51 @@ int block_is_due(thing_s *block, double now, double tolerance)
 	return 0;
 }
 
+void open_due_blocks(state_s *state, double now)
+{
+	thing_s *block = NULL;
+	for (size_t i = 0; i < state->num_blocks; ++i)
+	{
+		block = &state->blocks[i];
+		if (block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
+		{
+			if (block_can_consume(block))
+			{
+				kita_child_set_arg(block->child, block->other->output);
+				open_block(block);
+				kita_child_set_arg(block->child, NULL);
+			}
+			else
+			{
+				open_block(block);
+			}
+			if (block->b_type == BLOCK_SPARKED)
+			{
+				free(block->other->output);
+				block->other->output = NULL;
+			}
+		}
+	}
+}
+
+double time_to_wait(state_s *state, double now)
+{
+	double lemon_due = DBL_MAX;
+	double thing_due = DBL_MAX;
+
+	for (size_t i = 0; i < state->num_blocks; ++i)
+	{
+		thing_due = block_due_in(&state->blocks[i], now);
+
+		if (thing_due < lemon_due)
+		{
+			lemon_due = thing_due;
+		}
+	}
+
+	return (lemon_due == DBL_MAX) ? -1 : lemon_due;
+}
+
 char *prefixstr(const char *affix, const char *fg, const char *bg)
 {
 	size_t len = empty(affix) ? 0 : strlen(affix) + 32;
@@ -899,6 +944,19 @@ int process_action(const state_s *state, const char *action)
 	}
 }
 
+void feed_lemon(state_s *state)
+{
+	if (state->due == 0)
+	{
+		return;
+	}
+
+	char *input = barstr(state);
+	kita_child_feed(state->lemon.child, input);
+	free(input);
+	state->due = 0;
+}
+
 /*
  * This callback is supposed to be called for every block name that is being 
  * extracted from the config file's 'format' option for the bar itself, which 
@@ -1289,71 +1347,24 @@ int main(int argc, char **argv)
 	
 	while (running)
 	{
+		// update time (passed)
 		now    = get_time();
 		delta  = now - before;
 		before = now;
 
-		if (DEBUG)
-		{
-			fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
-		}
+		//fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
 
-		// open all blocks that are due
-		thing_s *block = NULL;
-		for (size_t i = 0; i < state.num_blocks; ++i)
-		{
-			block = &state.blocks[i];
-			if (block_is_due(block, now, BLOCK_WAIT_TOLERANCE))
-			{
-				//fprintf(stderr, "> open_block() '%s'\n", block->sid);
-				if (block_can_consume(block))
-				{
-					kita_child_set_arg(block->child, block->other->output);
-					open_block(block);
-					kita_child_set_arg(block->child, NULL);
-				}
-				else
-				{
-					open_block(block);
-				}
-				if (block->b_type == BLOCK_SPARKED)
-				{
-					free(block->other->output);
-					block->other->output = NULL;
+		// open all blocks that are due for (another) invocation
+		open_due_blocks(&state, now);
 
-				}
-			}
-		}
+		// feed lemon (if the state's 'due' field is set)
+		feed_lemon(&state);
 
-		// feed the bar, if there is any new block output 
-		if (state.due)
-		{
-			char *input = barstr(&state);
-			//fprintf(stderr, "%s\n", input);
-			kita_child_feed(lemon->child, input);
-			free(input);
-			state.due = 0;
-		}
-
-		// let kita check for child events
+		// let kita check for child events (for up to `wait` seconds)
 		kita_tick(kita, (wait == -1 ? wait : wait * MILLISEC_PER_SEC));
 
 		// figure out how long we can idle, based on timed blocks
-		double lemon_due = DBL_MAX;
-		double thing_due = DBL_MAX;
-		for (size_t i = 0; i < state.num_blocks; ++i)
-		{
-			block = &state.blocks[i];
-			thing_due = block_due_in(block, now);
-
-			if (thing_due < lemon_due)
-			{
-				lemon_due = thing_due;
-			}
-		}
-
-		// Update `wait` accordingly (-1 = not waiting on any blocks)
-		wait = lemon_due == DBL_MAX ? -1 : lemon_due;
+		wait = time_to_wait(&state, now);
 	}
 
 	//
