@@ -1,6 +1,6 @@
 # succade
 
-Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! succade starts Lemonbar for you, then repeatedly runs blocks, piping their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with a simple [ini file](https://en.wikipedia.org/wiki/INI_file).
+Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! succade starts Lemonbar for you, then repeatedly runs [blocks](https://github.com/domsson/candies), piping their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with a simple [ini file](https://en.wikipedia.org/wiki/INI_file).
 
 ![Example bar](https://i.imgur.com/IQ26ypO.png)
 ![Example bar](https://i.imgur.com/6iCKW3w.png)
@@ -12,7 +12,7 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! succade star
 - Loads blocks (programs or scripts defined in the config file)
 - Updates Lemonbar based on the block's output 
 
-The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the block should be reloaded. Alternatively, a trigger command can be defined for a block. Once the trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
+The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the block should be reloaded. Alternatively, a trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
 
 # Notable features
 
@@ -130,7 +130,7 @@ Options:
 
 # Why succade?
 
-With projects like [polybar](https://github.com/polybar/polybar), the question for the relevance of succade is justified. Ultimately, this comes down to personal preference. Personally, I prefer succade (or similar solutions, like [Captain](https://github.com/muse/Captain)) because they enforce the separation of concerns as described by the [UNIX philosophy](https://en.wikipedia.org/wiki/Unix_philosophy), which enables the mixing and matching of software.
+With projects like [polybar](https://github.com/polybar/polybar), the question for the relevance of succade is justified. Personally, I prefer succade - and similar solutions, like [Captain](https://github.com/muse/Captain) - because they enforce the separation of concerns as described by the [UNIX philosophy](https://en.wikipedia.org/wiki/Unix_philosophy).
 
 For example, imagine someone created a fork of Lemonbar that works with Wayland. As long as they would keep the same interface (same format specifiers supported as with Lemonbar), you can immediately switch to that new bar, without changing anything else. You can still use the same blocks, because they are not tied to the bar or succade.
 
