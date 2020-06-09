@@ -1293,7 +1293,10 @@ int main(int argc, char **argv)
 		delta  = now - before;
 		before = now;
 
-		//fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
+		if (DEBUG)
+		{
+			fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
+		}
 
 		// open all blocks that are due
 		thing_s *block = NULL;
@@ -1326,7 +1329,7 @@ int main(int argc, char **argv)
 		if (state.due)
 		{
 			char *input = barstr(&state);
-			//fprintf(stderr, "_ %s\n", input);
+			//fprintf(stderr, "%s\n", input);
 			kita_child_feed(lemon->child, input);
 			free(input);
 			state.due = 0;
