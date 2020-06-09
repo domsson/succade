@@ -135,14 +135,14 @@ typedef struct succade_state state_s;
 
 struct succade_thing
 {
-	char         *sid;     // section ID (config section name)
-	cfg_s         cfg;     // holds the config's options
+	char         *sid;       // section ID (config section name)
+	cfg_s         cfg;       // holds the config's options
 
-	kita_child_s *child;   // kita child process struct
+	kita_child_s *child;     // kita child process struct
 
-	thing_type_e  t_type;  // thing type (lemon, block, spark?) 
-	block_type_e  b_type;  // block type (once, timed, sparked, live?)
-	thing_s      *other;   // associated block (for sparks) or spark (for blocks) 
+	thing_type_e  t_type;    // thing type (lemon, block, spark?) 
+	block_type_e  b_type;    // block type (once, timed, sparked, live?)
+	thing_s      *other;     // associated block (for sparks) or spark (for blocks) 
 
 	char         *output;    // last output from stdout
 	unsigned char alive : 1; // is up and running?
@@ -152,20 +152,20 @@ struct succade_thing
 
 struct succade_prefs
 {
-	char     *config;      // Full path to config file
-	char     *section;     // INI section name for the bar
-	unsigned  empty : 1;   // Run bar even if no blocks present?
-	unsigned  help  : 1;   // Show help text and exit?
+	char     *config;        // Full path to config file
+	char     *section;       // INI section name for the bar
+	unsigned char empty : 1; // Run bar even if no blocks present?
+	unsigned char help  : 1; // Show help text and exit?
 };
 
 struct succade_state
 {
-        prefs_s  prefs;        // Preferences (options/config)
+        prefs_s  prefs;          // Preferences (options/config)
 	thing_s  lemon;
-	thing_s *blocks;       // Reference to block array
-	thing_s *sparks;       // Reference to spark array (prev. 'trigger')
-	size_t   num_blocks;   // Number of blocks in blocks array
-	size_t   num_sparks;   // Number of sparks in sparks array
+	thing_s *blocks;         // Reference to block array
+	thing_s *sparks;         // Reference to spark array (prev. 'trigger')
+	size_t   num_blocks;     // Number of blocks in blocks array
+	size_t   num_sparks;     // Number of sparks in sparks array
 	kita_state_s *kita;
 	unsigned char due : 1;
 };

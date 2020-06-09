@@ -139,27 +139,11 @@ int read_spark(thing_s *spark)
 }
 
 /*
- * Send a kill signal to the lemon's child process.
+ * Send a kill signal to the thing's child process.
  */
-void close_lemon(thing_s *lemon)
+void close_thing(thing_s *thing)
 {
-	kita_child_term(lemon->child);
-}
-
-/*
- * Send a kill signal to the block's child process.
- */
-void close_block(thing_s *block)
-{
-	kita_child_term(block->child);
-}
-
-/*
- * Send a kill signal to the spark's child process.
- */
-void close_spark(thing_s *spark)
-{
-	kita_child_term(spark->child);
+	kita_child_term(thing->child);
 }
 
 /*
@@ -169,7 +153,7 @@ void close_blocks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		close_block(&state->blocks[i]);
+		close_thing(&state->blocks[i]);
 	}
 }
 
@@ -205,7 +189,7 @@ void close_sparks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		close_spark(&state->sparks[i]);
+		close_thing(&state->sparks[i]);
 	}
 }
 
