@@ -4,7 +4,6 @@
 #include <string.h>    // strlen(), strcmp(), ...
 #include <signal.h>    // sigaction(), ... 
 #include <float.h>     // DBL_MAX
-#include <errno.h>     // errno
 #include "ini.h"       // https://github.com/benhoyt/inih
 #include "cfg.h"
 #include "succade.h"   // defines, structs, all that stuff
@@ -54,7 +53,7 @@ static char *lemon_arg(thing_s *lemon)
 
 	char *arg = malloc(sizeof(char) * BUFFER_LEMON_ARG); 
 
-	snprintf(arg, 1024,
+	snprintf(arg, BUFFER_LEMON_ARG,
 		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
 		cfg_has(lcfg, LEMON_OPT_WIDTH)  ? w : "",    // max 8
 		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",    // max 8
