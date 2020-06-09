@@ -228,6 +228,10 @@ char *config_path(const char *filename, const char *dirname)
 	return cfg_path;
 }
 
+/*
+ * Returns the seconds that have passed since an unspecified starting point,
+ * (see CLOCK_MONOTONIC), in seconds, as a floating point number.
+ */
 double get_time()
 {
 	clockid_t cid = CLOCK_MONOTONIC;
@@ -241,6 +245,10 @@ double get_time()
 	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
 }
 
+/*
+ * Tries to detect if X is running via the DISPLAY environment variable.
+ * Returns 1 if X seems to be running, otherwise 0.
+ */
 int x_is_running()
 {
 	char *display = getenv("DISPLAY");
