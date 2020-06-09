@@ -256,11 +256,9 @@ static int block_is_due(thing_s *block, double now, double tolerance)
 	return 0;
 }
 
-// TODO check the return of open_block() and only
-//      increment `opened` if it came back with 0
-static int open_due_blocks(state_s *state, double now)
+static size_t open_due_blocks(state_s *state, double now)
 {
-	int opened = 0;
+	size_t opened = 0;
 	thing_s *block = NULL;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
@@ -270,19 +268,18 @@ static int open_due_blocks(state_s *state, double now)
 			if (block_can_consume(block))
 			{
 				kita_child_set_arg(block->child, block->other->output);
-				open_block(block);
+				opened += (open_block(block) == 0);
 				kita_child_set_arg(block->child, NULL);
 			}
 			else
 			{
-				open_block(block);
+				opened += (open_block(block) == 0);
 			}
 			if (block->b_type == BLOCK_SPARKED)
 			{
 				free(block->other->output);
 				block->other->output = NULL;
 			}
-			++opened;
 		}
 	}
 	return opened;
