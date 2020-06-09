@@ -59,7 +59,7 @@ char *lemon_arg(thing_s *lemon)
 
 	snprintf(arg, 1024,
 		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
-		cfg_has(lcfg, LEMON_OPT_WIDTH) ? w : "",     // max 8
+		cfg_has(lcfg, LEMON_OPT_WIDTH)  ? w : "",    // max 8
 		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",    // max 8
 		cfg_get_int(lcfg, LEMON_OPT_X),              // max 8
 		cfg_get_int(lcfg, LEMON_OPT_Y),              // max 8
@@ -141,7 +141,7 @@ int read_spark(thing_s *spark)
 /*
  * Send a kill signal to the thing's child process.
  */
-void close_thing(thing_s *thing)
+void kill_thing(thing_s *thing)
 {
 	kita_child_term(thing->child);
 }
@@ -149,11 +149,11 @@ void close_thing(thing_s *thing)
 /*
  * Convenience function: simply runs close_block() for all blocks.
  */
-void close_blocks(state_s *state)
+void kill_blocks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		close_thing(&state->blocks[i]);
+		kill_thing(&state->blocks[i]);
 	}
 }
 
@@ -185,11 +185,11 @@ size_t open_sparks(state_s *state)
 /*
  * Convenience function: simply closes all given triggers.
  */
-void close_sparks(state_s *state)
+void kill_sparks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		close_thing(&state->sparks[i]);
+		kill_thing(&state->sparks[i]);
 	}
 }
 
