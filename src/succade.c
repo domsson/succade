@@ -7,6 +7,7 @@
 #include <sys/wait.h>  // waitpid()
 #include <errno.h>     // errno
 #include "ini.h"       // https://github.com/benhoyt/inih
+#include "cfg.c"
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
 #include "helpers.c"   // Helper functions, mostly for strings
@@ -15,7 +16,6 @@
 
 static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
-static volatile int sigchld;   // SIGCHLD has been received, please handle
 
 static void free_lemon_cfg(lemon_cfg_s *cfg)
 {
@@ -88,61 +88,6 @@ void free_spark(spark_s *spark)
 
 	char *arg = kita_child_get_arg(spark->child);
 	free(arg);
-}
-
-cfg_s *cfg_init(cfg_s *cfg, const char *name, size_t size)
-{
-	//cfg = (cfg_s *) { 0 };
-
-	cfg->name = strdup(name);
-	cfg->size = size;
-	cfg->opts = malloc(size * sizeof(cfg_s));
-	cfg->set  = malloc(size * sizeof(int));
-
-	for (size_t i = 0; i < size; ++i)
-	{
-		cfg->opts[i] = (cfg_opt_u) { 0 };
-		cfg->set[i]  = 0;
-	}
-
-	return cfg;
-}
-
-int cfg_has(cfg_s *cfg, size_t idx)
-{
-	return (idx < cfg->size && cfg->set[idx]);
-}
-
-void cfg_set_int(cfg_s *cfg, size_t idx, int val)
-{
-	if (idx >= cfg->size)
-		return;
-
-	cfg->opts[idx].i = val;
-	cfg->set[idx] = 1;
-}
-
-void cfg_set_float(cfg_s *cfg, size_t idx, float val)
-{
-	if (idx >= cfg->size)
-		return;
-
-	cfg->opts[idx].f = val;
-	cfg->set[idx] = 1;
-}
-
-void cfg_set_str(cfg_s *cfg, size_t idx, const char *val)
-{
-	if (idx >= cfg->size)
-		return;
-
-	cfg->opts[idx].s = val;
-	cfg->set[idx] = 1;
-}
-
-cfg_opt_u *cfg_get(cfg_s *cfg, size_t idx)
-{
-	return cfg_has(cfg, idx) ? &cfg->opts[idx] : NULL;
 }
 
 /*
@@ -1175,9 +1120,9 @@ void help(const char *invocation, FILE *where)
 
 void test_cfg()
 {
-	int i = 7;
-	int f = 13.37;
-	const char *s = "hello";
+	int   i = 7;
+	int   f = 13.37;
+	char *s = strdup("hello"); 
 
 	cfg_s cfg = { 0 };
 	cfg_init(&cfg, "test", 5);
@@ -1195,6 +1140,8 @@ void test_cfg()
 	fprintf(stderr, "OPT f = %f\n", opt_f ? opt_f->f : -1);
 	fprintf(stderr, "OPT s = %s\n", opt_s ? opt_s->s : "-");
 	fprintf(stderr, "OPT n = %s\n", opt_n ? opt_n->s : "-");
+
+	cfg_free(&cfg);
 
 }
 

@@ -115,19 +115,6 @@ typedef enum succade_block_opt block_opt_e;
 typedef enum succade_click_opt click_opt_e;
 
 //
-// UNIONS
-// 
-
-union succade_opt
-{
-	const char *s;
-	int         i;
-	float       f;
-};
-
-typedef union succade_opt cfg_opt_u;
-
-//
 // STRUCTS
 //
 
@@ -137,7 +124,6 @@ struct succade_spark;
 struct succade_prefs;
 struct succade_state;
 
-struct succade_cfg;
 struct succade_lemon_cfg;
 struct succade_block_cfg;
 struct succade_click_cfg;
@@ -148,18 +134,9 @@ typedef struct succade_spark spark_s;
 typedef struct succade_prefs prefs_s;
 typedef struct succade_state state_s;
 
-typedef struct succade_cfg cfg_s;
 typedef struct succade_lemon_cfg lemon_cfg_s;
 typedef struct succade_block_cfg block_cfg_s;
 typedef struct succade_click_cfg click_cfg_s;
-
-struct succade_cfg
-{
-	char         *name;
-	cfg_opt_u    *opts;
-	unsigned char *set;
-	size_t        size;
-};
 
 struct succade_lemon_cfg
 {
