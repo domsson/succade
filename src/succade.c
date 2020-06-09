@@ -358,6 +358,9 @@ char *blockstr(const thing_s *bar, const thing_s *block, size_t len)
 		strcat(action_end, "%{A}");
 	}
 
+	// TODO this whole function is a mess after changing the way we 
+	//      handle the configs, please clean this up ASAP, kthxbye!
+
 	size_t diff;
 	char *result = escape(block->output, '%', &diff);
 	int padding = cfg_get_int(&block->cfg, BLOCK_OPT_WIDTH) + diff;
