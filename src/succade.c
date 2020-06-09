@@ -4,9 +4,6 @@
 #include <string.h>    // strlen(), strcmp(), ...
 #include <signal.h>    // sigaction(), ... 
 #include <float.h>     // DBL_MAX
-#include <sys/epoll.h> // epoll_wait(), ... 
-#include <sys/types.h> // pid_t
-#include <sys/wait.h>  // waitpid()
 #include <errno.h>     // errno
 #include "ini.h"       // https://github.com/benhoyt/inih
 #include "cfg.h"
@@ -36,7 +33,7 @@ static void free_thing(thing_s *thing)
  * Command line options and arguments string for lemonbar.
  * Allocated with malloc(), so please free() it at some point.
  */
-char *lemon_arg(thing_s *lemon)
+static char *lemon_arg(thing_s *lemon)
 {
 	cfg_s *lcfg = &lemon->cfg;
 
@@ -87,7 +84,7 @@ char *lemon_arg(thing_s *lemon)
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
-int open_lemon(thing_s *lemon)
+static int open_lemon(thing_s *lemon)
 {
 	char *old_arg = kita_child_get_arg(lemon->child);
 	free(old_arg);
@@ -104,7 +101,7 @@ int open_lemon(thing_s *lemon)
 /*
  *
  */
-int open_block(thing_s *block)
+static int open_block(thing_s *block)
 {
 	if (kita_child_open(block->child) == 0)
 	{
@@ -115,7 +112,7 @@ int open_block(thing_s *block)
 	return -1;
 }
 
-int read_block(thing_s *block)
+static int read_block(thing_s *block)
 {
 	char *old = block->output ? strdup(block->output) : NULL;
 
@@ -129,7 +126,7 @@ int read_block(thing_s *block)
 	return !same;
 }
 
-int read_spark(thing_s *spark)
+static int read_spark(thing_s *spark)
 {
 	free(spark->output); // just in case, free'ing NULL is fine
 	spark->output = kita_child_read(spark->child, KITA_IOS_OUT);
@@ -138,26 +135,7 @@ int read_spark(thing_s *spark)
 	return !empty(spark->output);
 }
 
-/*
- * Send a kill signal to the thing's child process.
- */
-void kill_thing(thing_s *thing)
-{
-	kita_child_term(thing->child);
-}
-
-/*
- * Convenience function: simply runs close_block() for all blocks.
- */
-void kill_blocks(state_s *state)
-{
-	for (size_t i = 0; i < state->num_blocks; ++i)
-	{
-		kill_thing(&state->blocks[i]);
-	}
-}
-
-int open_spark(thing_s *spark)
+static int open_spark(thing_s *spark)
 {
 	if (kita_child_open(spark->child) == 0)
 	{
@@ -172,7 +150,7 @@ int open_spark(thing_s *spark)
  * Convenience function: simply opens all given triggers.
  * Returns the number of successfully opened triggers.
  */ 
-size_t open_sparks(state_s *state)
+static size_t open_sparks(state_s *state)
 {
 	size_t num_sparks_opened = 0;
 	for (size_t i = 0; i < state->num_sparks; ++i)
@@ -183,20 +161,9 @@ size_t open_sparks(state_s *state)
 }
 
 /*
- * Convenience function: simply closes all given triggers.
- */
-void kill_sparks(state_s *state)
-{
-	for (size_t i = 0; i < state->num_sparks; ++i)
-	{
-		kill_thing(&state->sparks[i]);
-	}
-}
-
-/*
  * Convenience function: simply frees all given blocks.
  */
-void free_blocks(state_s *state)
+static void free_blocks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
@@ -207,7 +174,7 @@ void free_blocks(state_s *state)
 /*
  * Convenience function: simply frees all given triggers.
  */
-void free_sparks(state_s *state)
+static void free_sparks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
@@ -215,14 +182,14 @@ void free_sparks(state_s *state)
 	}
 }
 
-int block_can_consume(thing_s *block)
+static int block_can_consume(thing_s *block)
 {
 	return block->b_type == BLOCK_SPARKED
 		&& cfg_get_int(&block->cfg, BLOCK_OPT_CONSUME) 
 		&& !empty(block->other->output);
 }
 
-double block_due_in(thing_s *block, double now)
+static double block_due_in(thing_s *block, double now)
 {
 	float reload = cfg_get_float(&block->cfg, BLOCK_OPT_RELOAD);
 
@@ -231,7 +198,7 @@ double block_due_in(thing_s *block, double now)
 		DBL_MAX;
 }
 
-int block_is_due(thing_s *block, double now, double tolerance)
+static int block_is_due(thing_s *block, double now, double tolerance)
 {
 	// block is currently running
 	if (block->alive)
@@ -290,8 +257,11 @@ int block_is_due(thing_s *block, double now, double tolerance)
 	return 0;
 }
 
-void open_due_blocks(state_s *state, double now)
+// TODO check the return of open_block() and only
+//      increment `opened` if it came back with 0
+static int open_due_blocks(state_s *state, double now)
 {
+	int opened = 0;
 	thing_s *block = NULL;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
@@ -313,11 +283,13 @@ void open_due_blocks(state_s *state, double now)
 				free(block->other->output);
 				block->other->output = NULL;
 			}
+			++opened;
 		}
 	}
+	return opened;
 }
 
-double time_to_wait(state_s *state, double now)
+static double time_to_wait(state_s *state, double now)
 {
 	double lemon_due = DBL_MAX;
 	double thing_due = DBL_MAX;
@@ -335,7 +307,8 @@ double time_to_wait(state_s *state, double now)
 	return (lemon_due == DBL_MAX) ? -1 : lemon_due;
 }
 
-char *prefixstr(const char *affix, const char *fg, const char *bg)
+/*
+static char *prefixstr(const char *affix, int font, const char *fg, const char *bg)
 {
 	size_t len = empty(affix) ? 0 : strlen(affix) + 32;
 	char *prefix = malloc(len * sizeof(char) + 1);
@@ -347,9 +320,10 @@ char *prefixstr(const char *affix, const char *fg, const char *bg)
 		return prefix;
 	}
 
-	snprintf(prefix, len, "%%{T3 F%s B%s}%s", fg ? fg : "-", bg ? bg : "-", affix);
+	snprintf(prefix, len, "%%{T%d F%s B%s}%s", font, fg ? fg : "-", bg ? bg : "-", affix);
 	return prefix;
 }
+*/
 
 /*
  * Given a block, it returns a pointer to a string that is the formatted result 
@@ -360,42 +334,46 @@ char *prefixstr(const char *affix, const char *fg, const char *bg)
  * string this function is putting together, otherwise truncation will happen.
  * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
-char *blockstr(const thing_s *bar, const thing_s *block, size_t len)
+static char *blockstr(const thing_s *lemon, const thing_s *block)
 {
-	char action_start[(5 * strlen(block->sid)) + 56]; // ... + (5 * 11) + 1
-	action_start[0] = 0;
-	char action_end[21]; // (5 * 4) + 1
-	action_end[0] = 0;
+	// for convenience
+	const cfg_s *bcfg = &block->cfg;
+	const cfg_s *lcfg = &lemon->cfg;
 
-	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_LMB))
+	char action_start[(5 * strlen(block->sid)) + 64];
+	char action_end[24];  
+	action_start[0] = 0;
+	action_end[0]   = 0;
+
+	if (cfg_has(bcfg, BLOCK_OPT_CMD_LMB))
 	{
 		strcat(action_start, "%{A1:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_MMB))
+	if (cfg_has(bcfg, BLOCK_OPT_CMD_MMB))
 	{
 		strcat(action_start, "%{A2:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_RMB))
+	if (cfg_has(bcfg, BLOCK_OPT_CMD_RMB))
 	{
 		strcat(action_start, "%{A3:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_SUP))
+	if (cfg_has(bcfg, BLOCK_OPT_CMD_SUP))
 	{
 		strcat(action_start, "%{A4:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_sup:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_SDN))
+	if (cfg_has(bcfg, BLOCK_OPT_CMD_SDN))
 	{
 		strcat(action_start, "%{A5:");
 		strcat(action_start, block->sid);
@@ -403,71 +381,33 @@ char *blockstr(const thing_s *bar, const thing_s *block, size_t len)
 		strcat(action_end, "%{A}");
 	}
 
-	// TODO this whole function is a mess after changing the way we 
-	//      handle the configs, please clean this up ASAP, kthxbye!
-
+	// TODO we're missing the UNIT option, add that! let's have the
+	//      unit have the same foreground and background color as 
+	//      the actual block result string, that should be okay.
+	//      but, be careful! the length of the unit string, plus the 
+	//      separating space, need to be taken into account when 
+	//      calculating the padding (fixed width) of the block, no?
+	
 	size_t diff;
 	char *result = escape(block->output, '%', &diff);
-	int padding = cfg_get_int(&block->cfg, BLOCK_OPT_WIDTH) + diff;
+	int padding = cfg_get_int(bcfg, BLOCK_OPT_WIDTH) + diff;
 
-	size_t buf_len;
+	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG), "-", "-");
+	const char *block_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_BG), cfg_get_str(lcfg, LEMON_OPT_BLOCK_BG), "-");
+	const char *label_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL_FG), cfg_get_str(lcfg, LEMON_OPT_LABEL_FG), "-");
+	const char *label_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL_BG), cfg_get_str(lcfg, LEMON_OPT_LABEL_BG), "-");
+	const char *affix_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_FG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_FG), "-");
+	const char *affix_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_BG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_BG), "-");
 
-	if (len > 0)
-	{
-		// If len is given, we use that as buffer size
-		buf_len = len;
-	}
-	else
-	{
-		char *bar_prefix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_PREFIX);
-		char *bar_suffix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_SUFFIX);
-		char *block_label = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL);
+	int offset = cfg_has(bcfg, BLOCK_OPT_OFFSET) ? cfg_get_int(bcfg, BLOCK_OPT_OFFSET) : cfg_get_int(lcfg, LEMON_OPT_BLOCK_OFFSET);
+	int ol     = cfg_has(bcfg, BLOCK_OPT_OL) ? cfg_get_int(bcfg, BLOCK_OPT_OL) : cfg_get_int(lcfg, LEMON_OPT_OL);
+	int ul     = cfg_has(bcfg, BLOCK_OPT_UL) ? cfg_get_int(bcfg, BLOCK_OPT_UL) : cfg_get_int(lcfg, LEMON_OPT_UL);
+	const char *lc   = strsel(cfg_get_str(bcfg, BLOCK_OPT_LC), cfg_get_str(lcfg, LEMON_OPT_LC) , "-");
 
-		// Required buffer mainly depends on the result and name of a block
-		buf_len = 209;   // format str = 70, known stuff = 138, '\0' = 1
-		buf_len += strlen(action_start);
-		buf_len += bar_prefix ? strlen(bar_prefix) : 0;
-		buf_len += bar_suffix ? strlen(bar_suffix) : 0;
-		buf_len += block_label ? strlen(block_label) : 0;
-		buf_len += strlen(result);
-	}
-
-	char *bar_block_bg   = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_BG);
-	char *bar_label_fg   = cfg_get_str(&bar->cfg, LEMON_OPT_LABEL_FG);
-	char *bar_label_bg   = cfg_get_str(&bar->cfg, LEMON_OPT_LABEL_BG);
-	char *bar_affix_fg   = cfg_get_str(&bar->cfg, LEMON_OPT_AFFIX_FG);
-	char *bar_affix_bg   = cfg_get_str(&bar->cfg, LEMON_OPT_AFFIX_BG);
-	int bar_block_offset = cfg_get_int(&bar->cfg, LEMON_OPT_BLOCK_OFFSET);
-	int bar_block_ol     = cfg_get_int(&bar->cfg, LEMON_OPT_OL);
-	int bar_block_ul     = cfg_get_int(&bar->cfg, LEMON_OPT_UL);
-
-	char *block_fg       = cfg_get_str(&block->cfg, BLOCK_OPT_BLOCK_FG);
-	char *block_bg       = cfg_get_str(&block->cfg, BLOCK_OPT_BLOCK_BG);
-	char *block_label_fg = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL_FG);
-	char *block_label_bg = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL_BG);
-	char *block_affix_fg = cfg_get_str(&block->cfg, BLOCK_OPT_AFFIX_FG);
-	char *block_affix_bg = cfg_get_str(&block->cfg, BLOCK_OPT_AFFIX_BG);
-	char *block_lc       = cfg_get_str(&block->cfg, BLOCK_OPT_LC);
-	int block_ol         = cfg_get_int(&block->cfg, BLOCK_OPT_OL);
-	int block_ul         = cfg_get_int(&block->cfg, BLOCK_OPT_UL);
-	int block_offset     = cfg_get_int(&block->cfg, BLOCK_OPT_OFFSET);
-
-	// TODO bug! if the user decides to set underline TRUE for the bar
-	//      buf turn it FALSE for individual blocks, it will not work.
-	//	similarly, the 'offset' option currently only works when set 
-	//	on a block, not when set for the entire bar
-	const char *fg = strsel(block_fg, NULL, NULL);
-	const char *bg = strsel(block_bg, bar_block_bg, NULL);
-	const char *lc = strsel(block_lc, NULL, NULL);
-	const char *label_fg = strsel(block_label_fg, bar_label_fg, fg);
-	const char *label_bg = strsel(block_label_bg, bar_label_bg, bg);
-	const char *affix_fg = strsel(block_affix_fg, bar_affix_fg, fg);
-	const char *affix_bg = strsel(block_affix_bg, bar_affix_bg, bg);
-        const int offset = cfg_has(&block->cfg, BLOCK_OPT_OFFSET) ? block_offset : bar_block_offset;
-	const int ol = cfg_has(&block->cfg, BLOCK_OPT_OL) ? block_ol : bar_block_ol;
-	const int ul = cfg_has(&block->cfg, BLOCK_OPT_UL) ? block_ul : bar_block_ul;
-
-	//const char *prefix = prefixstr(bar->block_cfg.prefix, affix_fg, affix_bg);
+	const char *prefix = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), cfg_get_str(lcfg, LEMON_OPT_BLOCK_PREFIX), "");
+	const char *suffix = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), cfg_get_str(lcfg, LEMON_OPT_BLOCK_SUFFIX), "");
+	const char *label  = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL), "", "");
+	//const char *unit   = strsel(cfg_get_str(bcfg, BLOCK_OPT_UNIT), "", "");
 
 	// TODO currently we are adding the format thingies for label, 
 	//      prefix and suffix, even if those are empty anyway, which
@@ -476,45 +416,26 @@ char *blockstr(const thing_s *bar, const thing_s *block, size_t len)
 	//      but of course, replacing a couple bytes with lots of malloc
 	//      would not be great either, so... not sure about it yet.
 
-	char *block_prefix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_PREFIX);
-	char *block_suffix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_SUFFIX);
-	char *block_label  = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL);
-
-	char *str = malloc(buf_len);
-	snprintf(str, buf_len,
-		"%s%%{O%d F%s B%s U%s %co %cu}"                   // 14
-		"%%{T3 F%s B%s}%s"                                //  9
-		"%%{T2 F%s B%s}%s"                                //  9
-		"%%{T1 F%s B%s}%*s"                               //  9
-		"%%{T3 F%s B%s}%s"                                //  9
-		"%%{T- F- B- U- -o -u}%s",                        // 20
+	char *str = malloc(BUFFER_BLOCK_STR);
+	snprintf(str, BUFFER_BLOCK_STR,
+		"%s%%{O%d F%s B%s U%s %co %cu}"
+		"%%{T3 F%s B%s}%s"
+		"%%{T2 F%s B%s}%s"
+		"%%{T1 F%s B%s}%*s"
+		"%%{T3 F%s B%s}%s"
+		"%%{T- F- B- U- -o -u}%s",
 		// Start
-		action_start,                                     // strlen
-		offset,                                           // max 4
-		fg ? fg : "-",                                    // strlen, max 9
-		bg ? bg : "-",                                    // strlen, max 9
-		lc ? lc : "-",                                    // strlen, max 9
-		ol ? '+' : '-',                                   // 1
-		ul ? '+' : '-',                                   // 1
+		action_start, offset, block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
 		// Prefix
-		affix_fg ? affix_fg : "-",                        // strlen, max 9
-		affix_bg ? affix_bg : "-",		          // strlen, max 9
-		block_prefix ? block_prefix : "",    // strlen
+		affix_fg, affix_bg, prefix,
 		// Label
-		label_fg ? label_fg : "-",                        // strlen, max 9
-		label_bg ? label_bg : "-",                        // strlen, max 9
-		block_label ? block_label : "",  // strlen
+		label_fg, label_bg, label,
 		// Block
-		fg ? fg : "-",                                    // strlen, max 9
-		bg ? bg : "-",                                    // strlen, max 9
-		padding,                                          // max 4
-		result,                                           // strlen
+		block_fg, block_bg, padding, result,
 		// Suffix
-		affix_fg ? affix_fg : "-",                        // strlen, max 9
-		affix_bg ? affix_bg : "-",                        // strlen, max 9
-		block_suffix ? block_suffix : "",    // strlen
+		affix_fg, affix_bg, suffix,
 		// End
-		action_end                                        // 5*4
+		action_end
 	);
 
 	free(result);
@@ -525,7 +446,7 @@ char *blockstr(const thing_s *bar, const thing_s *block, size_t len)
  * Returns 'l', 'c' or 'r' for input values -1, 0 and 1 respectively.
  * For other input values, the behavior is undefined.
  */
-char get_align(const int align)
+static char get_align(const int align)
 {
 	char a[] = {'l', 'c', 'r'};
 	return a[align+1]; 
@@ -535,7 +456,7 @@ char get_align(const int align)
  * Combines the results of all given blocks into a single string that can be fed
  * to Lemonbar. Returns a pointer to the string, allocated with malloc().
  */
-char *barstr(const state_s *state)
+static char *barstr(const state_s *state)
 {
 	// For convenience...
 	const thing_s *bar = &state->lemon;
@@ -563,7 +484,7 @@ char *barstr(const state_s *state)
 
 		int block_align = cfg_get_int(&block->cfg, BLOCK_OPT_ALIGN);
 
-		char *block_str = blockstr(bar, block, 0);
+		char *block_str = blockstr(bar, block);
 		size_t block_str_len = strlen(block_str);
 		if (block_align != last_align)
 		{
@@ -593,7 +514,7 @@ char *barstr(const state_s *state)
  * alignment of blocks. For every block name found, the callback function `cb` 
  * will be run. Returns the number of block names found.
  */
-size_t parse_format(const char *format, create_block_callback cb, void *data)
+static size_t parse_format(const char *format, create_block_callback cb, void *data)
 {
 	if (format == NULL)
 	{
@@ -636,7 +557,7 @@ size_t parse_format(const char *format, create_block_callback cb, void *data)
 	return num_blocks;
 }
 
-kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int err)
+static kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int err)
 {
 	// Create child process
 	kita_child_s *child = kita_child_new(cmd, in, out, err);
@@ -659,7 +580,7 @@ kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int e
 /*
  * Finds and returns the block with the given `sid` -- or NULL.
  */
-thing_s *get_block(const state_s *state, const char *sid)
+static thing_s *get_block(const state_s *state, const char *sid)
 {
 	// Iterate over all existing blocks and check for a name match
 	for (size_t i = 0; i < state->num_blocks; ++i)
@@ -678,7 +599,7 @@ thing_s *get_block(const state_s *state, const char *sid)
  * is already a block with that SID present. 
  * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
-thing_s *add_block(state_s *state, const char *sid)
+static thing_s *add_block(state_s *state, const char *sid)
 {
 	// See if there is an existing block by this name (and return, if so)
 	thing_s *eb = get_block(state, sid);
@@ -787,7 +708,7 @@ static int load_block_cfg(state_s *state)
 	return ini_parse(state->prefs.config, block_cfg_handler, state);
 }
 
-thing_s *get_spark(state_s *state, void *block, const char *cmd)
+static thing_s *get_spark(state_s *state, void *block, const char *cmd)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
@@ -804,7 +725,7 @@ thing_s *get_spark(state_s *state, void *block, const char *cmd)
 	return NULL;
 }
 
-thing_s *add_spark(state_s *state, thing_s *block, const char *cmd)
+static thing_s *add_spark(state_s *state, thing_s *block, const char *cmd)
 {
 	// See if there is an existing spark that matches the given params
 	thing_s *es = get_spark(state, block, cmd);
@@ -836,7 +757,7 @@ thing_s *add_spark(state_s *state, thing_s *block, const char *cmd)
 	return &state->sparks[current];
 }
 
-size_t create_sparks(state_s *state)
+static size_t create_sparks(state_s *state)
 {
 	thing_s *block = NULL;
 	for (size_t i = 0; i < state->num_blocks; ++i)
@@ -874,7 +795,7 @@ size_t create_sparks(state_s *state)
  * Returns 0 on success, -1 if the string was not a recognized action command
  * or the block that the action belongs to could not be found.
  */
-int process_action(const state_s *state, const char *action)
+static int process_action(const state_s *state, const char *action)
 {
 	size_t len = strlen(action);
 	if (len < 5)
@@ -944,7 +865,7 @@ int process_action(const state_s *state, const char *action)
 	}
 }
 
-void feed_lemon(state_s *state)
+static void feed_lemon(state_s *state)
 {
 	if (state->due == 0)
 	{
@@ -992,7 +913,7 @@ void on_signal(int sig)
 	handled = sig;
 }
 
-thing_s *thing_by_child(state_s *state, kita_child_s *child)
+static thing_s *thing_by_child(state_s *state, kita_child_s *child)
 {
 	// lemon
 	if (child == state->lemon.child)
@@ -1141,7 +1062,7 @@ void on_child_remove(kita_state_s *ks, kita_event_s *ke)
 	//fprintf(stderr, "on_child_remove()\n");
 }
 
-void cleanup(state_s *state)
+static void cleanup(state_s *state)
 {
 	// free sparks
 	free_sparks(state);
@@ -1167,7 +1088,7 @@ void cleanup(state_s *state)
 }
 
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
-void help(const char *invocation, FILE *where)
+static void help(const char *invocation, FILE *where)
 {
 	fprintf(where, "USAGE\n");
 	fprintf(where, "\t%s [OPTIONS...]\n", invocation);

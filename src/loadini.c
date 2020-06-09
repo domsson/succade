@@ -160,12 +160,12 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_BLOCK_FG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(bc, BLOCK_OPT_FG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "bg") || equals(name, "background"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_BLOCK_BG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(bc, BLOCK_OPT_BG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "label-bg") || equals(name, "label-background"))

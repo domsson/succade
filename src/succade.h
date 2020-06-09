@@ -12,10 +12,17 @@
 #define SUCCADE_VER_MINOR 3
 #define SUCCADE_VER_PATCH 0
 
-#define BUFFER_LEMON_ARG   1024
-#define BUFFER_LEMON_INPUT 2048
-#define BUFFER_BLOCK_NAME    64
-#define BUFFER_NUMERIC        8
+#define BUFFER_NUMERIC          8
+#define BUFFER_LEMON_ARG     1024
+#define BUFFER_LEMON_INPUT   2048
+
+#define BUFFER_BLOCK_FORMAT   256
+#define BUFFER_BLOCK_NAME      64
+#define BUFFER_BLOCK_AFFIX     16
+#define BUFFER_BLOCK_LABEL     64
+#define BUFFER_BLOCK_UNIT      16
+#define BUFFER_BLOCK_OUTPUT   512
+#define BUFFER_BLOCK_STR     2048
 
 #define BLOCK_WAIT_TOLERANCE 0.1
 #define MILLISEC_PER_SEC     1000
@@ -25,6 +32,10 @@
 #define DEFAULT_LEMON_BIN     "lemonbar"
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"
 #define DEFAULT_LEMON_SECTION "bar"
+
+#define STR_DASH "-"
+#define STR_PLUS "+"
+#define STR_NONE ""
 
 //
 // ENUMS
@@ -91,8 +102,8 @@ enum succade_lemon_opt
 enum succade_block_opt
 {
 	BLOCK_OPT_BIN,
-	BLOCK_OPT_BLOCK_FG,
-	BLOCK_OPT_BLOCK_BG,
+	BLOCK_OPT_FG,
+	BLOCK_OPT_BG,
 	BLOCK_OPT_LABEL_FG,
 	BLOCK_OPT_LABEL_BG,
 	BLOCK_OPT_AFFIX_FG,

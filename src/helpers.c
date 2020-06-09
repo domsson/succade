@@ -116,9 +116,9 @@ char *escape(const char *str, const char e, size_t *diff)
  * Returns the first string, unless it is empty or NULL, in which the same 
  * check is performed on the second string and it will be returned. If the 
  * second string is also NULL or empty, the third string will be returned
- * without any further tests.
+ * without any further tests (fallback).
  */
-const char *strsel(const char *str1, const char *str2,  const char *str3)
+const char *strsel(const char *str1, const char *str2,  const char *fb)
 {
 	if (str1 && strlen(str1))
 	{
@@ -128,7 +128,7 @@ const char *strsel(const char *str1, const char *str2,  const char *str3)
 	{
 		return str2;
 	}
-	return str3;
+	return fb;
 }
 
 /*
