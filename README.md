@@ -22,14 +22,6 @@ The config file needs to have one section for lemonbar and one per block. The ba
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
 - Most settings can be set once for all blocks, then overwritten for individual blocks, if need be.
 
-# To-Do List
-
-- [x] Support for _live_ blocks
-- [ ] Support for conditional formatting
-- [ ] Support for multiple bars / monitors
-- [ ] Lots of testing to find and fix bugs
-- [ ] Probably some more refactoring
-
 # Dependencies
 
 - [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian)
