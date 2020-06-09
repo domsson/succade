@@ -138,58 +138,6 @@ typedef struct succade_lemon_cfg lemon_cfg_s;
 typedef struct succade_block_cfg block_cfg_s;
 typedef struct succade_click_cfg click_cfg_s;
 
-struct succade_lemon_cfg
-{
-	char *name;            // Window name (WM_NAME)
-	char *bin;             // Command to run
-
-	size_t w : 16;         // Width of the bar
-	size_t h : 16;         // Height of the bar
-	size_t x : 16;         // x-position of the bar
-	size_t y : 16;         // y-position of the bar
-
-	unsigned bottom : 1;   // Position bar at bottom of screen?
-	unsigned force : 1;    // Force docking?
-	char *format;          // List and position of blocks
-
-	char *bg;              // Background color for the entire bar
-	size_t lw : 8;         // Overline/underline width in px
-
-	char *block_font;      // The default font to use (slot 1)
-	char *label_font;      // Font used for the label (slot 2)
-	char *affix_font;      // Font used for prefix/suffix (slot 3)
-};
-
-struct succade_block_cfg
-{
-	char *bin;             // Command to run
-
-	char *fg;              // Foreground color
-	char *bg;              // Background color
-	char *label_fg;        // Foreground color for the label
-	char *label_bg;        // Background color for the label
-	char *affix_fg;        // Foreground color for the affixes
-	char *affix_bg;        // Background color for the affixes
-
-	char *lc;              // Overline/underline color
-	unsigned ol : 1;       // Draw overline?
-	unsigned ul : 1;       // Draw underline?
-
-	size_t   width  :  8;  // Minimum width of result in chars (previously 'padding')
-	int      offset : 16;  // Offset to next block in px
-	int      align;        // -1, 0, 1 (left, center, right)
-	
-	char *prefix;          // Prepend this to the block's result [TODO] this was previously on bar-level only, implement
-	char *suffix;          // Append this to the block's result  [TODO] this was previously on bar-level only, implement
-	char *label;           // Prefixes the result string
-	char *unit;            // Will be appended to the result string [TODO] implement
-
-	char     *trigger;     // Run block based on this cmd's output
-	unsigned  consume : 1; // Consume the trigger's output, if any
-	double    reload;      // Interval between runs, in seconds 
-	unsigned  live    : 1; // This block is its own trigger
-};
-
 struct succade_click_cfg
 {
 	char *lmb;             // Command to run on left mouse click
