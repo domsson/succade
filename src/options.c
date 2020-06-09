@@ -6,7 +6,7 @@ void parse_args(int argc, char **argv, prefs_s *prefs)
 	// Get arguments, if any
 	opterr = 0;
 	int o;
-	while ((o = getopt(argc, argv, "c:eh")) != -1)
+	while ((o = getopt(argc, argv, "c:ehs:")) != -1)
 	{
 		switch (o)
 		{
@@ -18,6 +18,9 @@ void parse_args(int argc, char **argv, prefs_s *prefs)
 				break;
 			case 'h': // help (show help)
 				prefs->help = 1;
+				break;
+			case 's': // section name for bar
+				prefs->section = optarg;
 				break;
 		}
 	}

@@ -135,9 +135,10 @@ Usage:
 
 Options:
 
-- `e`: Run bar even if it is empty (no blocks defined or loaded)
-- `h`: Print a help text and exit
-- `s SECTION`: Define the section label to use for lemonbar (default is "bar")
+- `c`: config file to use
+- `e`: run bar even if it is empty (no blocks defined or loaded)
+- `h`: print a help text and exit
+- `s SECTION`: config section name for the bar (default is "bar")
 
 # License
 
