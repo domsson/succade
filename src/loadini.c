@@ -7,7 +7,7 @@
 int lemon_ini_handler(void *data, const char *section, const char *name, const char *value)
 {
 	// Unpack the data, which should be a lemon_s (struct succade_lemon)
-	lemon_s *lemon = (lemon_s*) data;
+	thing_s *lemon = (thing_s*) data;
 	cfg_s *lc = &lemon->cfg;
 
 	// Check for `name` and set the appropriate property

@@ -125,12 +125,14 @@ typedef enum succade_block_opt block_opt_e;
 // STRUCTS
 //
 
+struct succade_thing;
 struct succade_lemon;
 struct succade_block;
 struct succade_spark;
 struct succade_prefs;
 struct succade_state;
 
+typedef struct succade_thing thing_s;
 typedef struct succade_lemon lemon_s;
 typedef struct succade_block block_s;
 typedef struct succade_spark spark_s;
@@ -169,23 +171,22 @@ struct succade_spark
 	unsigned char alive : 1;
 };
 
-/*
 struct succade_thing
 {
 	char         *sid;
-	cfg_value_u  *cfg;
+	cfg_s         cfg;
 
 	kita_child_s *child;
 
-	thing_type_e  type; // LEMON, BLOCK_ONCE, BLOCK_TIMED, BLOCK_SPARKED, BLOCK_LIVE, SPARK
-	thing_s      *other;    // associated block or spark, depending on what this is
+	child_type_e  t_type;  // LEMON, BLOCK, SPARK
+	block_type_e  b_type;  // BLOCK_ONCE, BLOCK_TIMED, BLOCK_SPARKED, BLOCK_LIVE
+	thing_s      *other;   // associated block (for sparks) or spark (for blocks) 
 
 	char         *output;
 	unsigned char alive : 1;
 	double        last_open;
 	double        last_read;
 };
-*/
 
 struct succade_prefs
 {
@@ -198,7 +199,8 @@ struct succade_prefs
 struct succade_state
 {
         prefs_s  prefs;        // Preferences (options/config)
-	lemon_s  lemon;        // Lemon (prev. 'bar')
+	//lemon_s  lemon;        // Lemon (prev. 'bar')
+	thing_s  lemon;
 	block_s *blocks;       // Reference to block array
 	spark_s *sparks;       // Reference to spark array (prev. 'trigger')
 	size_t   num_blocks;   // Number of blocks in blocks array

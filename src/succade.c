@@ -22,7 +22,7 @@ static volatile int handled;   // The last signal that has been handled
 /*
  * Frees all members of the given bar that need freeing.
  */
-static void free_lemon(lemon_s *lemon)
+static void free_lemon(thing_s *lemon)
 {
 	free(lemon->sid);
 	cfg_free(&lemon->cfg);
@@ -57,7 +57,7 @@ void free_spark(spark_s *spark)
  * Command line options and arguments string for lemonbar.
  * Allocated with malloc(), so please free() it at some point.
  */
-char *lemon_arg(lemon_s *lemon)
+char *lemon_arg(thing_s *lemon)
 {
 	cfg_s *lcfg = &lemon->cfg;
 
@@ -108,7 +108,7 @@ char *lemon_arg(lemon_s *lemon)
  * Runs the bar process and opens file descriptors for reading and writing.
  * Returns 0 on success, -1 if bar could not be started.
  */
-int open_lemon(lemon_s *lemon)
+int open_lemon(thing_s *lemon)
 {
 	char *old_arg = kita_child_get_arg(lemon->child);
 	free(old_arg);
@@ -162,7 +162,7 @@ int read_spark(spark_s *spark)
 /*
  * Send a kill signal to the lemon's child process.
  */
-void close_lemon(lemon_s *lemon)
+void close_lemon(thing_s *lemon)
 {
 	kita_child_term(lemon->child);
 }
@@ -352,7 +352,7 @@ char *prefixstr(const char *affix, const char *fg, const char *bg)
  * string this function is putting together, otherwise truncation will happen.
  * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
-char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
+char *blockstr(const thing_s *bar, const block_s *block, size_t len)
 {
 	char action_start[(5 * strlen(block->sid)) + 56]; // ... + (5 * 11) + 1
 	action_start[0] = 0;
@@ -527,7 +527,7 @@ char get_align(const int align)
 char *barstr(const state_s *state)
 {
 	// For convenience...
-	const lemon_s *bar = &state->lemon;
+	const thing_s *bar = &state->lemon;
 	size_t num_blocks = state->num_blocks;
 
 	// Short blocks like temperature, volume or battery, will usually use 
@@ -965,7 +965,7 @@ void on_signal(int sig)
 	handled = sig;
 }
 
-lemon_s *lemon_by_child(state_s *state, kita_child_s *child)
+thing_s *lemon_by_child(state_s *state, kita_child_s *child)
 {
 	return (state->lemon.child == child) ? &state->lemon : NULL;
 }
@@ -1010,7 +1010,7 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 	//fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
 
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
-	lemon_s *lemon = NULL;
+	thing_s *lemon = NULL;
 	block_s *block = NULL;
 	spark_s *spark = NULL;
 
@@ -1067,7 +1067,7 @@ void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 	//fprintf(stderr, "on_child_exited(): %s\n", ke->child->cmd);
 	
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
-	lemon_s *lemon = NULL;
+	thing_s *lemon = NULL;
 	block_s *block = NULL;
 	spark_s *spark = NULL;
 	
@@ -1147,7 +1147,7 @@ int main(int argc, char **argv)
 
 	state_s  state = { 0 };
 	prefs_s *prefs = &(state.prefs); // For convenience
-	lemon_s *lemon = &(state.lemon); // For convenience
+	thing_s *lemon = &(state.lemon); // For convenience
 
 	//
 	// KITA STATE
