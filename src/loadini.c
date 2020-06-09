@@ -31,7 +31,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_str(lc, LEMON_OPT_BG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
-	if (equals(name, "lc") || equals(name, "line"))
+	if (equals(name, "lc") || equals(name, "line") || equals(name, "line-color"))
 	{
 		cfg_set_str(lc, LEMON_OPT_LC, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
@@ -71,7 +71,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(lc, LEMON_OPT_Y, atoi(value));
 		return 1;
 	}
-	if (equals(name, "dock"))
+	if (equals(name, "dock") || equals(name, "position"))
 	{
 		cfg_set_int(lc, LEMON_OPT_BOTTOM, equals(value, "bottom"));
 		return 1;
