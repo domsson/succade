@@ -1,6 +1,6 @@
 # succade
 
-Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, then repeatedly runs blocks, piping their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with simple [ini files](https://en.wikipedia.org/wiki/INI_file).
+Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works almost exactly like [Captain](https://github.com/muse/Captain): succade starts Lemonbar for you, then repeatedly runs blocks, piping their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with a simple [ini file](https://en.wikipedia.org/wiki/INI_file).
 
 ![Example bar](https://i.imgur.com/IQ26ypO.png)
 ![Example bar](https://i.imgur.com/6iCKW3w.png)
@@ -8,15 +8,11 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It works alm
 # How it works
 
 - Starts `lemonbar` for you
-- Reads the config file `~/.config/succade/succaderc`
-- Loads blocks (config files that point to binaries/scripts) from `~/.config/succade/blocks`
-- Updates Lemonbar based on the block's reloads or triggers
+- Reads the config file (default is `~/.config/succade/succaderc`)
+- Loads blocks (programs or scripts defined in the config file)
+- Updates Lemonbar based on the block's output 
 
-The general config file defines styling and position for the whole bar, lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes).
-
-Every block can have a config file that defines its styling, as well as how often the block should be reloaded. Alternatively, a trigger command can be defined.
-
-Triggers are commands that succade will run and monitor for output. When there is output, succade will run the associated block with the trigger's ouput as command line argument.
+The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the block should be reloaded. Alternatively, a trigger command can be defined for a block. Once the trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
 
 # Notable features
 
@@ -24,7 +20,7 @@ Triggers are commands that succade will run and monitor for output. When there i
 - Define a **prefix and suffix** for every block. Want to wrap all blocks in square brackets? That's 2 lines in the main config.
 - Define **padding** (fixed width) for your blocks to achieve a uniform look when using fixed-width fonts.
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
-- Most settings can be set once for all blocks, then overwritten for individual blocks in their own config, if need be.
+- Most settings can be set once for all blocks, then overwritten for individual blocks, if need be.
 
 # What it can't do
 
@@ -33,50 +29,39 @@ Triggers are commands that succade will run and monitor for output. When there i
 # To-Do List
 
 - [x] Support for _live_ blocks
-- [ ] Support for multiple bars
-- [ ] Support for multiple monitors
-- [ ] Lots of testing to find and fix bugs (your help is appreciated!)
-- [ ] Some Refactoring
+- [ ] Support for conditional formatting
+- [ ] Support for multiple bars / monitors
+- [ ] Lots of testing to find and fix bugs
+- [ ] Probably some more refactoring
 
 # Dependencies
 
 - [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian)
+- [`libkita`](https://github.com/domsson/libkita/) (by me, written for succade, public domain)
 
 # How to install
 
 Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed.
 
-1. Clone this repository:  
-   `git clone https://github.com/domsson/succade.git`
-2. Change into the succade directory:  
-   `cd succade`
-3. Make the build script executable, then run it:  
+1. Make the build script executable, then run it:  
    `chmod +x ./build`  
    `./build`
-4. Create the config directories (assuming `.config` as your config dir):  
+2. Create the config directory (assuming `.config` as your config dir):  
    `mkdir ~/.config/succade`  
-   `mkdir ~/.config/succade/blocks`
-5. Create a directory for the example block scripts:
-   `mkdir ~/.local/bin/candies`
-6. Copy the example config:
+3. Copy the example config, then edit it to your needs:
    `cp succaderc ~/.config/succade`  
-7. Copy the example block config files:
-   `cp blocks/cfg/* ~/.config/succade/blocks`
-8. Copy the example block scripts:
-   `cp blocks/bin/* ~/.local/bin/candies`
-7. Make sure the blocks are executable:  
-   `chmod +x ~/.local/bin/candies/*`
-8. Make `succade` executable and put it somwhere that's included in your path:  
+   `vim ~/.config/succade`
+4. Make `succade` executable and put it somewhere that's included in your path:  
    `chmod +x bin/succade`  
    `cp bin/succade ~/.local/bin/`
 
 # How to configure
 
-Take a look at the example configuration in this repository. The general configuration of the bar happens in `succaderc`. Additionally, every block can have its own `<blockname>.ini` file. As succade is still in active development, the configuration parameters available are subject to change. However, I'm trying to keep a high compatibility to Captain.
+Take a look at the example configuration in this repository and/or refer to the following documentation. 
 
-## succaderc
+## lemonbar
 
-`succaderc` is the config file for the bar itself. You need this file, otherwise succade won't start. At least the `format` property needs to be defined, everything else is optional.
+The special section `bar` is the configuration for the bar itself. This neeeds to be present, otherwise succade won't run. However, the only property that is required is `format`, everything else is optional.
 
 | Parameter             | Alias      | Type    | Description |
 |-----------------------|------------|---------|-------------|
@@ -105,9 +90,9 @@ Take a look at the example configuration in this repository. The general configu
 | `underline`           | `ul`       | boolean | Whether or not to draw an underline for all blocks. |
 | `block-offset`        | `offset`   | number  | Distance between any two blocks in pixel. Default is `0` |
 
-## name-of-block.ini
+## blocks
 
-In the block directory, you can create one config file for each block. The file name should end in `.ini`. The `bin` option points to the script/binary that should be run to create the desired output. Some of the values that can be set in these files are the same as in the succaderc file - if so, they will overwrite the behaviour specified there. This way, you can set a default font color in `succaderc`, but decide to give some blocks a different one via their own config.
+Every block that has been named in `format` needs is own config section. Some of the values that can be set here are the same as in the `bar` section - if so, they will overwrite the behaviour specified there. This way, you can set a default font color for the entire bar, but decide to give some blocks a different one.
 
 | Parameter          | Alias      | Type    | Description |
 |--------------------|------------|---------|-------------|
