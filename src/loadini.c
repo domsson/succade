@@ -149,7 +149,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 int block_ini_handler(void *data, const char *section, const char *name, const char *value)
 {
 	// Unpack the data
-	block_s *block = (block_s*) data;
+	thing_s *block = (thing_s *) data;
 	cfg_s *bc = &block->cfg;
 
 	// Check the `name` and do the thing
@@ -237,20 +237,20 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	{
 		if (is_quoted(value)) // String means trigger!
 		{
-			block->type = BLOCK_SPARKED;
+			block->b_type = BLOCK_SPARKED;
 			cfg_set_str(bc, BLOCK_OPT_TRIGGER, unquote(value));
 			cfg_set_float(bc, BLOCK_OPT_RELOAD, 0.0);
 		}
 		else
 		{
-			block->type = BLOCK_TIMED;
+			block->b_type = BLOCK_TIMED;
 			cfg_set_float(bc, BLOCK_OPT_RELOAD, atof(value));
 		}
 		return 1;
 	}
 	if (equals(name, "trigger"))
 	{
-		block->type = BLOCK_SPARKED;
+		block->b_type = BLOCK_SPARKED;
 		cfg_set_str(bc, BLOCK_OPT_TRIGGER, is_quoted(value) ? unquote(value) : strdup(value));
 		cfg_set_float(bc, BLOCK_OPT_RELOAD, 0.0);
 		return 1;
@@ -262,7 +262,7 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "live"))
 	{
-		block->type = BLOCK_LIVE;
+		block->b_type = BLOCK_LIVE;
 		cfg_set_int(bc, BLOCK_OPT_LIVE, equals(value, "true"));
 		return 1;
 	}

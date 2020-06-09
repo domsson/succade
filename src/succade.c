@@ -22,34 +22,13 @@ static volatile int handled;   // The last signal that has been handled
 /*
  * Frees all members of the given bar that need freeing.
  */
-static void free_lemon(thing_s *lemon)
+static void free_thing(thing_s *thing)
 {
-	free(lemon->sid);
-	cfg_free(&lemon->cfg);
+	free(thing->sid);
+	free(thing->output);
+	cfg_free(&thing->cfg);
 
-	char *arg = kita_child_get_arg(lemon->child);
-	free(arg);
-}
-
-/*
- * Frees all members of the given block that need freeing.
- */
-static void free_block(block_s *block)
-{
-	free(block->sid);
-	free(block->output);
-	cfg_free(&block->cfg);
-	//free_click_cfg(&block->click_cfg);
-
-	char *arg = kita_child_get_arg(block->child);
-	free(arg);
-}
-
-void free_spark(spark_s *spark)
-{
-	free(spark->output);
-
-	char *arg = kita_child_get_arg(spark->child);
+	char *arg = kita_child_get_arg(thing->child);
 	free(arg);
 }
 
@@ -125,7 +104,7 @@ int open_lemon(thing_s *lemon)
 /*
  *
  */
-int open_block(block_s *block)
+int open_block(thing_s *block)
 {
 	if (kita_child_open(block->child) == 0)
 	{
@@ -136,7 +115,7 @@ int open_block(block_s *block)
 	return -1;
 }
 
-int read_block(block_s *block)
+int read_block(thing_s *block)
 {
 	char *old = block->output ? strdup(block->output) : NULL;
 
@@ -150,7 +129,7 @@ int read_block(block_s *block)
 	return !same;
 }
 
-int read_spark(spark_s *spark)
+int read_spark(thing_s *spark)
 {
 	free(spark->output); // just in case, free'ing NULL is fine
 	spark->output = kita_child_read(spark->child, KITA_IOS_OUT);
@@ -170,7 +149,7 @@ void close_lemon(thing_s *lemon)
 /*
  * Send a kill signal to the block's child process.
  */
-void close_block(block_s *block)
+void close_block(thing_s *block)
 {
 	kita_child_term(block->child);
 }
@@ -178,7 +157,7 @@ void close_block(block_s *block)
 /*
  * Send a kill signal to the spark's child process.
  */
-void close_spark(spark_s *spark)
+void close_spark(thing_s *spark)
 {
 	kita_child_term(spark->child);
 }
@@ -194,7 +173,7 @@ void close_blocks(state_s *state)
 	}
 }
 
-int open_spark(spark_s *spark)
+int open_spark(thing_s *spark)
 {
 	if (kita_child_open(spark->child) == 0)
 	{
@@ -237,7 +216,7 @@ void free_blocks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		free_block(&state->blocks[i]);
+		free_thing(&state->blocks[i]);
 	}
 }
 
@@ -248,27 +227,27 @@ void free_sparks(state_s *state)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		free_spark(&state->sparks[i]);
+		free_thing(&state->sparks[i]);
 	}
 }
 
-int block_can_consume(block_s *block)
+int block_can_consume(thing_s *block)
 {
-	return block->type == BLOCK_SPARKED
+	return block->b_type == BLOCK_SPARKED
 		&& cfg_get_int(&block->cfg, BLOCK_OPT_CONSUME) 
-		&& !empty(block->spark->output);
+		&& !empty(block->other->output);
 }
 
-double block_due_in(block_s *block, double now)
+double block_due_in(thing_s *block, double now)
 {
 	float reload = cfg_get_float(&block->cfg, BLOCK_OPT_RELOAD);
 
-	return block->type == BLOCK_TIMED ? 
+	return block->b_type == BLOCK_TIMED ? 
 		reload - (now - block->last_open) : 
 		DBL_MAX;
 }
 
-int block_is_due(block_s *block, double now, double tolerance)
+int block_is_due(thing_s *block, double now, double tolerance)
 {
 	// block is currently running
 	if (block->alive)
@@ -277,14 +256,14 @@ int block_is_due(block_s *block, double now, double tolerance)
 	}
 
 	// One-shot blocks are due if they have never been run before
-	if (block->type == BLOCK_ONCE)
+	if (block->b_type == BLOCK_ONCE)
 	{
 		return block->last_open == 0.0;
 	}
 
 	// Timed blocks are due if their reload time has elapsed
 	// or if they've never been run before
-	if (block->type == BLOCK_TIMED)
+	if (block->b_type == BLOCK_TIMED)
 	{
 		if (block->last_open == 0.0)
 		{
@@ -296,16 +275,16 @@ int block_is_due(block_s *block, double now, double tolerance)
 
 	// Sparked blocks are due if their spark has new output, or if 
 	// they don't consume output and have never been run
-	if (block->type == BLOCK_SPARKED)
+	if (block->b_type == BLOCK_SPARKED)
 	{
 		// spark missing
-		if (block->spark == NULL)
+		if (block->other == NULL)
 		{
 			return 0;
 		}
 
 		// spark has output waiting to be processed
-		if (block->spark->output)
+		if (block->other->output)
 		{
 			return 1;
 		}
@@ -318,7 +297,7 @@ int block_is_due(block_s *block, double now, double tolerance)
 	}
 
 	// Live blocks are due if they haven't been run yet 
-	if (block->type == BLOCK_LIVE)
+	if (block->b_type == BLOCK_LIVE)
 	{	
 		return block->last_open == 0.0;
 	}
@@ -352,7 +331,7 @@ char *prefixstr(const char *affix, const char *fg, const char *bg)
  * string this function is putting together, otherwise truncation will happen.
  * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
-char *blockstr(const thing_s *bar, const block_s *block, size_t len)
+char *blockstr(const thing_s *bar, const thing_s *block, size_t len)
 {
 	char action_start[(5 * strlen(block->sid)) + 56]; // ... + (5 * 11) + 1
 	action_start[0] = 0;
@@ -539,7 +518,7 @@ char *barstr(const state_s *state)
 	char align[5];
 	int last_align = -1;
 
-	const block_s *block = NULL;
+	const thing_s *block = NULL;
 	for (int i = 0; i < num_blocks; ++i)
 	{
 		block = &state->blocks[i];
@@ -648,7 +627,7 @@ kita_child_s* make_child(state_s *state, const char *cmd, int in, int out, int e
 /*
  * Finds and returns the block with the given `sid` -- or NULL.
  */
-block_s *get_block(const state_s *state, const char *sid)
+thing_s *get_block(const state_s *state, const char *sid)
 {
 	// Iterate over all existing blocks and check for a name match
 	for (size_t i = 0; i < state->num_blocks; ++i)
@@ -667,10 +646,10 @@ block_s *get_block(const state_s *state, const char *sid)
  * is already a block with that SID present. 
  * Returns a pointer to the added (or existing) block or NULL in case of error.
  */
-block_s *add_block(state_s *state, const char *sid)
+thing_s *add_block(state_s *state, const char *sid)
 {
 	// See if there is an existing block by this name (and return, if so)
-	block_s *eb = get_block(state, sid);
+	thing_s *eb = get_block(state, sid);
 	if (eb)
 	{
 		return eb;
@@ -678,8 +657,8 @@ block_s *add_block(state_s *state, const char *sid)
 
 	// Resize the block container to be able to hold one more block
 	size_t current  =   state->num_blocks;
-	size_t new_size = ++state->num_blocks * sizeof(block_s);
-	block_s *blocks = realloc(state->blocks, new_size);
+	size_t new_size = ++state->num_blocks * sizeof(thing_s);
+	thing_s *blocks = realloc(state->blocks, new_size);
 	if (blocks == NULL)
 	{
 		fprintf(stderr, "add_block(): realloc() failed!\n");
@@ -689,8 +668,10 @@ block_s *add_block(state_s *state, const char *sid)
 	state->blocks = blocks;
 
 	// Create the block, setting its name and default values
-	state->blocks[current] = (block_s) { 0 };
+	state->blocks[current] = (thing_s) { 0 };
 	state->blocks[current].sid = strdup(sid);
+	state->blocks[current].t_type = THING_BLOCK;
+	state->blocks[current].b_type = BLOCK_ONCE;
 	cfg_init(&state->blocks[current].cfg, "default", BLOCK_OPT_COUNT);
 
 	// Return a pointer to the new block
@@ -727,7 +708,7 @@ int block_cfg_handler(void *data, const char *section, const char *name, const c
 	}
 
 	// Find the block whose name fits the section name
-	block_s *block = get_block(state, section);
+	thing_s *block = get_block(state, section);
 
 	// Abort if we couldn't find that block
 	if (block == NULL)
@@ -774,11 +755,11 @@ static int load_block_cfg(state_s *state)
 	return ini_parse(state->prefs.config, block_cfg_handler, state);
 }
 
-spark_s *get_spark(state_s *state, void *block, const char *cmd)
+thing_s *get_spark(state_s *state, void *block, const char *cmd)
 {
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		if (state->sparks[i].block != block)
+		if (state->sparks[i].other != block)
 		{
 			continue;
 		}
@@ -791,10 +772,10 @@ spark_s *get_spark(state_s *state, void *block, const char *cmd)
 	return NULL;
 }
 
-spark_s *add_spark(state_s *state, block_s *block, const char *cmd)
+thing_s *add_spark(state_s *state, thing_s *block, const char *cmd)
 {
 	// See if there is an existing spark that matches the given params
-	spark_s *es = get_spark(state, block, cmd);
+	thing_s *es = get_spark(state, block, cmd);
 	if (es)
 	{
 		return es;
@@ -802,8 +783,8 @@ spark_s *add_spark(state_s *state, block_s *block, const char *cmd)
 
 	// Resize the spark array to be able to hold one more spark
 	size_t current  =   state->num_sparks;
-	size_t new_size = ++state->num_sparks * sizeof(spark_s);
-	spark_s *sparks = realloc(state->sparks, new_size);
+	size_t new_size = ++state->num_sparks * sizeof(thing_s);
+	thing_s *sparks = realloc(state->sparks, new_size);
 	if (sparks == NULL)
 	{
 		fprintf(stderr, "add_spark(): realloc() failed!\n");
@@ -812,11 +793,12 @@ spark_s *add_spark(state_s *state, block_s *block, const char *cmd)
 	}
 	state->sparks = sparks; 
 	 
-	state->sparks[current] = (spark_s) { 0 };
-	state->sparks[current].block = block;
+	state->sparks[current] = (thing_s) { 0 };
+	state->sparks[current].t_type = THING_SPARK;
+	state->sparks[current].other = block;
 
 	// Add a reference of this spark to the block we've created it for
-	block->spark = &state->sparks[current];
+	block->other = &state->sparks[current];
 
 	// Return a pointer to the new spark
 	return &state->sparks[current];
@@ -824,12 +806,12 @@ spark_s *add_spark(state_s *state, block_s *block, const char *cmd)
 
 size_t create_sparks(state_s *state)
 {
-	block_s *block = NULL;
+	thing_s *block = NULL;
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
 		block = &state->blocks[i];
 
-		if (block->type != BLOCK_SPARKED)
+		if (block->b_type != BLOCK_SPARKED)
 		{
 			continue;
 		}
@@ -846,7 +828,7 @@ size_t create_sparks(state_s *state)
 
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		char *trigger = cfg_get_str(&state->sparks[i].block->cfg, BLOCK_OPT_TRIGGER);
+		char *trigger = cfg_get_str(&state->sparks[i].other->cfg, BLOCK_OPT_TRIGGER);
 		state->sparks[i].child = make_child(state, trigger, 0, 1, 0);
 	}
 
@@ -901,7 +883,7 @@ int process_action(const state_s *state, const char *action)
 	}
 
 	// Find the source block of the action
-	block_s *source = get_block(state, block);
+	thing_s *source = get_block(state, block);
 	if (source == NULL)
 	{
 		return -1;
@@ -944,7 +926,7 @@ static void on_block_found(const char *name, int align, int n, void *data)
 	state_s *state = (state_s*) data;
 	
 	// Find or add the block with the given name
-	block_s *block = add_block(state, name);
+	thing_s *block = add_block(state, name);
 	
 	if (block == NULL)
 	{
@@ -965,32 +947,34 @@ void on_signal(int sig)
 	handled = sig;
 }
 
-thing_s *lemon_by_child(state_s *state, kita_child_s *child)
+thing_s *thing_by_child(state_s *state, kita_child_s *child)
 {
-	return (state->lemon.child == child) ? &state->lemon : NULL;
-}
+	// lemon
+	if (child == state->lemon.child)
+	{
+		return &state->lemon;
+	}
 
-block_s *block_by_child(state_s *state, kita_child_s *child)
-{
+	// blocks
 	for (size_t i = 0; i < state->num_blocks; ++i)
 	{
-		if (state->blocks[i].child == child)
+		if (child == state->blocks[i].child)
 		{
 			return &state->blocks[i];
 		}
 	}
-	return NULL;
-}
-
-spark_s *spark_by_child(state_s *state, kita_child_s *child)
-{
+	
+	// sparks
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		if (state->sparks[i].child == child)
+		if (child == state->sparks[i].child)
 		{
 			return &state->sparks[i];
 		}
 	}
+
+
+	// not found
 	return NULL;
 }
 
@@ -1010,11 +994,14 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 	//fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
 
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
-	thing_s *lemon = NULL;
-	block_s *block = NULL;
-	spark_s *spark = NULL;
+	thing_s *thing = thing_by_child(state, ke->child);
 
-	if ((lemon = lemon_by_child(state, ke->child)))
+	if (thing == NULL)
+	{
+		return;
+	}
+
+	if (thing->t_type == THING_LEMON)
 	{
 		if (ke->ios == KITA_IOS_OUT)
 		{
@@ -1033,13 +1020,13 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 		return;
 	}
 
-	if ((block = block_by_child(state, ke->child)))
+	if (thing->t_type == THING_BLOCK)
 	{
 		if (ke->ios == KITA_IOS_OUT)
 		{
 			// schedule an update if the block's output was
 			// different from its previous output
-			if (read_block(block))
+			if (read_block(thing))
 			{
 				state->due = 1;
 			}
@@ -1052,11 +1039,11 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 		return;
 	}
 
-	if ((spark = spark_by_child(state, ke->child)))
+	if (thing->t_type == THING_SPARK)
 	{
 		if (ke->ios == KITA_IOS_OUT)
 		{
-			read_spark(spark);
+			read_spark(thing);
 		}
 		return;
 	}
@@ -1067,25 +1054,28 @@ void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 	//fprintf(stderr, "on_child_exited(): %s\n", ke->child->cmd);
 	
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
-	thing_s *lemon = NULL;
-	block_s *block = NULL;
-	spark_s *spark = NULL;
+	thing_s *thing = thing_by_child(state, ke->child);
+
+	if (thing == NULL)
+	{
+		return;
+	}
 	
-	if ((lemon = lemon_by_child(state, ke->child)))
+	if (thing->t_type == THING_LEMON)
 	{
 		running = 0;
 		return;
 	}
 
-	if ((block = block_by_child(state, ke->child)))
+	if (thing->t_type == THING_BLOCK)
 	{
-		block->alive = 0;
+		thing->alive = 0;
 		return;
 	}
 	
-	if ((spark = spark_by_child(state, ke->child)))
+	if (thing->t_type == THING_SPARK)
 	{
-		spark->alive = 0;
+		thing->alive = 0;
 		return;
 	}
 }
@@ -1217,6 +1207,7 @@ int main(int argc, char **argv)
 
 	// copy the section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
+	lemon->t_type = THING_LEMON;
 	cfg_init(&lemon->cfg, "lemon", LEMON_OPT_COUNT);
 
 	// read the config file and parse bar's section
@@ -1282,7 +1273,7 @@ int main(int argc, char **argv)
 	}
 
 	// create child processes and add them to the kita state
-	block_s *block = NULL;
+	thing_s *block = NULL;
 	for (size_t i = 0; i < state.num_blocks; ++i)
 	{
 		block = &state.blocks[i];
@@ -1318,7 +1309,7 @@ int main(int argc, char **argv)
 		//fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
 
 		// open all blocks that are due
-		block_s *block = NULL;
+		thing_s *block = NULL;
 		for (size_t i = 0; i < state.num_blocks; ++i)
 		{
 			block = &state.blocks[i];
@@ -1327,7 +1318,7 @@ int main(int argc, char **argv)
 				//fprintf(stderr, "> open_block() '%s'\n", block->sid);
 				if (block_can_consume(block))
 				{
-					kita_child_set_arg(block->child, block->spark->output);
+					kita_child_set_arg(block->child, block->other->output);
 					open_block(block);
 					kita_child_set_arg(block->child, NULL);
 				}
@@ -1335,10 +1326,10 @@ int main(int argc, char **argv)
 				{
 					open_block(block);
 				}
-				if (block->type == BLOCK_SPARKED)
+				if (block->b_type == BLOCK_SPARKED)
 				{
-					free(block->spark->output);
-					block->spark->output = NULL;
+					free(block->other->output);
+					block->other->output = NULL;
 
 				}
 			}
@@ -1393,7 +1384,7 @@ int main(int argc, char **argv)
 	free(state.blocks);
 
 	// Close bar
-	free_lemon(&state.lemon);
+	free_thing(&state.lemon);
 
 	kita_free(&kita);
 	kita = NULL;

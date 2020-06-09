@@ -29,16 +29,16 @@
 // ENUMS
 //
 
-enum succade_child_type
+enum succade_thing_type
 {
-	CHILD_LEMON,
-	CHILD_BLOCK,
-	CHILD_SPARK
+	THING_LEMON,
+	THING_BLOCK,
+	THING_SPARK
 };
 
 enum succade_block_type
 {
-	BLOCK_NONE = -1,
+	BLOCK_NONE,
 	BLOCK_ONCE,
 	BLOCK_TIMED,
 	BLOCK_SPARKED,
@@ -52,7 +52,7 @@ enum succade_fdesc_type
 	FD_ERR = STDERR_FILENO
 };
 
-typedef enum succade_child_type child_type_e;
+typedef enum succade_thing_type thing_type_e;
 typedef enum succade_block_type block_type_e;
 typedef enum succade_fdesc_type fdesc_type_e;
 
@@ -126,66 +126,28 @@ typedef enum succade_block_opt block_opt_e;
 //
 
 struct succade_thing;
-struct succade_lemon;
-struct succade_block;
-struct succade_spark;
 struct succade_prefs;
 struct succade_state;
 
 typedef struct succade_thing thing_s;
-typedef struct succade_lemon lemon_s;
-typedef struct succade_block block_s;
-typedef struct succade_spark spark_s;
 typedef struct succade_prefs prefs_s;
 typedef struct succade_state state_s;
 
-struct succade_lemon
-{
-	char         *sid;       // section ID (config section name)
-	kita_child_s *child;     // associated child process
-	cfg_s         cfg;
-};
-
-struct succade_block
-{
-	char         *sid;       // section ID (config section name)
-	kita_child_s *child;     // associated child process
-	block_type_e  type;      // type of block (one-shot, reload, sparked, live)
-	cfg_s         cfg;
-	spark_s      *spark;     // asosciated spark, if any
-
-	char         *output;
-	double        last_open; // time of last invocation (0.0 for never)
-	double        last_read; // time of last read from stdout (TODO what about stderr)
-	unsigned char alive : 1;
-};
-
-struct succade_spark
-{
-	kita_child_s *child;     // associated child process
-	block_s      *block;     // associated lemon or block struct
-	char         *output;
-
-	double last_open;      // time of last invocation (0.0 for never)
-	double last_read;      // time of last read from stdout (TODO what about stderr)
-	unsigned char alive : 1;
-};
-
 struct succade_thing
 {
-	char         *sid;
-	cfg_s         cfg;
+	char         *sid;     // section ID (config section name)
+	cfg_s         cfg;     // holds the config's options
 
-	kita_child_s *child;
+	kita_child_s *child;   // kita child process struct
 
-	child_type_e  t_type;  // LEMON, BLOCK, SPARK
-	block_type_e  b_type;  // BLOCK_ONCE, BLOCK_TIMED, BLOCK_SPARKED, BLOCK_LIVE
+	thing_type_e  t_type;  // thing type (lemon, block, spark?) 
+	block_type_e  b_type;  // block type (once, timed, sparked, live?)
 	thing_s      *other;   // associated block (for sparks) or spark (for blocks) 
 
-	char         *output;
-	unsigned char alive : 1;
-	double        last_open;
-	double        last_read;
+	char         *output;    // last output from stdout
+	unsigned char alive : 1; // is up and running?
+	double        last_open; // timestamp (in seconds) of last open operation
+	double        last_read; // timestamp (in seconds) of last read operation
 };
 
 struct succade_prefs
@@ -199,10 +161,9 @@ struct succade_prefs
 struct succade_state
 {
         prefs_s  prefs;        // Preferences (options/config)
-	//lemon_s  lemon;        // Lemon (prev. 'bar')
 	thing_s  lemon;
-	block_s *blocks;       // Reference to block array
-	spark_s *sparks;       // Reference to spark array (prev. 'trigger')
+	thing_s *blocks;       // Reference to block array
+	thing_s *sparks;       // Reference to spark array (prev. 'trigger')
 	size_t   num_blocks;   // Number of blocks in blocks array
 	size_t   num_sparks;   // Number of sparks in sparks array
 	kita_state_s *kita;
