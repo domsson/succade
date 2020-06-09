@@ -105,19 +105,8 @@ enum succade_block_opt
 	BLOCK_OPT_COUNT
 };
 
-enum succade_click_opt
-{
-	CLICK_OPT_LMB,
-	CLICK_OPT_MMB,
-	CLICK_OPT_RMB,
-	CLICK_OPT_SUP,
-	CLICK_OPT_SDN,
-	CLICK_OPT_COUNT
-};
-
 typedef enum succade_lemon_opt lemon_opt_e;
 typedef enum succade_block_opt block_opt_e;
-typedef enum succade_click_opt click_opt_e;
 
 //
 // STRUCTS
@@ -129,28 +118,11 @@ struct succade_spark;
 struct succade_prefs;
 struct succade_state;
 
-struct succade_lemon_cfg;
-struct succade_block_cfg;
-struct succade_click_cfg;
-
 typedef struct succade_lemon lemon_s;
 typedef struct succade_block block_s;
 typedef struct succade_spark spark_s;
 typedef struct succade_prefs prefs_s;
 typedef struct succade_state state_s;
-
-typedef struct succade_lemon_cfg lemon_cfg_s;
-typedef struct succade_block_cfg block_cfg_s;
-typedef struct succade_click_cfg click_cfg_s;
-
-struct succade_click_cfg
-{
-	char *lmb;             // Command to run on left mouse click
-	char *mmb;             // Command to run on middle mouse click
-	char *rmb;             // Command to run on right mouse click
-	char *sup;             // Command to run on scroll up
-	char *sdn;             // Command to run on scroll down
-};
 
 struct succade_lemon
 {
@@ -166,7 +138,6 @@ struct succade_block
 	kita_child_s *child;     // associated child process
 	block_type_e  type;      // type of block (one-shot, reload, sparked, live)
 	cfg_s         block_cfg;
-	//click_cfg_s   click_cfg; // associated action commands
 	spark_s      *spark;     // asosciated spark, if any
 
 	char         *output;

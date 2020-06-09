@@ -19,15 +19,6 @@
 static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
 
-static void free_click_cfg(click_cfg_s *cfg)
-{
-	free(cfg->lmb);
-	free(cfg->mmb);
-	free(cfg->rmb);
-	free(cfg->sup);
-	free(cfg->sdn);
-}
-
 /*
  * Frees all members of the given bar that need freeing.
  */
@@ -1127,33 +1118,6 @@ void help(const char *invocation, FILE *where)
 	fprintf(where, "\t-e\tRun bar even if it is empty (no blocks).\n");
 	fprintf(where, "\t-h\tPrint this help text and exit.\n");
 	fprintf(where, "\t-s\tINI section name for the bar.\n");
-}
-
-void test_cfg()
-{
-	int   i = 7;
-	int   f = 13.37;
-	char *s = strdup("hello"); 
-
-	cfg_s cfg = { 0 };
-	cfg_init(&cfg, "test", 5);
-
-	cfg_set_int(&cfg, 0, i);
-	cfg_set_float(&cfg, 1, f);
-	cfg_set_str(&cfg, 2, s);
-
-	cfg_opt_u *opt_i = cfg_get(&cfg, 0);
-	cfg_opt_u *opt_f = cfg_get(&cfg, 1);
-	cfg_opt_u *opt_s = cfg_get(&cfg, 2);
-	cfg_opt_u *opt_n = cfg_get(&cfg, 3);
-
-	fprintf(stderr, "OPT i = %d\n", opt_i ? opt_i->i : -1);
-	fprintf(stderr, "OPT f = %f\n", opt_f ? opt_f->f : -1);
-	fprintf(stderr, "OPT s = %s\n", opt_s ? opt_s->s : "-");
-	fprintf(stderr, "OPT n = %s\n", opt_n ? opt_n->s : "-");
-
-	cfg_free(&cfg);
-
 }
 
 int main(int argc, char **argv)
