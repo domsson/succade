@@ -22,10 +22,6 @@ The config file needs to have one section for lemonbar and one per block. The ba
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
 - Most settings can be set once for all blocks, then overwritten for individual blocks, if need be.
 
-# What it can't do
-
-- There is no conditional formatting, blocks always have the colors as defined in the config.
-
 # To-Do List
 
 - [x] Support for _live_ blocks
