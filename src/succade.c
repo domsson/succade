@@ -256,6 +256,9 @@ static int block_is_due(thing_s *block, double now, double tolerance)
 	return 0;
 }
 
+/*
+ * Opens all blocks that are due and returns the number of blocks opened.
+ */
 static size_t open_due_blocks(state_s *state, double now)
 {
 	size_t opened = 0;
@@ -285,6 +288,9 @@ static size_t open_due_blocks(state_s *state, double now)
 	return opened;
 }
 
+/*
+ * Returns the time, in seconds, until the next block should be run.
+ */
 static double time_to_wait(state_s *state, double now)
 {
 	double lemon_due = DBL_MAX;
@@ -302,24 +308,6 @@ static double time_to_wait(state_s *state, double now)
 
 	return (lemon_due == DBL_MAX) ? -1 : lemon_due;
 }
-
-/*
-static char *prefixstr(const char *affix, int font, const char *fg, const char *bg)
-{
-	size_t len = empty(affix) ? 0 : strlen(affix) + 32;
-	char *prefix = malloc(len * sizeof(char) + 1);
-
-	if (len == 0)
-	{
-		prefix = malloc(1);
-		prefix[0] = 0;
-		return prefix;
-	}
-
-	snprintf(prefix, len, "%%{T%d F%s B%s}%s", font, fg ? fg : "-", bg ? bg : "-", affix);
-	return prefix;
-}
-*/
 
 /*
  * Given a block, it returns a pointer to a string that is the formatted result 
@@ -420,17 +408,17 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 		"%%{T1 F%s B%s}%*s"
 		"%%{T3 F%s B%s}%s"
 		"%%{T- F- B- U- -o -u}%s",
-		// Start
+		// start
 		action_start, offset, block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
-		// Prefix
+		// prefix
 		affix_fg, affix_bg, prefix,
-		// Label
+		// label
 		label_fg, label_bg, label,
-		// Block
+		// block
 		block_fg, block_bg, padding, result,
-		// Suffix
+		// suffix
 		affix_fg, affix_bg, suffix,
-		// End
+		// end
 		action_end
 	);
 
