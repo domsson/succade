@@ -151,8 +151,7 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 {
 	// Unpack the data
 	block_s *block = (block_s*) data;
-	cfg_s *bc = &block->block_cfg;
-	//click_cfg_s *cc = &block->click_cfg;
+	cfg_s *bc = &block->cfg;
 
 	// Check the `name` and do the thing
 	if (equals(name, "bin") || equals(name, "cmd") || equals(name, "command"))

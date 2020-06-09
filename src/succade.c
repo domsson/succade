@@ -39,7 +39,7 @@ static void free_block(block_s *block)
 {
 	free(block->sid);
 	free(block->output);
-	cfg_free(&block->block_cfg);
+	cfg_free(&block->cfg);
 	//free_click_cfg(&block->click_cfg);
 
 	char *arg = kita_child_get_arg(block->child);
@@ -257,13 +257,13 @@ void free_sparks(state_s *state)
 int block_can_consume(block_s *block)
 {
 	return block->type == BLOCK_SPARKED
-		&& cfg_get_int(&block->block_cfg, BLOCK_OPT_CONSUME) 
+		&& cfg_get_int(&block->cfg, BLOCK_OPT_CONSUME) 
 		&& !empty(block->spark->output);
 }
 
 double block_due_in(block_s *block, double now)
 {
-	float reload = cfg_get_float(&block->block_cfg, BLOCK_OPT_RELOAD);
+	float reload = cfg_get_float(&block->cfg, BLOCK_OPT_RELOAD);
 
 	return block->type == BLOCK_TIMED ? 
 		reload - (now - block->last_open) : 
@@ -313,7 +313,7 @@ int block_is_due(block_s *block, double now, double tolerance)
 		}
 
 		// doesn't consume and has never been run before
-		if (cfg_get_int(&block->block_cfg, BLOCK_OPT_CONSUME) == 0)
+		if (cfg_get_int(&block->cfg, BLOCK_OPT_CONSUME) == 0)
 		{
 			return block->last_open == 0.0;
 		}
@@ -361,35 +361,35 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	char action_end[21]; // (5 * 4) + 1
 	action_end[0] = 0;
 
-	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_LMB))
+	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_LMB))
 	{
 		strcat(action_start, "%{A1:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_lmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_MMB))
+	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_MMB))
 	{
 		strcat(action_start, "%{A2:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_mmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_RMB))
+	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_RMB))
 	{
 		strcat(action_start, "%{A3:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_rmb:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_SUP))
+	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_SUP))
 	{
 		strcat(action_start, "%{A4:");
 		strcat(action_start, block->sid);
 		strcat(action_start, "_sup:}");
 		strcat(action_end, "%{A}");
 	}
-	if (cfg_has(&block->block_cfg, BLOCK_OPT_CMD_SDN))
+	if (cfg_has(&block->cfg, BLOCK_OPT_CMD_SDN))
 	{
 		strcat(action_start, "%{A5:");
 		strcat(action_start, block->sid);
@@ -399,7 +399,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 
 	size_t diff;
 	char *result = escape(block->output, '%', &diff);
-	int padding = cfg_get_int(&block->block_cfg, BLOCK_OPT_WIDTH) + diff;
+	int padding = cfg_get_int(&block->cfg, BLOCK_OPT_WIDTH) + diff;
 
 	size_t buf_len;
 
@@ -412,7 +412,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	{
 		char *bar_prefix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_PREFIX);
 		char *bar_suffix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_SUFFIX);
-		char *block_label = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL);
+		char *block_label = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL);
 
 		// Required buffer mainly depends on the result and name of a block
 		buf_len = 209;   // format str = 70, known stuff = 138, '\0' = 1
@@ -432,16 +432,16 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	int bar_block_ol     = cfg_get_int(&bar->block_cfg, BLOCK_OPT_OL);
 	int bar_block_ul     = cfg_get_int(&bar->block_cfg, BLOCK_OPT_UL);
 
-	char *block_fg = cfg_get_str(&block->block_cfg, BLOCK_OPT_BLOCK_FG);
-	char *block_bg = cfg_get_str(&block->block_cfg, BLOCK_OPT_BLOCK_BG);
-	char *block_label_fg = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL_FG);
-	char *block_label_bg = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL_BG);
-	char *block_affix_fg = cfg_get_str(&block->block_cfg, BLOCK_OPT_AFFIX_FG);
-	char *block_affix_bg = cfg_get_str(&block->block_cfg, BLOCK_OPT_AFFIX_BG);
-	char *block_lc = cfg_get_str(&block->block_cfg, BLOCK_OPT_LC);
-	int block_ol = cfg_get_int(&block->block_cfg, BLOCK_OPT_OL);
-	int block_ul = cfg_get_int(&block->block_cfg, BLOCK_OPT_UL);
-	int block_offset = cfg_get_int(&block->block_cfg, BLOCK_OPT_OFFSET);
+	char *block_fg       = cfg_get_str(&block->cfg, BLOCK_OPT_BLOCK_FG);
+	char *block_bg       = cfg_get_str(&block->cfg, BLOCK_OPT_BLOCK_BG);
+	char *block_label_fg = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL_FG);
+	char *block_label_bg = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL_BG);
+	char *block_affix_fg = cfg_get_str(&block->cfg, BLOCK_OPT_AFFIX_FG);
+	char *block_affix_bg = cfg_get_str(&block->cfg, BLOCK_OPT_AFFIX_BG);
+	char *block_lc       = cfg_get_str(&block->cfg, BLOCK_OPT_LC);
+	int block_ol         = cfg_get_int(&block->cfg, BLOCK_OPT_OL);
+	int block_ul         = cfg_get_int(&block->cfg, BLOCK_OPT_UL);
+	int block_offset     = cfg_get_int(&block->cfg, BLOCK_OPT_OFFSET);
 
 	// TODO bug! if the user decides to set underline TRUE for the bar
 	//      buf turn it FALSE for individual blocks, it will not work.
@@ -469,7 +469,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 
 	char *block_prefix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_PREFIX);
 	char *block_suffix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_SUFFIX);
-	char *block_label  = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL);
+	char *block_label  = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL);
 
 	char *str = malloc(buf_len);
 	snprintf(str, buf_len,
@@ -552,7 +552,7 @@ char *barstr(const state_s *state)
 			continue;
 		}
 
-		int block_align = cfg_get_int(&block->block_cfg, BLOCK_OPT_ALIGN);
+		int block_align = cfg_get_int(&block->cfg, BLOCK_OPT_ALIGN);
 
 		char *block_str = blockstr(bar, block, 0);
 		size_t block_str_len = strlen(block_str);
@@ -693,7 +693,7 @@ block_s *add_block(state_s *state, const char *sid)
 	// Create the block, setting its name and default values
 	state->blocks[current] = (block_s) { 0 };
 	state->blocks[current].sid = strdup(sid);
-	cfg_init(&state->blocks[current].block_cfg, "default", BLOCK_OPT_COUNT);
+	cfg_init(&state->blocks[current].cfg, "default", BLOCK_OPT_COUNT);
 
 	// Return a pointer to the new block
 	return &state->blocks[current];
@@ -836,7 +836,7 @@ size_t create_sparks(state_s *state)
 			continue;
 		}
 
-		char *trigger = cfg_get_str(&block->block_cfg, BLOCK_OPT_TRIGGER);
+		char *trigger = cfg_get_str(&block->cfg, BLOCK_OPT_TRIGGER);
 		if (empty(trigger))
 		{
 			fprintf(stderr, "create_sparks(): missing trigger for sparked block '%s'\n", block->sid);
@@ -848,7 +848,7 @@ size_t create_sparks(state_s *state)
 
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		char *trigger = cfg_get_str(&state->sparks[i].block->block_cfg, BLOCK_OPT_TRIGGER);
+		char *trigger = cfg_get_str(&state->sparks[i].block->cfg, BLOCK_OPT_TRIGGER);
 		state->sparks[i].child = make_child(state, trigger, 0, 1, 0);
 	}
 
@@ -912,19 +912,19 @@ int process_action(const state_s *state, const char *action)
 	// Now to fire the right command for the action type
 	switch (b) {
 		case 0:
-			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_LMB));
+			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_LMB));
 			return 0;
 		case 1:
-			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_MMB));
+			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_MMB));
 			return 0;
 		case 2:
-			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_RMB));
+			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_RMB));
 			return 0;
 		case 3:
-			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_SUP));
+			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_SUP));
 			return 0;
 		case 4:
-			run_cmd(cfg_get_str(&source->block_cfg, BLOCK_OPT_CMD_SDN));
+			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_SDN));
 			return 0;
 		default:
 			// Should never happen...
@@ -954,7 +954,7 @@ static void on_block_found(const char *name, int align, int n, void *data)
 		return;
 	}
 	// Set the block's align to the given one
-	cfg_set_int(&block->block_cfg, BLOCK_OPT_ALIGN, align);
+	cfg_set_int(&block->cfg, BLOCK_OPT_ALIGN, align);
 }
 
 /*
@@ -1291,7 +1291,7 @@ int main(int argc, char **argv)
 	for (size_t i = 0; i < state.num_blocks; ++i)
 	{
 		block = &state.blocks[i];
-		char *block_bin = cfg_get_str(&block->block_cfg, BLOCK_OPT_BIN);
+		char *block_bin = cfg_get_str(&block->cfg, BLOCK_OPT_BIN);
 		char *block_cmd = block_bin ? block_bin : block->sid;
 		block->child = make_child(&state, block_cmd, 0, 1, 1);
 	}

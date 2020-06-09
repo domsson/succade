@@ -137,7 +137,7 @@ struct succade_block
 	char         *sid;       // section ID (config section name)
 	kita_child_s *child;     // associated child process
 	block_type_e  type;      // type of block (one-shot, reload, sparked, live)
-	cfg_s         block_cfg;
+	cfg_s         cfg;
 	spark_s      *spark;     // asosciated spark, if any
 
 	char         *output;
