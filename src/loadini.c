@@ -8,8 +8,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 {
 	// Unpack the data, which should be a lemon_s (struct succade_lemon)
 	lemon_s *lemon = (lemon_s*) data;
-	cfg_s *lc = &lemon->lemon_cfg;
-	cfg_s *bc = &lemon->block_cfg;
+	cfg_s *lc = &lemon->cfg;
 
 	// Check for `name` and set the appropriate property
 	if (equals(name, "name"))
@@ -24,7 +23,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "fg") || equals(name, "foreground"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_BLOCK_FG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_FG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "bg") || equals(name, "background"))
@@ -34,7 +33,7 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "lc") || equals(name, "line"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_LC, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_LC, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "lw") || equals(name, "line-width"))
@@ -44,12 +43,12 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "ol") || equals(name, "overline"))
 	{
-		cfg_set_int(bc, BLOCK_OPT_OL, equals(value, "true"));
+		cfg_set_int(lc, LEMON_OPT_OL, equals(value, "true"));
 		return 1;
 	}
 	if (equals(name, "ul") || equals(name, "underline"))
 	{
-		cfg_set_int(bc, BLOCK_OPT_UL, equals(value, "true"));
+		cfg_set_int(lc, LEMON_OPT_UL, equals(value, "true"));
 		return 1;
 	}
 	if (equals(name, "h") || equals(name, "height"))
@@ -84,17 +83,17 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "offset") || equals(name, "block-offset"))
 	{
-		cfg_set_int(bc, BLOCK_OPT_OFFSET, atoi(value));
+		cfg_set_int(lc, LEMON_OPT_BLOCK_OFFSET, atoi(value));
 		return 1;
 	}
 	if (equals(name, "prefix") || equals(name, "block-prefix"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_PREFIX, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_BLOCK_PREFIX, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "suffix") || equals(name, "block-suffix"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_SUFFIX, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_BLOCK_SUFFIX, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "format") || equals(name, "blocks"))
@@ -119,27 +118,27 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "block-bg") || equals(name, "block-background"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_BLOCK_BG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_BLOCK_BG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "label-bg") || equals(name, "label-background"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_LABEL_BG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_LABEL_BG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "label-fg") || equals(name, "label-foreground"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_LABEL_FG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_LABEL_FG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "affix-bg") || equals(name, "affix-background"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_AFFIX_BG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_AFFIX_BG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 	if (equals(name, "affix-fg") || equals(name, "affix-foreground"))
 	{
-		cfg_set_str(bc, BLOCK_OPT_AFFIX_FG, is_quoted(value) ? unquote(value) : strdup(value));
+		cfg_set_str(lc, LEMON_OPT_AFFIX_FG, is_quoted(value) ? unquote(value) : strdup(value));
 		return 1;
 	}
 

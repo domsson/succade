@@ -25,8 +25,7 @@ static volatile int handled;   // The last signal that has been handled
 static void free_lemon(lemon_s *lemon)
 {
 	free(lemon->sid);
-	cfg_free(&lemon->lemon_cfg);
-	cfg_free(&lemon->block_cfg);
+	cfg_free(&lemon->cfg);
 
 	char *arg = kita_child_get_arg(lemon->child);
 	free(arg);
@@ -60,8 +59,7 @@ void free_spark(spark_s *spark)
  */
 char *lemon_arg(lemon_s *lemon)
 {
-	cfg_s *lcfg = &lemon->lemon_cfg;
-	cfg_s *bcfg = &lemon->block_cfg;
+	cfg_s *lcfg = &lemon->cfg;
 
 	char w[8]; // TODO hardcoded (8 is what we want tho) 
 	char h[8];
@@ -74,9 +72,9 @@ char *lemon_arg(lemon_s *lemon)
 	char *affix_font = optstr('f', cfg_get_str(lcfg, LEMON_OPT_AFFIX_FONT), 0);
 	char *name_str   = optstr('n', cfg_get_str(lcfg, LEMON_OPT_NAME), 0);
 
-	char *fg = cfg_get_str(bcfg, BLOCK_OPT_BLOCK_FG);
+	char *fg = cfg_get_str(lcfg, LEMON_OPT_FG);
 	char *bg = cfg_get_str(lcfg, LEMON_OPT_BG);
-	char *lc = cfg_get_str(bcfg, BLOCK_OPT_LC);
+	char *lc = cfg_get_str(lcfg, LEMON_OPT_LC);
 
 	char *arg = malloc(sizeof(char) * BUFFER_LEMON_ARG); 
 
@@ -410,8 +408,8 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	}
 	else
 	{
-		char *bar_prefix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_PREFIX);
-		char *bar_suffix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_SUFFIX);
+		char *bar_prefix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_PREFIX);
+		char *bar_suffix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_SUFFIX);
 		char *block_label = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL);
 
 		// Required buffer mainly depends on the result and name of a block
@@ -423,14 +421,14 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 		buf_len += strlen(result);
 	}
 
-	char *bar_block_bg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_BLOCK_BG);
-	char *bar_label_fg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_LABEL_FG);
-	char *bar_label_bg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_LABEL_BG);
-	char *bar_affix_fg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_AFFIX_FG);
-	char *bar_affix_bg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_AFFIX_BG);
-	int bar_block_offset = cfg_get_int(&bar->block_cfg, BLOCK_OPT_OFFSET);
-	int bar_block_ol     = cfg_get_int(&bar->block_cfg, BLOCK_OPT_OL);
-	int bar_block_ul     = cfg_get_int(&bar->block_cfg, BLOCK_OPT_UL);
+	char *bar_block_bg   = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_BG);
+	char *bar_label_fg   = cfg_get_str(&bar->cfg, LEMON_OPT_LABEL_FG);
+	char *bar_label_bg   = cfg_get_str(&bar->cfg, LEMON_OPT_LABEL_BG);
+	char *bar_affix_fg   = cfg_get_str(&bar->cfg, LEMON_OPT_AFFIX_FG);
+	char *bar_affix_bg   = cfg_get_str(&bar->cfg, LEMON_OPT_AFFIX_BG);
+	int bar_block_offset = cfg_get_int(&bar->cfg, LEMON_OPT_BLOCK_OFFSET);
+	int bar_block_ol     = cfg_get_int(&bar->cfg, LEMON_OPT_OL);
+	int bar_block_ul     = cfg_get_int(&bar->cfg, LEMON_OPT_UL);
 
 	char *block_fg       = cfg_get_str(&block->cfg, BLOCK_OPT_BLOCK_FG);
 	char *block_bg       = cfg_get_str(&block->cfg, BLOCK_OPT_BLOCK_BG);
@@ -454,9 +452,9 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	const char *label_bg = strsel(block_label_bg, bar_label_bg, bg);
 	const char *affix_fg = strsel(block_affix_fg, bar_affix_fg, fg);
 	const char *affix_bg = strsel(block_affix_bg, bar_affix_bg, bg);
-        const int offset = (block_offset >= 0) ? block_offset : bar_block_offset;
-	const int ol = block_ol ? 1 : (bar_block_ol ? 1 : 0);
-	const int ul = block_ul ? 1 : (bar_block_ul ? 1 : 0);
+        const int offset = cfg_has(&block->cfg, BLOCK_OPT_OFFSET) ? block_offset : bar_block_offset;
+	const int ol = cfg_has(&block->cfg, BLOCK_OPT_OL) ? block_ol : bar_block_ol;
+	const int ul = cfg_has(&block->cfg, BLOCK_OPT_UL) ? block_ul : bar_block_ul;
 
 	//const char *prefix = prefixstr(bar->block_cfg.prefix, affix_fg, affix_bg);
 
@@ -467,8 +465,8 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	//      but of course, replacing a couple bytes with lots of malloc
 	//      would not be great either, so... not sure about it yet.
 
-	char *block_prefix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_PREFIX);
-	char *block_suffix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_SUFFIX);
+	char *block_prefix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_PREFIX);
+	char *block_suffix = cfg_get_str(&bar->cfg, LEMON_OPT_BLOCK_SUFFIX);
 	char *block_label  = cfg_get_str(&block->cfg, BLOCK_OPT_LABEL);
 
 	char *str = malloc(buf_len);
@@ -1219,8 +1217,7 @@ int main(int argc, char **argv)
 
 	// copy the section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
-	cfg_init(&lemon->lemon_cfg, "lemon", LEMON_OPT_COUNT);
-	cfg_init(&lemon->block_cfg, "lemon", BLOCK_OPT_COUNT);
+	cfg_init(&lemon->cfg, "lemon", LEMON_OPT_COUNT);
 
 	// read the config file and parse bar's section
 	if (load_lemon_cfg(&state) < 0)
@@ -1230,23 +1227,21 @@ int main(int argc, char **argv)
 	}
 	
 	// if no `bin` option was present in the config, set it to the default
-	//if (empty(lemon->lemon_cfg.bin))
-	if (!cfg_has(&lemon->lemon_cfg, LEMON_OPT_BIN))
+	if (!cfg_has(&lemon->cfg, LEMON_OPT_BIN))
 	{
 		// We use strdup() for consistency with free() later on
-		cfg_set_str(&lemon->lemon_cfg, LEMON_OPT_BIN, strdup(DEFAULT_LEMON_BIN));
+		cfg_set_str(&lemon->cfg, LEMON_OPT_BIN, strdup(DEFAULT_LEMON_BIN));
 	}
 
 	// if no `name` option was present in the config, set it to the default
-	//if (empty(lemon->lemon_cfg.name))
-	if (!cfg_has(&lemon->lemon_cfg, LEMON_OPT_NAME))
+	if (!cfg_has(&lemon->cfg, LEMON_OPT_NAME))
 	{
 		// We use strdup() for consistency with free() later on
-		cfg_set_str(&lemon->lemon_cfg, LEMON_OPT_NAME, strdup(DEFAULT_LEMON_NAME));
+		cfg_set_str(&lemon->cfg, LEMON_OPT_NAME, strdup(DEFAULT_LEMON_NAME));
 	}
 
 	// create the child process and add it to the kita state
-	char *lemon_bin = cfg_get_str(&lemon->lemon_cfg, LEMON_OPT_BIN);
+	char *lemon_bin = cfg_get_str(&lemon->cfg, LEMON_OPT_BIN);
 	lemon->child = make_child(&state, lemon_bin, 1, 1, 1);
 	if (lemon->child == NULL)
 	{
@@ -1269,7 +1264,7 @@ int main(int argc, char **argv)
 	// TODO I'd like to make this into a two-step thing:
 	//      1. parse the format string, creating an array of requested block names
 	//      2. iterate through the requested block names, creating blocks as we go
-	char *lemon_format = cfg_get_str(&lemon->lemon_cfg, LEMON_OPT_FORMAT);
+	char *lemon_format = cfg_get_str(&lemon->cfg, LEMON_OPT_FORMAT);
 	parse_format(lemon_format, on_block_found, &state);
 	
 	// exit if no blocks could be loaded and 'empty' option isn't present

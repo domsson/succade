@@ -38,6 +38,7 @@ enum succade_child_type
 
 enum succade_block_type
 {
+	BLOCK_NONE = -1,
 	BLOCK_ONCE,
 	BLOCK_TIMED,
 	BLOCK_SPARKED,
@@ -66,8 +67,20 @@ enum succade_lemon_opt
 	LEMON_OPT_BOTTOM,
 	LEMON_OPT_FORCE,
 	LEMON_OPT_FORMAT,
+	LEMON_OPT_FG, // block
 	LEMON_OPT_BG,
 	LEMON_OPT_LW,
+	LEMON_OPT_LC, // block
+	LEMON_OPT_OL, // block
+	LEMON_OPT_UL, // block
+	LEMON_OPT_BLOCK_BG, // block
+	LEMON_OPT_LABEL_FG, // block
+	LEMON_OPT_LABEL_BG, // block
+	LEMON_OPT_AFFIX_FG, // block
+	LEMON_OPT_AFFIX_BG, // block
+	LEMON_OPT_BLOCK_OFFSET, // block
+	LEMON_OPT_BLOCK_PREFIX, // block
+	LEMON_OPT_BLOCK_SUFFIX, // block
 	LEMON_OPT_BLOCK_FONT,
 	LEMON_OPT_LABEL_FONT,
 	LEMON_OPT_AFFIX_FONT,
@@ -128,8 +141,7 @@ struct succade_lemon
 {
 	char         *sid;       // section ID (config section name)
 	kita_child_s *child;     // associated child process
-	cfg_s lemon_cfg;
-	cfg_s block_cfg;
+	cfg_s         cfg;
 };
 
 struct succade_block
@@ -141,8 +153,8 @@ struct succade_block
 	spark_s      *spark;     // asosciated spark, if any
 
 	char         *output;
-	double last_open;      // time of last invocation (0.0 for never)
-	double last_read;      // time of last read from stdout (TODO what about stderr)
+	double        last_open; // time of last invocation (0.0 for never)
+	double        last_read; // time of last read from stdout (TODO what about stderr)
 	unsigned char alive : 1;
 };
 
@@ -154,7 +166,7 @@ struct succade_spark
 
 	double last_open;      // time of last invocation (0.0 for never)
 	double last_read;      // time of last read from stdout (TODO what about stderr)
-	unsigned char alive: 1;
+	unsigned char alive : 1;
 };
 
 /*
@@ -185,12 +197,12 @@ struct succade_prefs
 
 struct succade_state
 {
-        prefs_s  prefs;    // Preferences (options/config)
-	lemon_s  lemon;    // Lemon (prev. 'bar')
-	block_s *blocks;   // Reference to block array
-	spark_s *sparks;   // Reference to spark array (prev. 'trigger')
-	size_t num_blocks; // Number of blocks in blocks array
-	size_t num_sparks; // Number of sparks in sparks array
+        prefs_s  prefs;        // Preferences (options/config)
+	lemon_s  lemon;        // Lemon (prev. 'bar')
+	block_s *blocks;       // Reference to block array
+	spark_s *sparks;       // Reference to spark array (prev. 'trigger')
+	size_t   num_blocks;   // Number of blocks in blocks array
+	size_t   num_sparks;   // Number of sparks in sparks array
 	kita_state_s *kita;
 	unsigned char due : 1;
 };
