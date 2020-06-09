@@ -1,9 +1,10 @@
+#ifndef CFG_H
+#define CFG_H
+
 #include <stdlib.h>    // NULL, size_t
 #include <string.h>    // strdup()
-#include <limits.h>    // INT_MIN
-#include <float.h>     // FLT_MIN
 
-enum opt_type
+enum cfg_opt_type
 {
 	OPT_TYPE_NONE,
 	OPT_TYPE_INT,
@@ -11,7 +12,7 @@ enum opt_type
 	OPT_TYPE_STRING
 };
 
-typedef enum opt_type opt_type_e;
+typedef enum cfg_opt_type cfg_opt_type_e;
 
 union cfg_opt
 {
@@ -23,31 +24,33 @@ union cfg_opt
 typedef union cfg_opt cfg_opt_u;
 
 struct cfg {
-	char          *name;
-	union cfg_opt *opts;
-	enum opt_type *type;
-	size_t         size;
+	char           *name;
+	cfg_opt_u      *opts;
+	cfg_opt_type_e *type;
+	size_t          size;
 };
 
 typedef struct cfg cfg_s;
 
-struct cfg *cfg_init(struct cfg *cfg, const char *name, size_t size)
+#ifdef CFG_IMPLEMENTATION
+
+cfg_s *cfg_init(cfg_s *cfg, const char *name, size_t size)
 {
 	cfg->name = strdup(name);
 	cfg->size = size;
-	cfg->opts = malloc(size * sizeof(struct cfg));
-	cfg->type = malloc(size * sizeof(enum opt_type));
+	cfg->opts = malloc(size * sizeof(cfg_opt_u));
+	cfg->type = malloc(size * sizeof(cfg_opt_type_e));
 
 	for (size_t i = 0; i < size; ++i)
 	{
-		cfg->opts[i] = (union cfg_opt) { 0 };
+		cfg->opts[i] = (cfg_opt_u) { 0 };
 		cfg->type[i] = OPT_TYPE_NONE;
 	}
 
 	return cfg;
 }
 
-void cfg_free(struct cfg *cfg)
+void cfg_free(cfg_s *cfg)
 {
 	for (size_t i = 0; i < cfg->size; ++i)
 	{
@@ -65,12 +68,12 @@ void cfg_free(struct cfg *cfg)
 	cfg->type = NULL;
 }
 
-int cfg_has(struct cfg *cfg, size_t idx)
+int cfg_has(const cfg_s *cfg, size_t idx)
 {
-	return (idx < cfg->size && cfg->type[idx]);
+	return (idx < cfg->size && cfg->type[idx] != 0);
 }
 
-void cfg_set_int(struct cfg *cfg, size_t idx, int val)
+void cfg_set_int(const cfg_s *cfg, size_t idx, int val)
 {
 	if (idx >= cfg->size)
 		return;
@@ -79,7 +82,7 @@ void cfg_set_int(struct cfg *cfg, size_t idx, int val)
 	cfg->type[idx] = OPT_TYPE_INT;
 }
 
-void cfg_set_float(struct cfg *cfg, size_t idx, float val)
+void cfg_set_float(cfg_s *cfg, size_t idx, float val)
 {
 	if (idx >= cfg->size)
 		return;
@@ -88,7 +91,7 @@ void cfg_set_float(struct cfg *cfg, size_t idx, float val)
 	cfg->type[idx] = OPT_TYPE_FLOAT;
 }
 
-void cfg_set_str(struct cfg *cfg, size_t idx, char *val)
+void cfg_set_str(cfg_s *cfg, size_t idx, char *val)
 {
 	if (idx >= cfg->size)
 		return;
@@ -97,26 +100,28 @@ void cfg_set_str(struct cfg *cfg, size_t idx, char *val)
 	cfg->type[idx] = OPT_TYPE_STRING;
 }
 
-union cfg_opt *cfg_get(struct cfg *cfg, size_t idx)
+cfg_opt_u *cfg_get(cfg_s *cfg, size_t idx)
 {
 	return cfg_has(cfg, idx) ? &cfg->opts[idx] : NULL;
 }
 
-int cfg_get_int(struct cfg *cfg, size_t idx)
+int cfg_get_int(const cfg_s *cfg, size_t idx)
 {
 	return (idx < cfg->size && cfg->type[idx] == OPT_TYPE_INT) ?
-		cfg->opts[idx].i : INT_MIN;
+		cfg->opts[idx].i : 0;
 }
 
-float cfg_get_float(struct cfg *cfg, size_t idx)
+float cfg_get_float(const cfg_s *cfg, size_t idx)
 {
 	return (idx < cfg->size && cfg->type[idx] == OPT_TYPE_FLOAT) ?
-		cfg->opts[idx].i : FLT_MIN;
+		cfg->opts[idx].i : 0;
 }
 
-char *cfg_get_str(struct cfg *cfg, size_t idx)
+char *cfg_get_str(const cfg_s *cfg, size_t idx)
 {
 	return (idx < cfg->size && cfg->type[idx] == OPT_TYPE_STRING) ?
 		cfg->opts[idx].s : NULL;
 }
 
+#endif /* CFG_IMPLEMENTATION */
+#endif /* CFG_H */

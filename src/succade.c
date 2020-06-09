@@ -1,3 +1,5 @@
+#define CFG_IMPLEMENTATION
+
 #include <stdlib.h>    // NULL, size_t, EXIT_SUCCESS, EXIT_FAILURE, ...
 #include <string.h>    // strlen(), strcmp(), ...
 #include <signal.h>    // sigaction(), ... 
@@ -7,7 +9,7 @@
 #include <sys/wait.h>  // waitpid()
 #include <errno.h>     // errno
 #include "ini.h"       // https://github.com/benhoyt/inih
-#include "cfg.c"
+#include "cfg.h"
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
 #include "helpers.c"   // Helper functions, mostly for strings
@@ -16,34 +18,6 @@
 
 static volatile int running;   // Used to stop main loop in case of SIGINT
 static volatile int handled;   // The last signal that has been handled 
-
-static void free_lemon_cfg(lemon_cfg_s *cfg)
-{
-	free(cfg->name);
-	free(cfg->bin);
-	free(cfg->format);
-	free(cfg->bg);
-	free(cfg->block_font);
-	free(cfg->label_font);
-	free(cfg->affix_font);
-}
-
-static void free_block_cfg(block_cfg_s *cfg)
-{
-	free(cfg->bin);
-	free(cfg->fg);
-	free(cfg->bg);
-	free(cfg->label_fg);
-	free(cfg->label_bg);
-	free(cfg->affix_fg);
-	free(cfg->affix_bg);
-	free(cfg->lc);
-	free(cfg->prefix);
-	free(cfg->suffix);
-	free(cfg->label);
-	free(cfg->unit);
-	free(cfg->trigger);
-}
 
 static void free_click_cfg(click_cfg_s *cfg)
 {
@@ -59,10 +33,9 @@ static void free_click_cfg(click_cfg_s *cfg)
  */
 static void free_lemon(lemon_s *lemon)
 {
-	//free(lemon->cfg);
 	free(lemon->sid);
-	free_lemon_cfg(&lemon->lemon_cfg);
-	free_block_cfg(&lemon->block_cfg);
+	cfg_free(&lemon->lemon_cfg);
+	cfg_free(&lemon->block_cfg);
 
 	char *arg = kita_child_get_arg(lemon->child);
 	free(arg);
@@ -75,7 +48,7 @@ static void free_block(block_s *block)
 {
 	free(block->sid);
 	free(block->output);
-	free_block_cfg(&block->block_cfg);
+	cfg_free(&block->block_cfg);
 	free_click_cfg(&block->click_cfg);
 
 	char *arg = kita_child_get_arg(block->child);
@@ -96,34 +69,38 @@ void free_spark(spark_s *spark)
  */
 char *lemon_arg(lemon_s *lemon)
 {
-	lemon_cfg_s *lcfg = &lemon->lemon_cfg;
-	block_cfg_s *bcfg = &lemon->block_cfg;
+	cfg_s *lcfg = &lemon->lemon_cfg;
+	cfg_s *bcfg = &lemon->block_cfg;
 
 	char w[8]; // TODO hardcoded (8 is what we want tho) 
 	char h[8];
 
-	snprintf(w, 8, "%d", lcfg->w);
-	snprintf(h, 8, "%d", lcfg->h);
+	snprintf(w, 8, "%d", cfg_get_int(lcfg, LEMON_OPT_WIDTH));
+	snprintf(h, 8, "%d", cfg_get_int(lcfg, LEMON_OPT_HEIGHT));
 
-	char *block_font = optstr('f', lcfg->block_font, 0);
-	char *label_font = optstr('f', lcfg->label_font, 0);
-	char *affix_font = optstr('f', lcfg->affix_font, 0);
-	char *name_str   = optstr('n', lcfg->name, 0);
+	char *block_font = optstr('f', cfg_get_str(lcfg, LEMON_OPT_BLOCK_FONT), 0);
+	char *label_font = optstr('f', cfg_get_str(lcfg, LEMON_OPT_LABEL_FONT), 0);
+	char *affix_font = optstr('f', cfg_get_str(lcfg, LEMON_OPT_AFFIX_FONT), 0);
+	char *name_str   = optstr('n', cfg_get_str(lcfg, LEMON_OPT_NAME), 0);
+
+	char *fg = cfg_get_str(bcfg, BLOCK_OPT_BLOCK_FG);
+	char *bg = cfg_get_str(lcfg, LEMON_OPT_BG);
+	char *lc = cfg_get_str(bcfg, BLOCK_OPT_LC);
 
 	char *arg = malloc(sizeof(char) * BUFFER_LEMON_ARG); 
 
 	snprintf(arg, 1024,
 		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
-		(lcfg->w > 0) ? w : "",                      // max 8
-		(lcfg->h > 0) ? h : "",                      // max 8
-		lcfg->x,                                     // max 8
-		lcfg->y,                                     // max 8
-		(bcfg->fg && bcfg->fg[0]) ? bcfg->fg : "-",  // strlen, max 9
-		(lcfg->bg && lcfg->bg[0]) ? lcfg->bg : "-",  // strlen, max 9
-		(bcfg->lc && bcfg->lc[0]) ? bcfg->lc : "-",  // strlen, max 9
-		lcfg->lw,                                    // max 4
-		(lcfg->bottom) ? "-b" : "",                  // max 2
-		(lcfg->force)  ? "-d" : "",                  // max 2
+		cfg_has(lcfg, LEMON_OPT_WIDTH) ? w : "",     // max 8
+		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",    // max 8
+		cfg_get_int(lcfg, LEMON_OPT_X),              // max 8
+		cfg_get_int(lcfg, LEMON_OPT_Y),              // max 8
+		fg ? fg : "-",                               // strlen, max 9
+		bg ? bg : "-",                               // strlen, max 9
+		lc ? lc : "-",                               // strlen, max 9
+		cfg_get_int(lcfg, LEMON_OPT_LW),             // max 4
+		cfg_get_int(lcfg, LEMON_OPT_BOTTOM) ? "-b" : "",   // max 2
+		cfg_get_int(lcfg, LEMON_OPT_FORCE)  ? "-d" : "",   // max 2
 		block_font,                                  // strlen, max 255
 		label_font,                                  // strlen, max 255
 		affix_font,                                  // strlen, max 255
@@ -289,14 +266,16 @@ void free_sparks(state_s *state)
 int block_can_consume(block_s *block)
 {
 	return block->type == BLOCK_SPARKED
-		&& block->block_cfg.consume
+		&& cfg_get_int(&block->block_cfg, BLOCK_OPT_CONSUME) 
 		&& !empty(block->spark->output);
 }
 
 double block_due_in(block_s *block, double now)
 {
+	float reload = cfg_get_float(&block->block_cfg, BLOCK_OPT_RELOAD);
+
 	return block->type == BLOCK_TIMED ? 
-		block->block_cfg.reload - (now - block->last_open) :
+		reload - (now - block->last_open) : 
 		DBL_MAX;
 }
 
@@ -343,7 +322,7 @@ int block_is_due(block_s *block, double now, double tolerance)
 		}
 
 		// doesn't consume and has never been run before
-		if (block->block_cfg.consume == 0)
+		if (cfg_get_int(&block->block_cfg, BLOCK_OPT_CONSUME) == 0)
 		{
 			return block->last_open == 0.0;
 		}
@@ -429,7 +408,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 
 	size_t diff;
 	char *result = escape(block->output, '%', &diff);
-	int padding = block->block_cfg.width + diff;
+	int padding = cfg_get_int(&block->block_cfg, BLOCK_OPT_WIDTH) + diff;
 
 	size_t buf_len;
 
@@ -440,29 +419,53 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	}
 	else
 	{
+		char *bar_prefix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_PREFIX);
+		char *bar_suffix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_SUFFIX);
+		char *block_label = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL);
+
 		// Required buffer mainly depends on the result and name of a block
 		buf_len = 209;   // format str = 70, known stuff = 138, '\0' = 1
 		buf_len += strlen(action_start);
-		buf_len += bar->block_cfg.prefix ? strlen(bar->block_cfg.prefix) : 0;
-		buf_len += bar->block_cfg.suffix ? strlen(bar->block_cfg.suffix) : 0;
-		buf_len += block->block_cfg.label ? strlen(block->block_cfg.label) : 0;
+		buf_len += bar_prefix ? strlen(bar_prefix) : 0;
+		buf_len += bar_suffix ? strlen(bar_suffix) : 0;
+		buf_len += block_label ? strlen(block_label) : 0;
 		buf_len += strlen(result);
 	}
+
+	char *bar_block_bg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_BLOCK_BG);
+	char *bar_label_fg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_LABEL_FG);
+	char *bar_label_bg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_LABEL_BG);
+	char *bar_affix_fg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_AFFIX_FG);
+	char *bar_affix_bg   = cfg_get_str(&bar->block_cfg, BLOCK_OPT_AFFIX_BG);
+	int bar_block_offset = cfg_get_int(&bar->block_cfg, BLOCK_OPT_OFFSET);
+	int bar_block_ol     = cfg_get_int(&bar->block_cfg, BLOCK_OPT_OL);
+	int bar_block_ul     = cfg_get_int(&bar->block_cfg, BLOCK_OPT_UL);
+
+	char *block_fg = cfg_get_str(&block->block_cfg, BLOCK_OPT_BLOCK_FG);
+	char *block_bg = cfg_get_str(&block->block_cfg, BLOCK_OPT_BLOCK_BG);
+	char *block_label_fg = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL_FG);
+	char *block_label_bg = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL_BG);
+	char *block_affix_fg = cfg_get_str(&block->block_cfg, BLOCK_OPT_AFFIX_FG);
+	char *block_affix_bg = cfg_get_str(&block->block_cfg, BLOCK_OPT_AFFIX_BG);
+	char *block_lc = cfg_get_str(&block->block_cfg, BLOCK_OPT_LC);
+	int block_ol = cfg_get_int(&block->block_cfg, BLOCK_OPT_OL);
+	int block_ul = cfg_get_int(&block->block_cfg, BLOCK_OPT_UL);
+	int block_offset = cfg_get_int(&block->block_cfg, BLOCK_OPT_OFFSET);
 
 	// TODO bug! if the user decides to set underline TRUE for the bar
 	//      buf turn it FALSE for individual blocks, it will not work.
 	//	similarly, the 'offset' option currently only works when set 
 	//	on a block, not when set for the entire bar
-	const char *fg = strsel(block->block_cfg.fg, NULL, NULL);
-	const char *bg = strsel(block->block_cfg.bg, bar->block_cfg.bg, NULL);
-	const char *lc = strsel(block->block_cfg.lc, NULL, NULL);
-	const char *label_fg = strsel(block->block_cfg.label_fg, bar->block_cfg.label_fg, fg);
-	const char *label_bg = strsel(block->block_cfg.label_bg, bar->block_cfg.label_bg, bg);
-	const char *affix_fg = strsel(block->block_cfg.affix_fg, bar->block_cfg.affix_fg, fg);
-	const char *affix_bg = strsel(block->block_cfg.affix_bg, bar->block_cfg.affix_bg, bg);
-        const int offset = (block->block_cfg.offset >= 0) ? block->block_cfg.offset : bar->block_cfg.offset;	
-	const int ol = block->block_cfg.ol ? 1 : (bar->block_cfg.ol ? 1 : 0);
-	const int ul = block->block_cfg.ul ? 1 : (bar->block_cfg.ul ? 1 : 0);
+	const char *fg = strsel(block_fg, NULL, NULL);
+	const char *bg = strsel(block_bg, bar_block_bg, NULL);
+	const char *lc = strsel(block_lc, NULL, NULL);
+	const char *label_fg = strsel(block_label_fg, bar_label_fg, fg);
+	const char *label_bg = strsel(block_label_bg, bar_label_bg, bg);
+	const char *affix_fg = strsel(block_affix_fg, bar_affix_fg, fg);
+	const char *affix_bg = strsel(block_affix_bg, bar_affix_bg, bg);
+        const int offset = (block_offset >= 0) ? block_offset : bar_block_offset;
+	const int ol = block_ol ? 1 : (bar_block_ol ? 1 : 0);
+	const int ul = block_ul ? 1 : (bar_block_ul ? 1 : 0);
 
 	//const char *prefix = prefixstr(bar->block_cfg.prefix, affix_fg, affix_bg);
 
@@ -472,6 +475,10 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 	//      also increasing the parsing workload for lemonbar.
 	//      but of course, replacing a couple bytes with lots of malloc
 	//      would not be great either, so... not sure about it yet.
+
+	char *block_prefix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_PREFIX);
+	char *block_suffix = cfg_get_str(&bar->block_cfg, BLOCK_OPT_SUFFIX);
+	char *block_label  = cfg_get_str(&block->block_cfg, BLOCK_OPT_LABEL);
 
 	char *str = malloc(buf_len);
 	snprintf(str, buf_len,
@@ -492,11 +499,11 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 		// Prefix
 		affix_fg ? affix_fg : "-",                        // strlen, max 9
 		affix_bg ? affix_bg : "-",		          // strlen, max 9
-		bar->block_cfg.prefix ? bar->block_cfg.prefix : "",    // strlen
+		block_prefix ? block_prefix : "",    // strlen
 		// Label
 		label_fg ? label_fg : "-",                        // strlen, max 9
 		label_bg ? label_bg : "-",                        // strlen, max 9
-		block->block_cfg.label ? block->block_cfg.label : "",  // strlen
+		block_label ? block_label : "",  // strlen
 		// Block
 		fg ? fg : "-",                                    // strlen, max 9
 		bg ? bg : "-",                                    // strlen, max 9
@@ -505,7 +512,7 @@ char *blockstr(const lemon_s *bar, const block_s *block, size_t len)
 		// Suffix
 		affix_fg ? affix_fg : "-",                        // strlen, max 9
 		affix_bg ? affix_bg : "-",                        // strlen, max 9
-		bar->block_cfg.suffix ? bar->block_cfg.suffix : "",    // strlen
+		block_suffix ? block_suffix : "",    // strlen
 		// End
 		action_end                                        // 5*4
 	);
@@ -554,11 +561,13 @@ char *barstr(const state_s *state)
 			continue;
 		}
 
+		int block_align = cfg_get_int(&block->block_cfg, BLOCK_OPT_ALIGN);
+
 		char *block_str = blockstr(bar, block, 0);
 		size_t block_str_len = strlen(block_str);
-		if (block->block_cfg.align != last_align)
+		if (block_align != last_align)
 		{
-			last_align = block->block_cfg.align;
+			last_align = block_align;
 			snprintf(align, 5, "%%{%c}", get_align(last_align));
 			strcat(bar_str, align);
 		}
@@ -693,6 +702,7 @@ block_s *add_block(state_s *state, const char *sid)
 	// Create the block, setting its name and default values
 	state->blocks[current] = (block_s) { 0 };
 	state->blocks[current].sid = strdup(sid);
+	cfg_init(&state->blocks[current].block_cfg, "default", BLOCK_OPT_COUNT);
 
 	// Return a pointer to the new block
 	return &state->blocks[current];
@@ -835,18 +845,20 @@ size_t create_sparks(state_s *state)
 			continue;
 		}
 
-		if (empty(block->block_cfg.trigger))
+		char *trigger = cfg_get_str(&block->block_cfg, BLOCK_OPT_TRIGGER);
+		if (empty(trigger))
 		{
 			fprintf(stderr, "create_sparks(): missing trigger for sparked block '%s'\n", block->sid);
 			continue;
 		}
 
-		add_spark(state, block, block->block_cfg.trigger);
+		add_spark(state, block, trigger);
 	}
 
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		state->sparks[i].child = make_child(state, state->sparks[i].block->block_cfg.trigger, 0, 1, 0);
+		char *trigger = cfg_get_str(&state->sparks[i].block->block_cfg, BLOCK_OPT_TRIGGER);
+		state->sparks[i].child = make_child(state, trigger, 0, 1, 0);
 	}
 
 	return state->num_sparks;
@@ -951,7 +963,7 @@ static void on_block_found(const char *name, int align, int n, void *data)
 		return;
 	}
 	// Set the block's align to the given one
-	block->block_cfg.align = align;
+	cfg_set_int(&block->block_cfg, BLOCK_OPT_ALIGN, align);
 }
 
 /*
@@ -1247,7 +1259,8 @@ int main(int argc, char **argv)
 
 	// copy the section ID from the config for convenience and consistency
 	lemon->sid = strdup(prefs->section);
-	//lemon->cfg = malloc((LEMON_OPT_COUNT + BLOCK_OPT_COUNT) * sizeof(cfg_opt_u));
+	cfg_init(&lemon->lemon_cfg, "lemon", LEMON_OPT_COUNT);
+	cfg_init(&lemon->block_cfg, "lemon", BLOCK_OPT_COUNT);
 
 	// read the config file and parse bar's section
 	if (load_lemon_cfg(&state) < 0)
@@ -1257,24 +1270,27 @@ int main(int argc, char **argv)
 	}
 	
 	// if no `bin` option was present in the config, set it to the default
-	if (empty(lemon->lemon_cfg.bin))
+	//if (empty(lemon->lemon_cfg.bin))
+	if (!cfg_has(&lemon->lemon_cfg, LEMON_OPT_BIN))
 	{
 		// We use strdup() for consistency with free() later on
-		lemon->lemon_cfg.bin = strdup(DEFAULT_LEMON_BIN);
+		cfg_set_str(&lemon->lemon_cfg, LEMON_OPT_BIN, strdup(DEFAULT_LEMON_BIN));
 	}
 
 	// if no `name` option was present in the config, set it to the default
-	if (empty(lemon->lemon_cfg.name))
+	//if (empty(lemon->lemon_cfg.name))
+	if (!cfg_has(&lemon->lemon_cfg, LEMON_OPT_NAME))
 	{
 		// We use strdup() for consistency with free() later on
-		lemon->lemon_cfg.name = strdup(DEFAULT_LEMON_NAME);
+		cfg_set_str(&lemon->lemon_cfg, LEMON_OPT_NAME, strdup(DEFAULT_LEMON_NAME));
 	}
 
 	// create the child process and add it to the kita state
-	lemon->child = make_child(&state, lemon->lemon_cfg.bin, 1, 1, 1);
+	char *lemon_bin = cfg_get_str(&lemon->lemon_cfg, LEMON_OPT_BIN);
+	lemon->child = make_child(&state, lemon_bin, 1, 1, 1);
 	if (lemon->child == NULL)
 	{
-		fprintf(stderr, "Failed to create bar process: %s\n", lemon->lemon_cfg.bin);
+		fprintf(stderr, "Failed to create bar process: %s\n", lemon_bin);
 		return EXIT_FAILURE;
 	}
 
@@ -1293,7 +1309,8 @@ int main(int argc, char **argv)
 	// TODO I'd like to make this into a two-step thing:
 	//      1. parse the format string, creating an array of requested block names
 	//      2. iterate through the requested block names, creating blocks as we go
-	parse_format(lemon->lemon_cfg.format, on_block_found, &state);
+	char *lemon_format = cfg_get_str(&lemon->lemon_cfg, LEMON_OPT_FORMAT);
+	parse_format(lemon_format, on_block_found, &state);
 	
 	// exit if no blocks could be loaded and 'empty' option isn't present
 	if (state.num_blocks == 0 && prefs->empty == 0)
@@ -1314,7 +1331,8 @@ int main(int argc, char **argv)
 	for (size_t i = 0; i < state.num_blocks; ++i)
 	{
 		block = &state.blocks[i];
-		char *block_cmd = block->block_cfg.bin ? block->block_cfg.bin : block->sid;
+		char *block_bin = cfg_get_str(&block->block_cfg, BLOCK_OPT_BIN);
+		char *block_cmd = block_bin ? block_bin : block->sid;
 		block->child = make_child(&state, block_cmd, 0, 1, 1);
 	}
 
