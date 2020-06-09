@@ -40,11 +40,11 @@ char *lemon_arg(thing_s *lemon)
 {
 	cfg_s *lcfg = &lemon->cfg;
 
-	char w[8]; // TODO hardcoded (8 is what we want tho) 
-	char h[8];
+	char w[BUFFER_NUMERIC]; 
+	char h[BUFFER_NUMERIC];
 
-	snprintf(w, 8, "%d", cfg_get_int(lcfg, LEMON_OPT_WIDTH));
-	snprintf(h, 8, "%d", cfg_get_int(lcfg, LEMON_OPT_HEIGHT));
+	snprintf(w, BUFFER_NUMERIC, "%d", cfg_get_int(lcfg, LEMON_OPT_WIDTH));
+	snprintf(h, BUFFER_NUMERIC, "%d", cfg_get_int(lcfg, LEMON_OPT_HEIGHT));
 
 	char *block_font = optstr('f', cfg_get_str(lcfg, LEMON_OPT_BLOCK_FONT), 0);
 	char *label_font = optstr('f', cfg_get_str(lcfg, LEMON_OPT_LABEL_FONT), 0);
@@ -1141,6 +1141,31 @@ void on_child_remove(kita_state_s *ks, kita_event_s *ke)
 	//fprintf(stderr, "on_child_remove()\n");
 }
 
+void cleanup(state_s *state)
+{
+	// free sparks
+	free_sparks(state);
+	free(state->sparks);
+	state->sparks = NULL;
+	state->num_sparks = 0;
+
+	// free blocks
+	free_blocks(state);
+	free(state->blocks);
+	state->blocks = NULL;
+	state->num_blocks = 0;
+
+	// free bar
+	free_thing(&state->lemon);
+
+	// free kita
+	kita_free(&state->kita);
+	state->kita = NULL;
+
+	// misc
+	state->due = 0;
+}
+
 // http://courses.cms.caltech.edu/cs11/material/general/usage.html
 void help(const char *invocation, FILE *where)
 {
@@ -1371,26 +1396,8 @@ int main(int argc, char **argv)
 	// CLEAN UP
 	//
 
-	fprintf(stderr, "Performing clean-up ...\n");
-
+	cleanup(&state);
 	free(default_cfg_path);
-
-	// Close triggers - it's important we free these first as they might
-	// point to instances of bar and/or blocks, which will lead to errors
-	free_sparks(&state);
-	free(state.sparks);
-	
-	// Close blocks
-	free_blocks(&state);
-	free(state.blocks);
-
-	// Close bar
-	free_thing(&state.lemon);
-
-	kita_free(&kita);
-	kita = NULL;
-
-	fprintf(stderr, "Clean-up finished, see you next time!\n");
 
 	return EXIT_SUCCESS;
 }
