@@ -3,8 +3,7 @@ bin = "lemonbar"
 name = "testbar"
 # format is required, it lists the blocks to display
 #        SPARKED   ONCE   LIVE     TIMED
-format = "desktop user || datetime temp "
-#format = "desktop || temp"
+format = "desktop user || datetime temp"
 # dock defines bar's position: 'top' or 'bottom'
 dock = top
 # height of the bar in pixel
@@ -39,11 +38,13 @@ trigger="bspc subscribe"
 consume=false
 
 [user]
-bin="id -u -n"
+bin="whoami"
 
 [datetime]
-bin="~/.local/bin/candies/datetime -m"
-live=true
+bin="date +'%Y-%m-%d %H:%M:%S'"
+reload=1
+;bin="~/.local/bin/candies/datetime -m"
+;live=true
 mouse-left=xclock
 
 [temp]
@@ -51,3 +52,4 @@ bin="~/.config/succade/blocks/temp"
 label=" "
 width=5
 reload=8
+
