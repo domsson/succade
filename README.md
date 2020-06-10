@@ -11,7 +11,7 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It repeatedl
 - Loads blocks (programs or scripts defined in the config file)
 - Updates Lemonbar based on the block's output 
 
-The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the block should be reloaded. Alternatively, a trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
+The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the block should be reloaded. Alternatively, trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
 
 # Notable features
 
