@@ -35,7 +35,7 @@ Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code)
    `./build`
 2. Create the config directory (assuming `.config` as your config dir):  
    `mkdir ~/.config/succade`  
-3. Copy the example config, then edit it to your needs:
+3. Copy the example config, then edit it to your needs:  
    `cp succaderc ~/.config/succade`  
    `vim ~/.config/succade`
 4. Make `succade` executable and put it somewhere that's included in your path:  
@@ -91,28 +91,28 @@ Every block that has been named in `format` needs its own config section. Some o
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
-| `bin`              | string  | The command to run this block; defaults to the section name. |
-| `reload`           | number  | Interval (in seconds) this block should be run in; `0` (default) means the block will only be run once. |
-| `trigger`          | string  | Run the block whenever the command given here prints something to `stdout`. Sets `reload` to `0`. |
-| `consume`          | boolean | If `true`, the trigger's output will be added as command line argument when running the block. |
+| `bin`              | string  | The command to run the block; defaults to the section name. |
+| `reload`           | number  | Run the block every `interval` seconds; `0` (default) means the block will only be run once. |
+| `trigger`          | string  | Run the block whenever the command given here prints something to `stdout`. |
+| `consume`          | boolean | Use the trigger's output as command line argument when running the block. |
 | `live`             | boolean | The block is supposed to keep running; succade will monitor it for new output on `stdout`. |
 | `label`            | string  | Shown before the block's main text; useful to display icons when using fonts like Siji. |
 | `padding`          | number  | Minimum width of the block's main text, which will be left-padded with spaces if neccessary. |
 | `foreground`       | color   | Font color for the whole block (including label and affixes). |
 | `background`       | color   | Background color for the whole block (including label and affixes). |
-| `label-foreground` | color   | Font color this the block's label, if any. |
-| `label-background` | color   | Background color for this block's label, if any. |
-| `affix-foreground` | color   | Font color for block's prefix and suffix, if any. |
+| `label-foreground` | color   | Font color for the block's label, if any. |
+| `label-background` | color   | Background color for the block's label, if any. |
+| `affix-foreground` | color   | Font color for the block's prefix and suffix, if any. |
 | `affix-background` | color   | Background color for the block's prefix and suffix, if any. |
-| `line-color`       | color   | Overline / underline color for this block. |
-| `overline`         | boolean | Whether or not to draw an overline for this block. |
-| `underline`        | boolean | Whether or not to draw an underline for this block. |
+| `line-color`       | color   | Overline / underline color for the block. |
+| `overline`         | boolean | Whether or not to draw an overline for the block. |
+| `underline`        | boolean | Whether or not to draw an underline for the block. |
 | `offset`           | number  | Distance to the next block, in pixels. |
-| `mouse-left`       | string  | Command to run when you left-click this block. |
-| `mouse-middle`     | string  | Command to run when you middle-click this block. |
-| `mouse-right`      | string  | Command to run when you right-click this block. |
-| `scroll-up`        | string  | Command to run when you scroll your mouse wheel up while hovering over this block. |
-| `scroll-down`      | string  | Command to run when you scroll your mouse whell down while hovering over this block. |
+| `mouse-left`       | string  | Command to run when you left-click the block. |
+| `mouse-middle`     | string  | Command to run when you middle-click the block. |
+| `mouse-right`      | string  | Command to run when you right-click the block. |
+| `scroll-up`        | string  | Command to run when you scroll your mouse wheel up while hovering over the block. |
+| `scroll-down`      | string  | Command to run when you scroll your mouse whell down while hovering over the block. |
 
 # Usage and command line arguments
 
