@@ -133,8 +133,6 @@ With projects like [polybar](https://github.com/polybar/polybar), the question f
 
 For example, imagine someone created a fork of Lemonbar that works with Wayland. As long as they would keep the same interface (same format specifiers supported as with Lemonbar), you can immediately switch to that new bar, without changing anything else. You can still use the same blocks, because they are not tied to the bar or succade.
 
-Another reason is performance / footprint. While succade plus lemonbar use about the same amount of CPU as a similar polybar setup (somewhere from 0.0 to 1.7 %), the RAM usage is quite different. In my tests, succade plus lemonbar came in below 10 MB of RAM, while polybar was reported to use about 770 MB of RAM on my system (according to `pmap`).
-
 # License
 
 succade is free software, dedicated to the public domain. Do with it whatever you want, but don't hold me responsible for anything either. However, be aware that the libaries this project is using (see section _Dependencies_) might use a different license. If so, distribution of the executable binary of this project would be affected by such licenses. For that reason, I do not provide a binary, only the source code.
