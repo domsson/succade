@@ -137,13 +137,18 @@ For example, imagine someone created a fork of Lemonbar that works with Wayland.
 
 On my sytem, according to `top` and `pmap`, succade running with 7 blocks uses:
 
-- from 0 to 0.7 % of CPU
-- less than 2.4 MB of RAM
+- from 0.0 to 0.7 % CPU
+- less than 2.4 MB RAM
 
-If we take Lemonbar into account, we end up with about:
+If we take Lemonbar into account, we end up with these numbers:
 
-- from 0 to 1 % of CPU
-- about 9.2 MB of RAM
+- from 0.0 to 1.3 % CPU
+- about 9.2 MB RAM
+
+Running a comparable setup via polybar gives me these results:
+
+- from 0.0 to 1.7 % CPU
+- about 770 MB RAM
 
 # License
 
