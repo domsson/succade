@@ -133,22 +133,7 @@ With projects like [polybar](https://github.com/polybar/polybar), the question f
 
 For example, imagine someone created a fork of Lemonbar that works with Wayland. As long as they would keep the same interface (same format specifiers supported as with Lemonbar), you can immediately switch to that new bar, without changing anything else. You can still use the same blocks, because they are not tied to the bar or succade.
 
-# Performance / Footprint
-
-On my sytem, according to `top` and `pmap`, succade running with 7 blocks uses:
-
-- from 0.0 to 0.7 % CPU
-- less than 2.4 MB RAM
-
-If we take Lemonbar into account, we end up with these numbers:
-
-- from 0.0 to 1.3 % CPU
-- about 9.2 MB RAM
-
-Running a comparable setup via polybar gives me these results:
-
-- from 0.0 to 1.7 % CPU
-- about 770 MB RAM
+Another reason is performance / footprint. While succade plus lemonbar use about the same amount of CPU as a similar polybar setup (somewhere from 0.0 to 1.7 %), the RAM usage is quite different. In my tests, succade plus lemonbar came in below 10 MB of RAM, while polybar was reported to use about 770 MB of RAM on my system (according to `pmap`).
 
 # License
 
