@@ -942,11 +942,6 @@ void on_child_error(kita_state_s *ks, kita_event_s *ke)
 	// TODO possibly log this to a file or something
 }
 
-void on_child_feedok(kita_state_s *ks, kita_event_s *ke)
-{
-	//fprintf(stderr, "on_child_feedok(): %s\n", ke->child->cmd);
-}
-
 void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
 	//fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
@@ -1038,20 +1033,10 @@ void on_child_exited(kita_state_s *ks, kita_event_s *ke)
 	}
 }
 
-void on_child_closed(kita_state_s *ks, kita_event_s *ke)
-{
-	//fprintf(stderr, "on_child_closed(): %s\n", ke->child->cmd);
-}
-
 void on_child_reaped(kita_state_s *ks, kita_event_s *ke)
 {
 	//fprintf(stderr, "on_child_reaped(): %s\n", ke->child->cmd);
 	on_child_exited(ks, ke);
-}
-
-void on_child_remove(kita_state_s *ks, kita_event_s *ke)
-{
-	//fprintf(stderr, "on_child_remove()\n");
 }
 
 static void cleanup(state_s *state)
@@ -1141,12 +1126,9 @@ int main(int argc, char **argv)
 	// KITA CALLBACKS 
 	//
 
-	kita_set_callback(kita, KITA_EVT_CHILD_CLOSED, on_child_closed);
 	kita_set_callback(kita, KITA_EVT_CHILD_REAPED, on_child_reaped);
 	kita_set_callback(kita, KITA_EVT_CHILD_HANGUP, on_child_exited);
 	kita_set_callback(kita, KITA_EVT_CHILD_EXITED, on_child_exited);
-	kita_set_callback(kita, KITA_EVT_CHILD_REMOVE, on_child_remove);
-	kita_set_callback(kita, KITA_EVT_CHILD_FEEDOK, on_child_feedok);
 	kita_set_callback(kita, KITA_EVT_CHILD_READOK, on_child_readok);
 	kita_set_callback(kita, KITA_EVT_CHILD_ERROR,  on_child_error);
 
