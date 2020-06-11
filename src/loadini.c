@@ -86,9 +86,9 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(lc, LEMON_OPT_FORCE, equals(value, "true"));
 		return 1;
 	}
-	if (equals(name, "block-offset") || equals(name, "offset"))
+	if (equals(name, "block-margin") || equals(name, "margin"))
 	{
-		cfg_set_int(lc, LEMON_OPT_BLOCK_OFFSET, atoi(value));
+		cfg_set_int(lc, LEMON_OPT_BLOCK_MARGIN, atoi(value));
 		return 1;
 	}
 	if (equals(name, "block-prefix") || equals(name, "prefix"))
@@ -213,9 +213,14 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(bc, BLOCK_OPT_WIDTH, atoi(value));
 		return 1;
 	}
-	if (equals(name, "offset"))
+	if (equals(name, "margin-left"))
 	{
-		cfg_set_int(bc, BLOCK_OPT_OFFSET, atoi(value));
+		cfg_set_int(bc, BLOCK_OPT_MARGIN_LEFT, atoi(value));
+		return 1;
+	}
+	if (equals(name, "margin-right"))
+	{
+		cfg_set_int(bc, BLOCK_OPT_MARGIN_RIGHT, atoi(value));
 		return 1;
 	}
 	if (equals(name, "prefix"))

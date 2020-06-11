@@ -391,7 +391,9 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 	const char *affix_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_FG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_FG), "-");
 	const char *affix_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_BG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_BG), "-");
 
-	int offset = cfg_has(bcfg, BLOCK_OPT_OFFSET) ? cfg_get_int(bcfg, BLOCK_OPT_OFFSET) : cfg_get_int(lcfg, LEMON_OPT_BLOCK_OFFSET);
+	int margin   = cfg_get_int(lcfg, LEMON_OPT_BLOCK_MARGIN);
+	int margin_l = cfg_has(bcfg, BLOCK_OPT_MARGIN_LEFT) ? cfg_get_int(bcfg, BLOCK_OPT_MARGIN_LEFT) : -1;
+	int margin_r = cfg_has(bcfg, BLOCK_OPT_MARGIN_RIGHT) ? cfg_get_int(bcfg, BLOCK_OPT_MARGIN_RIGHT) : -1;
 	int ol     = cfg_has(bcfg, BLOCK_OPT_OL) ? cfg_get_int(bcfg, BLOCK_OPT_OL) : cfg_get_int(lcfg, LEMON_OPT_OL);
 	int ul     = cfg_has(bcfg, BLOCK_OPT_UL) ? cfg_get_int(bcfg, BLOCK_OPT_UL) : cfg_get_int(lcfg, LEMON_OPT_UL);
 	const char *lc   = strsel(cfg_get_str(bcfg, BLOCK_OPT_LC), cfg_get_str(lcfg, LEMON_OPT_LC) , "-");
@@ -410,14 +412,18 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 
 	char *str = malloc(BUFFER_BLOCK_STR);
 	snprintf(str, BUFFER_BLOCK_STR,
-		"%s%%{O%d F%s B%s U%s %co %cu}"
+		"%%{O%d}"
+		"%s%%{F%s B%s U%s %co %cu}"
 		"%%{T3 F%s B%s}%s"
 		"%%{T2 F%s B%s}%s"
 		"%%{T1 F%s B%s}%*s"
 		"%%{T3 F%s B%s}%s"
-		"%%{T- F- B- U- -o -u}%s",
+		"%%{T- F- B- U- -o -u}%s"
+		"%%{O%d}",
+		// margin left
+		margin_l >= 0 ? margin_l : margin,
 		// start
-		action_start, offset, block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
+		action_start, block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
 		// prefix
 		affix_fg, affix_bg, prefix,
 		// label
@@ -427,7 +433,8 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 		// suffix
 		affix_fg, affix_bg, suffix,
 		// end
-		action_end
+		action_end,
+		margin_r >= 0 ? margin_r : margin
 	);
 
 	free(result);

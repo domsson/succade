@@ -83,7 +83,7 @@ The special section `bar` configures Lemonbar itself and can define common forma
 | `line-width`       | number  | Thickness of all underlines / overlines, if any, in pixels. |
 | `overline`         | boolean | Whether or not to draw an overline for all blocks. |
 | `underline`        | boolean | Whether or not to draw an underline for all blocks. |
-| `block-offset`     | number  | Distance between any two blocks in pixel; default is `0`. |
+| `block-margin`     | number  | Sets margin-left and margin-right for all blocks. |
 
 ## blocks
 
@@ -109,7 +109,8 @@ Every block that has been named in `blocks` needs its own config section. Some o
 | `line-color`       | color   | Overline / underline color for the block. |
 | `overline`         | boolean | Whether or not to draw an overline for the block. |
 | `underline`        | boolean | Whether or not to draw an underline for the block. |
-| `offset`           | number  | Distance to the next block, in pixels. |
+| `margin-left`      | number  | Distance to the next block (or edge of bar) on the left, in pixels. |
+| `margin-right`     | number  | Distance to the next block (or edge of bar) on the right, in pixels. |
 | `mouse-left`       | string  | Command to run when you left-click the block. |
 | `mouse-middle`     | string  | Command to run when you middle-click the block. |
 | `mouse-right`      | string  | Command to run when you right-click the block. |
