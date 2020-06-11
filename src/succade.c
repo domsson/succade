@@ -1084,10 +1084,11 @@ static void help(const char *invocation, FILE *where)
 	fprintf(where, "\t%s [OPTIONS...]\n", invocation);
 	fprintf(where, "\n");
 	fprintf(where, "OPTIONS\n");
-	fprintf(where, "\t-c\tconfig file to use.\n");
-	fprintf(where, "\t-e\trun bar even if it is empty (no blocks).\n");
-	fprintf(where, "\t-h\tprint this help text and exit.\n");
-	fprintf(where, "\t-s\tINI section name for the bar.\n");
+	fprintf(where, "\t-c\tconfig file to use\n");
+	fprintf(where, "\t-e\trun bar even if it is empty (no blocks)\n");
+	fprintf(where, "\t-h\tprint this help text and exit\n");
+	fprintf(where, "\t-s\tINI section name for the bar\n");
+	fprintf(where, "\t-V\tprint version information and exit\n");
 }
 
 static void version()
