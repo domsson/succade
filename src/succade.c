@@ -944,7 +944,7 @@ void on_child_error(kita_state_s *ks, kita_event_s *ke)
 
 void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
-	//fprintf(stderr, "on_child_readok(): %s\n", ke->child->cmd);
+	//fprintf(stderr, "on_child_readok(): %s (%d bytes)\n", ke->child->cmd, ke->size);
 
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
 	thing_s *thing = thing_by_child(state, ke->child);
@@ -1000,6 +1000,11 @@ void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 		}
 		return;
 	}
+}
+
+void on_child_closed(kita_state_s *ks, kita_event_s *ke)
+{
+	//fprintf(stderr, "on_child_closed(): %s\n", ke->child->cmd);
 }
 
 void on_child_exited(kita_state_s *ks, kita_event_s *ke)
@@ -1126,6 +1131,7 @@ int main(int argc, char **argv)
 	// KITA CALLBACKS 
 	//
 
+	kita_set_callback(kita, KITA_EVT_CHILD_CLOSED, on_child_closed);
 	kita_set_callback(kita, KITA_EVT_CHILD_REAPED, on_child_reaped);
 	kita_set_callback(kita, KITA_EVT_CHILD_HANGUP, on_child_exited);
 	kita_set_callback(kita, KITA_EVT_CHILD_EXITED, on_child_exited);
