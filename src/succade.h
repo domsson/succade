@@ -4,24 +4,18 @@
 #include "libkita.h"
 #include <unistd.h> // STDOUT_FILENO, STDIN_FILENO, STDERR_FILENO
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define SUCCADE_NAME "succade"
 #define SUCCADE_URL  "https://github.com/domsson/succade"
-#define SUCCADE_VER_MAJOR 0
-#define SUCCADE_VER_MINOR 3
+#define SUCCADE_VER_MAJOR 1
+#define SUCCADE_VER_MINOR 0
 #define SUCCADE_VER_PATCH 0
 
 #define BUFFER_NUMERIC          8
 #define BUFFER_LEMON_ARG     1024
-#define BUFFER_LEMON_INPUT   2048
 
-#define BUFFER_BLOCK_FORMAT   256
 #define BUFFER_BLOCK_NAME      64
-#define BUFFER_BLOCK_AFFIX     16
-#define BUFFER_BLOCK_LABEL     64
-#define BUFFER_BLOCK_UNIT      16
-#define BUFFER_BLOCK_OUTPUT   512
 #define BUFFER_BLOCK_STR     2048
 
 #define BLOCK_WAIT_TOLERANCE 0.1
@@ -32,10 +26,6 @@
 #define DEFAULT_LEMON_BIN     "lemonbar"
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"
 #define DEFAULT_LEMON_SECTION "bar"
-
-#define STR_DASH "-"
-#define STR_PLUS "+"
-#define STR_NONE ""
 
 //
 // ENUMS
@@ -170,6 +160,7 @@ struct succade_prefs
 	char     *section;       // INI section name for the bar
 	unsigned char empty : 1; // Run bar even if no blocks present?
 	unsigned char help  : 1; // Show help text and exit?
+	unsigned char version : 1; // Show version and exit?
 };
 
 struct succade_state

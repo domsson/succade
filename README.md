@@ -85,7 +85,8 @@ The special section `bar` configures Lemonbar itself and can define common forma
 | `line-width`       | number  | Thickness of all underlines / overlines, if any, in pixels. |
 | `overline`         | boolean | Whether or not to draw an overline for all blocks. |
 | `underline`        | boolean | Whether or not to draw an underline for all blocks. |
-| `block-margin`     | number  | Sets margin-left and margin-right for all blocks. |
+| `block-margin`     | number  | Sets margin-left and margin-right for all blocks, in pixels. |
+| `block-padding`    | number  | Adds the given number of spaces to both sides of the block's output. |
 
 ## blocks
 

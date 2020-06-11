@@ -1090,6 +1090,13 @@ static void help(const char *invocation, FILE *where)
 	fprintf(where, "\t-s\tINI section name for the bar.\n");
 }
 
+static void version()
+{
+	fprintf(stdout, "%s %d.%d.%d\n%s\n", SUCCADE_NAME,
+			SUCCADE_VER_MAJOR, SUCCADE_VER_MINOR, SUCCADE_VER_PATCH,
+			SUCCADE_URL);
+}
+
 int main(int argc, char **argv)
 {
 	//
@@ -1160,6 +1167,13 @@ int main(int argc, char **argv)
 	if (prefs->help)
 	{
 		help(argv[0], stdout);
+		return EXIT_SUCCESS;
+	}
+
+	// PRINT VERSION AND EXIT, MAYBE
+	if (prefs->version)
+	{
+		version();
 		return EXIT_SUCCESS;
 	}
 
