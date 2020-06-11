@@ -55,7 +55,7 @@ Possible property values, based on their types as listed in the tables below, ar
 
 ## lemonbar
 
-The special section `bar` configures Lemonbar itself and can define common formatting for all blocks. It is required for succade to run, but the only mandatory property is `format`.
+The special section `bar` configures Lemonbar itself and can define common formatting for all blocks. It is required for succade to run, but the only mandatory property is `blocks`.
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
@@ -87,7 +87,7 @@ The special section `bar` configures Lemonbar itself and can define common forma
 
 ## blocks
 
-Every block that has been named in `format` needs its own config section. Some of the values that can be set here are the same as in the `bar` section - if so, they will overwrite the values specified there. This way, you can set a default font color for the entire bar, but decide to give some blocks a different one.
+Every block that has been named in `blocks` needs its own config section. Some of the values that can be set here are the same as in the `bar` section - if so, they will overwrite the values specified there. This way, you can set a default font color for the entire bar, but decide to give some blocks a different one.
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
