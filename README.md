@@ -129,11 +129,6 @@ Options:
 - `h`: print a help text and exit
 - `s SECTION`: config section name for the bar (default is "bar")
 
-# Known issues
-
-- Because of a [bug in lemonbar](https://github.com/LemonBoy/bar/issues/107), feeding new input to lemonbar in quick succession doesn't always work and a previous input will be shown instead; sometimes leaving whole blocks missing (especially if only few or mostly static blocks are used)
-- The `offset` option behaves differently on the left and right, plus adds an unnecessary offset for centered blocks (possibly a [bug in lemonbar](https://github.com/LemonBoy/bar/issues/224))
-
 # Motivation 
 
 With projects like [polybar](https://github.com/polybar/polybar), the question for the relevance of succade is justified. Personally, I prefer succade - and similar solutions, like [Captain](https://github.com/muse/Captain) - because they enforce the separation of concerns as described by the [UNIX philosophy](https://en.wikipedia.org/wiki/Unix_philosophy).
