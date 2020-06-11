@@ -1,33 +1,29 @@
 [bar]
-bin = "lemonbar"
 name = "testbar"
-# format is required, it lists the blocks to display
-#         SPARKED   ONCE   TIMED
-format = "desktop | user | datetime"
-dock = top
+command = "lemonbar"
+blocks = "desktop | user | datetime"
 height = 24
 foreground = "#000000"
 background = "#ce7942"
 underline = true
-overline = false 
 line-width = 3
-line = "#333333"
-label-fg = "#333333"
-prefix = " " 
-suffix = " "
-offset = 8
+line-color = "#333333"
+label-foreground = "#333333"
+block-prefix = " " 
+block-suffix = " "
+block-offset = 8
 font = 6x13
 label-font = "-wuncon-siji-medium-r-normal--10-100-75-75-c-80-iso10646-1"
 
 [desktop]
-bin="bspc query -D -d focused --names"
-trigger="bspc subscribe"
+command = "bspc query -D -d focused --names"
+trigger = "bspc subscribe"
 
 [user]
-bin="whoami"
+command = "whoami"
 
 [datetime]
-bin="date +'%Y-%m-%d %H:%M:%S'"
-reload=1
-mouse-left=xclock
+command = "date +'%Y-%m-%d %H:%M:%S'"
+interval = 1
+mouse-left = xclock
 

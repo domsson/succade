@@ -11,7 +11,7 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It repeatedl
 - Loads blocks (programs or scripts defined in the config file)
 - Updates Lemonbar based on the block's output 
 
-The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the block should be reloaded. Alternatively, trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
+The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the blocks should be reloaded. Alternatively, trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
 
 # Notable features
 
@@ -59,13 +59,13 @@ The special section `bar` configures Lemonbar itself and can define common forma
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
-| `format`           | string  | Specifies the blocks to display on the bar. Example: <code>desktop  &#124; title  &#124; volume time</code> |
-| `bin`              | string  | The command to start the bar; defaults to `lemonbar` | 
+| `blocks`           | string  | Specifies the blocks to display on the bar. Example: <code>desktop  &#124; title  &#124; volume time</code> |
+| `command`          | string  | The command to start the bar; defaults to `lemonbar` | 
 | `width`            | number  | Width of the bar in pixel - omit this value for a full-width bar. |
 | `height`           | number  | Height of the bar in pixel. |  
-| `x`                | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
-| `y`                | number  | y-position of the bar - omit to have it sit at the edge of your screen. |
-| `dock`             | string  | Position of the bar; possible values are `bottom` and `top` (default). |
+| `left              | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
+| `top`              | number  | y-position of the bar - omit to have it sit at the edge of your screen. |
+| `bottom`           | boolean | Dock the bar at the bottom instead of the top of the screen. |
 | `force`            | boolean | Set to `true` if you want to force docking of Lemonbar; default is `false`. |
 | `foreground`       | color   | Foreground (font) color for all blocks. |
 | `background`       | color   | Background color for the entire bar. |
@@ -76,7 +76,7 @@ The special section `bar` configures Lemonbar itself and can define common forma
 | `affix-background` | color   | Background color for all block's prefixes / suffixes. |
 | `block-prefix`     | string  | A string that will be prepended to every block, for example a space: `" "`. |
 | `block-suffix`     | string  | Same as the prefix, but will be added to the end of every block. |
-| `block-font`       | string  | Font to use for all blocks. |
+| `font`             | string  | Font to use for all blocks. |
 | `label-font`       | string  | Font to use for all block's labels, if any. |
 | `affix-font`       | string  | Font to use for all block's prefixes / suffixes, if any. |
 | `line-color`       | color   | Color for all underlines / overlines, if any. |
@@ -91,13 +91,15 @@ Every block that has been named in `format` needs its own config section. Some o
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
-| `bin`              | string  | The command to run the block; defaults to the section name. |
-| `reload`           | number  | Run the block every `interval` seconds; `0` (default) means the block will only be run once. |
+| `command`          | string  | The command to run the block; defaults to the section name. |
+| `interval`         | number  | Run the block every `interval` seconds; `0` (default) means the block will only be run once. |
 | `trigger`          | string  | Run the block whenever the command given here prints something to `stdout`. |
 | `consume`          | boolean | Use the trigger's output as command line argument when running the block. |
 | `live`             | boolean | The block is supposed to keep running; succade will monitor it for new output on `stdout`. |
+| `prefix`           | string  | Shown before the block's main text and label. |
+| `suffix`           | string  | Shown after the block's main text and unit, if any. |
 | `label`            | string  | Shown before the block's main text; useful to display icons when using fonts like Siji. |
-| `padding`          | number  | Minimum width of the block's main text, which will be left-padded with spaces if neccessary. |
+| `min-width`        | number  | Minimum width of the block's main text, which will be left-padded with spaces if neccessary. |
 | `foreground`       | color   | Font color for the whole block (including label and affixes). |
 | `background`       | color   | Background color for the whole block (including label and affixes). |
 | `label-foreground` | color   | Font color for the block's label, if any. |
@@ -122,16 +124,18 @@ Usage:
 
 Options:
 
-- `c`: config file to use
+- `c CONFIG`: config file to use
 - `e`: run bar even if it is empty (no blocks defined or loaded)
 - `h`: print a help text and exit
 - `s SECTION`: config section name for the bar (default is "bar")
 
-# Why succade?
+# Motivation 
 
 With projects like [polybar](https://github.com/polybar/polybar), the question for the relevance of succade is justified. Personally, I prefer succade - and similar solutions, like [Captain](https://github.com/muse/Captain) - because they enforce the separation of concerns as described by the [UNIX philosophy](https://en.wikipedia.org/wiki/Unix_philosophy).
 
 For example, imagine someone created a fork of Lemonbar that works with Wayland. As long as they would keep the same interface (same format specifiers supported as with Lemonbar), you can immediately switch to that new bar, without changing anything else. You can still use the same blocks, because they are not tied to the bar or succade.
+
+Additionally, I like minimalistic setups. I don't want most of the additional features of other bars, like true type fonts or rounded borders. Hence, I might as well save a bit of RAM by going with more minimalistic solutions.
 
 # License
 
