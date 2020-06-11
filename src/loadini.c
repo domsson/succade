@@ -91,6 +91,11 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(lc, LEMON_OPT_BLOCK_MARGIN, atoi(value));
 		return 1;
 	}
+	if (equals(name, "block-padding") || equals(name, "padding"))
+	{
+		cfg_set_int(lc, LEMON_OPT_BLOCK_PADDING, atoi(value));
+		return 1;
+	}
 	if (equals(name, "block-prefix") || equals(name, "prefix"))
 	{
 		cfg_set_str(lc, LEMON_OPT_BLOCK_PREFIX, is_quoted(value) ? unquote(value) : strdup(value));

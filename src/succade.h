@@ -91,6 +91,7 @@ enum succade_lemon_opt
 	LEMON_OPT_AFFIX_FG, // block
 	LEMON_OPT_AFFIX_BG, // block
 	LEMON_OPT_BLOCK_MARGIN, // block
+	LEMON_OPT_BLOCK_PADDING, // block
 	LEMON_OPT_BLOCK_PREFIX, // block
 	LEMON_OPT_BLOCK_SUFFIX, // block
 	LEMON_OPT_BLOCK_FONT,

@@ -1,0 +1,38 @@
+[bar]
+name = "testbar"
+command = "lemonbar"
+blocks = "desktop | user | date time"
+height = 24
+foreground = "#000000"
+background = "#ce7942"
+underline = true
+line-width = 3
+line-color = "#333333"
+label-foreground = "#333333"
+block-prefix = " " 
+block-suffix = " "
+block-margin = 4
+font = 6x13
+
+[desktop]
+command = "bspc query -D -d focused --names"
+trigger = "bspc subscribe"
+label = "WORKSPACE "
+margin-left = 8
+
+[user]
+command = "whoami"
+label = "USER "
+
+[date]
+command = "date +'%Y-%m-%d'"
+interval = 1
+label = "DATE "
+
+[time]
+command = "date +'%H:%M:%S'"
+interval = 1
+label = "TIME "
+mouse-left = xclock
+margin-right = 8
+

@@ -3,37 +3,38 @@ name = "testbar"
 command = "lemonbar"
 blocks = "desktop | user | date time"
 height = 24
-foreground = "#000000"
-background = "#ce7942"
-underline = true
-line-width = 3
-line-color = "#333333"
+foreground = "#dddddd"
 label-foreground = "#333333"
-block-prefix = " " 
-block-suffix = " "
+block-background = "#333333"
+underline = true
 block-margin = 4
+block-padding = 2
 font = 6x13
 label-font = "-wuncon-siji-medium-r-normal--10-100-75-75-c-80-iso10646-1"
 
 [desktop]
 command = "bspc query -D -d focused --names"
 trigger = "bspc subscribe"
-label = "WORKSPACE "
+label = "  "
+label-background = "#e89a6a"
 margin-left = 8
 
 [user]
 command = "whoami"
-label = "USER "
+label = "  "
+label-background = "#5a8fcd"
 
 [date]
 command = "date +'%Y-%m-%d'"
 interval = 1
-label = "DATE "
+label = "  "
+label-background = "#7da464"
 
 [time]
 command = "date +'%H:%M:%S'"
 interval = 1
-label = "TIME "
+label = "  "
+label-background = "#b683c3"
 mouse-left = xclock
 margin-right = 8
 

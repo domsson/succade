@@ -382,7 +382,7 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 	
 	size_t diff;
 	char *result = escape(block->output, '%', &diff);
-	int padding = cfg_get_int(bcfg, BLOCK_OPT_WIDTH) + diff;
+	int min_width = cfg_get_int(bcfg, BLOCK_OPT_WIDTH) + diff;
 
 	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG), "-", "-");
 	const char *block_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_BG), cfg_get_str(lcfg, LEMON_OPT_BLOCK_BG), "-");
@@ -391,6 +391,7 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 	const char *affix_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_FG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_FG), "-");
 	const char *affix_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_BG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_BG), "-");
 
+	int padding  = cfg_get_int(lcfg, LEMON_OPT_BLOCK_PADDING);
 	int margin   = cfg_get_int(lcfg, LEMON_OPT_BLOCK_MARGIN);
 	int margin_l = cfg_has(bcfg, BLOCK_OPT_MARGIN_LEFT) ? cfg_get_int(bcfg, BLOCK_OPT_MARGIN_LEFT) : -1;
 	int margin_r = cfg_has(bcfg, BLOCK_OPT_MARGIN_RIGHT) ? cfg_get_int(bcfg, BLOCK_OPT_MARGIN_RIGHT) : -1;
@@ -416,7 +417,7 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 		"%s%%{F%s B%s U%s %co %cu}"
 		"%%{T3 F%s B%s}%s"
 		"%%{T2 F%s B%s}%s"
-		"%%{T1 F%s B%s}%*s"
+		"%%{T1 F%s B%s}%*s%*s%*s"
 		"%%{T3 F%s B%s}%s"
 		"%%{T- F- B- U- -o -u}%s"
 		"%%{O%d}",
@@ -429,7 +430,7 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 		// label
 		label_fg, label_bg, label,
 		// block
-		block_fg, block_bg, padding, result,
+		block_fg, block_bg, padding, "", min_width, result, padding, "",
 		// suffix
 		affix_fg, affix_bg, suffix,
 		// end
