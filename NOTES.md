@@ -15,14 +15,6 @@ are dead, we should mark them as such. The (last line of) output they produced
 shall be buffered, so we can compare the output of two runs. If the output did 
 not change, we don't need to update bar (unless another block has new output).
 
-What's unclear is if we should wait for blocks to return ouput the moment we do 
-the update on all/some blocks, or if we should add their file descriptor to the 
-epoll events, then run them, then wait for them to trigger an epoll event, even 
-if that happens immediately after? The first approach is very easy to implement 
-but has the drawback that a single stalling (or very time consuming) block can 
-block succade entirely. The last approach prevents this, but is definitely much 
-more involved.
-
 ### STATIC
 
 - Programs that spit something to `stdout` once, then exit
@@ -76,16 +68,3 @@ lifetime, as all LIVE blocks should be killed then.
 When a live block dies prematurely, we should mark it as dead and treat it as 
 a STATIC block from that point onwards, re-using the last output it produced.
 
-## Things to figure out
-
-- We open sparks in non-blocking mode; should we do the same for blocks?
-- We open sparks in non-blockign mode; should we do the same for bar?
-- With sparks opened in non-blocking mode, when fgets() returns NULL, we 
-  should probably check if errno = EWOULDBLOCK, or don't we need this?
-- In `run_block()` we call `fgets()` once, but shouldn't we call it in a loop,
-  as it only reads one line at a time and there might be more in the buffer;
-  or can there not be more in there for some reason?
-- Can we ignore SIGCHLD (which automatically reaps dead children) and make 
-  sure we detect and mark dead bar/blocks/sparks in some other way (say by 
-  checking the return value of `fgets()` etc), or should we have a signal 
-  handler in place that does the reaping and marking etc?
