@@ -18,18 +18,22 @@ label-font = "-wuncon-siji-medium-r-normal--10-100-75-75-c-80-iso10646-1"
 [desktop]
 command = "bspc query -D -d focused --names"
 trigger = "bspc subscribe"
+label = "WORKSPACE "
 margin-left = 8
 
 [user]
 command = "whoami"
+label = "USER "
 
 [date]
 command = "date +'%Y-%m-%d'"
 interval = 1
+label = "DATE "
 
 [time]
 command = "date +'%H:%M:%S'"
 interval = 1
+label = "TIME "
 mouse-left = xclock
 margin-right = 8
 

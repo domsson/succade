@@ -3,6 +3,7 @@
 Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It repeatedly runs [blocks](https://github.com/domsson/candies), piping their output to Lemonbar. Every block is a script or program that provides text to be displayed on your bar. Configuration is done with a simple [ini file](https://en.wikipedia.org/wiki/INI_file).
 
 ![succade lemonbar example](https://i.imgur.com/H7vFfV3.png)
+![succade lemonbar example](https://i.imgur.com/nkoptQR.png)
 
 # How it works
 
