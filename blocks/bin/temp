@@ -1,8 +1,0 @@
-#!/usr/bin/env bash
-# Dependencies: none, but assuming the existence of /sys/class/thermal/thermal_zone0 and 1
-
-temp1=$(cat /sys/class/thermal/thermal_zone0/temp)
-temp2=$(cat /sys/class/thermal/thermal_zone1/temp)
-temp=$(((temp1 + temp2) / 2000))
-
-echo "$temp C"
