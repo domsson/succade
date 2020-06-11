@@ -130,8 +130,9 @@ Options:
 
 - `c CONFIG`: config file to use
 - `e`: run bar even if it is empty (no blocks defined or loaded)
-- `h`: print a help text and exit
+- `h`: print help text and exit
 - `s SECTION`: config section name for the bar (default is "bar")
+- `V`: print version information and exit
 
 # Motivation 
 
