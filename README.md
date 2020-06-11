@@ -63,7 +63,7 @@ The special section `bar` configures Lemonbar itself and can define common forma
 | `command`          | string  | The command to start the bar; defaults to `lemonbar` | 
 | `width`            | number  | Width of the bar in pixel - omit this value for a full-width bar. |
 | `height`           | number  | Height of the bar in pixel. |  
-| `left              | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
+| `left`             | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
 | `top`              | number  | y-position of the bar - omit to have it sit at the edge of your screen. |
 | `bottom`           | boolean | Dock the bar at the bottom instead of the top of the screen. |
 | `force`            | boolean | Set to `true` if you want to force docking of Lemonbar; default is `false`. |
