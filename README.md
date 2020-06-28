@@ -27,7 +27,6 @@ The config file needs to have one section for lemonbar and one per block. The ba
 # Dependencies
 
 - [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian)
-- [`libkita`](https://github.com/domsson/libkita/) (by me, written for succade, public domain)
 
 # Installation 
 

@@ -12,6 +12,9 @@
 #include "execute.c"   // Execute child processes
 #include "loadini.c"   // Handles loading/processing of INI cfg file
 
+#define KITA_IMPLEMENTATION
+#include "libkita.h"
+
 static volatile int running;   // used to stop main loop 
 static volatile int handled;   // last signal that has been handled 
 
