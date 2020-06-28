@@ -1,1 +1,1 @@
-gcc -Wall -g -o bin/succade src/succade.c -linih -lkita
+gcc -Wall -g -o bin/succade src/succade.c -linih
