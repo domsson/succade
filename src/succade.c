@@ -1,4 +1,5 @@
 #define CFG_IMPLEMENTATION
+#define KITA_IMPLEMENTATION
 
 #include <stdlib.h>    // NULL, size_t, EXIT_SUCCESS, EXIT_FAILURE, ...
 #include <string.h>    // strlen(), strcmp(), ...
@@ -6,14 +7,13 @@
 #include <float.h>     // DBL_MAX
 #include "ini.h"       // https://github.com/benhoyt/inih
 #include "cfg.h"
+#include "libkita.h"
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
 #include "helpers.c"   // Helper functions, mostly for strings
 #include "execute.c"   // Execute child processes
 #include "loadini.c"   // Handles loading/processing of INI cfg file
 
-#define KITA_IMPLEMENTATION
-#include "libkita.h"
 
 static volatile int running;   // used to stop main loop 
 static volatile int handled;   // last signal that has been handled 

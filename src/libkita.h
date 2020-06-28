@@ -209,7 +209,7 @@ void* kita_get_context(kita_state_s* s);
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-#ifndef KITA_IMPLEMENTATION
+#ifdef KITA_IMPLEMENTATION
 
 #include <stdlib.h>    // NULL, size_t, EXIT_SUCCESS, EXIT_FAILURE, ...
 #include <unistd.h>    // pipe(), fork(), dup(), close(), _exit(), ...
