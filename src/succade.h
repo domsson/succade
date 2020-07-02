@@ -175,6 +175,6 @@ struct succade_state
 	unsigned char due : 1;
 };
 
-typedef void (*create_block_callback)(const char *name, int align, int n, void *data);
+typedef void (*create_block_callback)(const char *name, int align, void *data);
 
 #endif

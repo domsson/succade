@@ -474,7 +474,7 @@ static char *barstr(const state_s *state)
 	int last_align = -1;
 
 	const thing_s *block = NULL;
-	for (int i = 0; i < num_blocks; ++i)
+	for (size_t i = 0; i < num_blocks; ++i)
 	{
 		block = &state->blocks[i];
 
@@ -537,12 +537,13 @@ static size_t parse_format(const char *format, create_block_callback cb, void *d
 		case '|':
 			// Next align
 			block_align += block_align < 1;
+			break;
 		case ' ':
 		case '\0':
 			if (block_name_len)
 			{
 				// Block name complete, inform the callback
-				cb(block_name, block_align, num_blocks++, data);
+				cb(block_name, block_align, data);
 				// Prepare for the next block name
 				block_name[0] = '\0';
 				block_name_len = 0;
@@ -888,7 +889,7 @@ static void feed_lemon(state_s *state)
  * meaning left, center or right, accordingly (indicating where the block is 
  * supposed to be displayed on the bar).
  */
-static void on_block_found(const char *name, int align, int n, void *data)
+static void on_block_found(const char *name, int align, void *data)
 {
 	// 'Unpack' the data
 	state_s *state = (state_s*) data;
@@ -1291,8 +1292,8 @@ int main(int argc, char **argv)
 	//
 
 	double now;
-	double before = get_time();
-	double delta;
+	//double before = get_time();
+	//double delta;
 	double wait = 0.0; 
 
 	running = 1;
@@ -1301,8 +1302,8 @@ int main(int argc, char **argv)
 	{
 		// update time (passed)
 		now    = get_time();
-		delta  = now - before;
-		before = now;
+		//delta  = now - before;
+		//before = now;
 
 		//fprintf(stderr, "> now = %f, wait = %f, delta = %f\n", now, wait, delta);
 
