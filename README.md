@@ -37,9 +37,8 @@ Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code)
    `./build`
 2. Create the config directory (assuming `.config` as your config dir):  
    `mkdir ~/.config/succade`  
-3. Copy the example config, then edit it to your needs:  
-   `cp succaderc ~/.config/succade`  
-   `vim ~/.config/succade/succaderc`
+3. Copy the example config:  
+   `cp ./cfg/succaderc.1 ~/.config/succade/succaderc`  
 4. Make `succade` executable and put it somewhere that's included in your path:  
    `chmod +x bin/succade`  
    `cp bin/succade ~/.local/bin/`
