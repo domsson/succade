@@ -32,16 +32,19 @@ The config file needs to have one section for lemonbar and one per block. The ba
 
 Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed. If `inih` is not available in your distribution, just replace `./build` with `./build-inih` below and you should be good to go.
 
-1. Make the build script executable, then run it:  
+1. Clone succade and change into its directory:
+   `git clone https://github.com/domsson/succade.git`  
+   `cd succade`
+2. Make the build script executable, then run it:  
    `chmod +x ./build`  
    `./build`
-2. Create the config directory (assuming `.config` as your config dir):  
+3. Create the config directory (assuming `.config` as your config dir):  
    `mkdir ~/.config/succade`  
-3. Copy the example config:  
+4. Copy the example config:  
    `cp ./cfg/succaderc.1 ~/.config/succade/succaderc`  
-4. Make `succade` executable and put it somewhere that's included in your path:  
-   `chmod +x bin/succade`  
-   `cp bin/succade ~/.local/bin/`
+5. Make `succade` executable and put it somewhere that's included in your path:  
+   `chmod +x ./bin/succade`  
+   `cp ./bin/succade ~/.local/bin/`
 
 # Configuration
 
