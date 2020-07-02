@@ -26,11 +26,11 @@ The config file needs to have one section for lemonbar and one per block. The ba
 
 # Dependencies
 
-- [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian)
+- [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian, but also included in this repo, see below)
 
 # Installation 
 
-Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed.
+Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed. If `inih` is not available in your distribution, just replace `./build` with `./build-inih` below and you should be good to go.
 
 1. Make the build script executable, then run it:  
    `chmod +x ./build`  
