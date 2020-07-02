@@ -1,1 +1,2 @@
-cp bin/succade ~/.local/bin/succade
+#!/bin/bash
+cp ./bin/succade ~/.local/bin/succade
