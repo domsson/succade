@@ -101,6 +101,7 @@ Every block that has been named in `blocks` needs its own config section. Some o
 | `trigger`          | string  | Run the block whenever the command given here prints something to `stdout`. |
 | `consume`          | boolean | Use the trigger's output as command line argument when running the block. |
 | `live`             | boolean | The block is supposed to keep running; succade will monitor it for new output on `stdout`. |
+| `raw`              | boolean | If `true`, succade will not escape '%' characters, allowing you to use format strings directly. |
 | `prefix`           | string  | Shown before the block's main text and label. |
 | `suffix`           | string  | Shown after the block's main text and unit, if any. |
 | `label`            | string  | Shown before the block's main text; useful to display icons when using fonts like Siji. |
