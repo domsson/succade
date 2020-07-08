@@ -9,8 +9,8 @@
 #define SUCCADE_NAME "succade"
 #define SUCCADE_URL  "https://github.com/domsson/succade"
 #define SUCCADE_VER_MAJOR 1
-#define SUCCADE_VER_MINOR 0
-#define SUCCADE_VER_PATCH 2
+#define SUCCADE_VER_MINOR 1
+#define SUCCADE_VER_PATCH 0
 
 #define BUFFER_NUMERIC          8
 #define BUFFER_LEMON_ARG     1024
