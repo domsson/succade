@@ -382,8 +382,9 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 	//      separating space, need to be taken into account when 
 	//      calculating the padding (fixed width) of the block, no?
 	
-	size_t diff;
-	char *result = escape(block->output, '%', &diff);
+	size_t diff = 0;
+	char *result = (cfg_has(bcfg, BLOCK_OPT_RAW) && cfg_get_int(bcfg, BLOCK_OPT_RAW)) ? 
+		strdup(block->output) : escape(block->output, '%', &diff);
 	int min_width = cfg_get_int(bcfg, BLOCK_OPT_WIDTH) + diff;
 
 	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG), "-", "-");

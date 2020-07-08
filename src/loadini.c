@@ -281,6 +281,11 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(bc, BLOCK_OPT_LIVE, equals(value, "true"));
 		return 1;
 	}
+	if (equals(name, "raw"))
+	{
+		cfg_set_int(bc, BLOCK_OPT_RAW, equals(value, "true"));
+		return 1;
+	}
 	if (equals(name, "mouse-left") || equals(name, "click-left"))
 	{
 		cfg_set_str(bc, BLOCK_OPT_CMD_LMB, is_quoted(value) ? unquote(value) : strdup(value));
