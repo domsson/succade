@@ -568,6 +568,46 @@ libkita_stream_new(kita_ios_type_e ios)
 	return stream;
 }
 
+/*
+ * Set the blocking behavior of the given stream, where 0 means non-blocking 
+ * and 1 means blocking. Returns 0 on success, -1 on error.
+ */
+int
+libkita_stream_set_blocking(kita_stream_s *stream, int blocking)
+{
+	if (stream->fp == NULL) // can't modify if not yet open
+	{
+		return -1;
+	}
+
+	if (stream->fd < 2) // can't modify without valid file descriptor
+	{
+		return -1;
+	}
+
+	//int fd = fileno(stream->fp);
+	int flags = fcntl(stream->fd, F_GETFL, 0);
+
+	if (flags == -1)
+	{
+		return -1;
+	}
+	if (blocking) // make blocking
+	{
+	  	flags &= ~O_NONBLOCK;
+	}
+	else          // make non-blocking
+	{
+		flags |=  O_NONBLOCK;
+	}
+	if (fcntl(stream->fd, F_SETFL, flags) != 0)
+	{
+		return -1;
+	}
+
+	return 0;
+}
+
 static int
 libkita_child_open(kita_child_s *child)
 {
@@ -615,6 +655,8 @@ libkita_child_open(kita_child_s *child)
 		{
 			child->io[i]->fd = fileno(child->io[i]->fp);
 			libkita_stream_set_buf_type(child->io[i], child->io[i]->buf_type);
+			// TODO wouldn't it be best to set non-blocking right here?
+			//libkita_stream_set_blocking(child->io[i], 0);
 		}
 	}
 	
@@ -959,46 +1001,6 @@ libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
 	return 0;
 }
 
-/*
- * Set the blocking behavior of the given stream, where 0 means non-blcking 
- * and 1 means blocking. Returns 0 on success, -1 on error.
- */
-int
-libkita_stream_set_blocking(kita_stream_s *stream, int blocking)
-{
-	if (stream->fp == NULL) // can't modify if not yet open
-	{
-		return -1;
-	}
-
-	if (stream->fd < 2) // can't modify without valid file descriptor
-	{
-		return -1;
-	}
-
-	//int fd = fileno(stream->fp);
-	int flags = fcntl(stream->fd, F_GETFL, 0);
-
-	if (flags == -1)
-	{
-		return -1;
-	}
-	if (blocking) // make blocking
-	{
-	  	flags &= ~O_NONBLOCK;
-	}
-	else          // make non-blocking
-	{
-		flags |=  O_NONBLOCK;
-	}
-	if (fcntl(stream->fd, F_SETFL, flags) != 0)
-	{
-		return -1;
-	}
-
-	return 0;
-}
-
 
 /*
  * Closes the given stream, then frees its memory and sets it to NULL. 
@@ -1050,11 +1052,11 @@ libkita_stream_read_line(kita_stream_s *stream, int last, int no_nl)
 	*/
 
 	size_t num_lines = 0;
-	size_t len = libkita_fd_data_avail(stream->fd) + 1;
+	size_t len = libkita_fd_data_avail(stream->fd) + 2;
 	char*  buf = malloc(len * sizeof(char));
 	
 	// fgets() - reads until a newline ('\n') or EOF (end of file)
-	//         - returns NULL on error of when EOF occurs
+	//         - returns NULL on error or when EOF occurs
 	while (fgets(buf, len, stream->fp) != NULL)
 	{
 		++num_lines;
@@ -1091,7 +1093,7 @@ libkita_stream_read_data(kita_stream_s *stream)
 	//      libkita_fd_data_avail() and fgets(), effectively making us 
 	//      not read all the data that is available, which then gets us 
 	//      into some unholy stuck mess!
-	size_t len = libkita_fd_data_avail(stream->fd) + 1;
+	size_t len = libkita_fd_data_avail(stream->fd) + 2;
 	char*  buf = malloc(len * sizeof(char));
 
 	fread(buf, len, 1, stream->fp);

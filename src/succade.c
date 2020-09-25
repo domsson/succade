@@ -802,11 +802,12 @@ static size_t create_sparks(state_s *state)
  * Run a command in a 'fire and forget' manner. Does not invoke a shell,
  * hence no fancy stuff like pipes can be used with this.
  */
-pid_t run_cmd(const char *cmd)
+int run_cmd(const char *cmd)
 {
 	kita_child_s *child = kita_child_new(cmd, 0, 0, 0);
-	kita_child_open(child);
-	return child->pid > 0 ? child->pid : -1;
+	kita_child_open(child);  // runs the child via fork/execvp
+	kita_child_close(child); // does not stop the child, just closes com channels
+	return 1; // TODO
 }
 
 /*
@@ -974,6 +975,11 @@ void on_child_error(kita_state_s *ks, kita_event_s *ke)
 void on_child_readok(kita_state_s *ks, kita_event_s *ke)
 {
 	//fprintf(stderr, "on_child_readok(): %s (%d bytes)\n", ke->child->cmd, ke->size);
+
+	if (ke->size == 0)
+	{
+		return;
+	}
 
 	state_s *state = (state_s*) kita_child_get_context(ke->child);
 	thing_s *thing = thing_by_child(state, ke->child);
