@@ -11,7 +11,6 @@
 #include "succade.h"   // defines, structs, all that stuff
 #include "options.c"   // Command line args/options parsing
 #include "helpers.c"   // Helper functions, mostly for strings
-#include "execute.c"   // Execute child processes
 #include "loadini.c"   // Handles loading/processing of INI cfg file
 
 static volatile int running;   // used to stop main loop 
@@ -797,6 +796,17 @@ static size_t create_sparks(state_s *state)
 	}
 
 	return state->num_sparks;
+}
+
+/*
+ * Run a command in a 'fire and forget' manner. Does not invoke a shell,
+ * hence no fancy stuff like pipes can be used with this.
+ */
+pid_t run_cmd(const char *cmd)
+{
+	kita_child_s *child = kita_child_new(cmd, 0, 0, 0);
+	kita_child_open(child);
+	return child->pid > 0 ? child->pid : -1;
 }
 
 /*
