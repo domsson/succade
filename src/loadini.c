@@ -86,6 +86,11 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(lc, LEMON_OPT_FORCE, equals(value, "true"));
 		return 1;
 	}
+	if (equals(name, "areas"))
+	{
+		cfg_set_int(lc, LEMON_OPT_AREAS, atoi(value));
+		return 1;
+	}
 	if (equals(name, "block-margin") || equals(name, "margin"))
 	{
 		cfg_set_int(lc, LEMON_OPT_BLOCK_MARGIN, atoi(value));

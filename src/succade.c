@@ -56,11 +56,12 @@ static char *lemon_arg(thing_s *lemon)
 	char *arg = malloc(BUFFER_LEMON_ARG); 
 
 	snprintf(arg, BUFFER_LEMON_ARG,
-		"-g %sx%s+%d+%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
+		"-g %sx%s+%d+%d -a%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
 		cfg_has(lcfg, LEMON_OPT_WIDTH)  ? w : "",    // max 8
 		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",    // max 8
 		cfg_get_int(lcfg, LEMON_OPT_X),              // max 8
 		cfg_get_int(lcfg, LEMON_OPT_Y),              // max 8
+		cfg_get_int(lcfg, LEMON_OPT_AREAS),          // 
 		fg ? fg : "-",                               // strlen, max 9
 		bg ? bg : "-",                               // strlen, max 9
 		lc ? lc : "-",                               // strlen, max 9
@@ -1228,6 +1229,12 @@ int main(int argc, char **argv)
 	{
 		// We use strdup() for consistency with free() later on
 		cfg_set_str(&lemon->cfg, LEMON_OPT_NAME, strdup(DEFAULT_LEMON_NAME));
+	}
+
+	// if no 'areas' option was present in the config, set it to the default
+	if (!cfg_has(&lemon->cfg, LEMON_OPT_AREAS))
+	{
+		cfg_set_int(&lemon->cfg, LEMON_OPT_AREAS, DEFAULT_LEMON_AREAS);
 	}
 
 	// create the child process and add it to the kita state
