@@ -462,6 +462,12 @@ static char get_align(const int align)
  */
 static char *barstr(const state_s *state)
 {
+	// This should never happen, but just in case (also makes compiler happy)
+	if (state->num_blocks == 0)
+	{
+		return NULL;
+	}
+	
 	// For convenience...
 	const thing_s *bar = &state->lemon;
 	size_t num_blocks = state->num_blocks;
@@ -469,10 +475,7 @@ static char *barstr(const state_s *state)
 	// Short blocks like temperature, volume or battery, will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
 	size_t bar_str_len = 256 * num_blocks; // TODO hardcoded value
-	
-	// We need to allocate at least 2 byte, so that even if num_blocks is 0, 
-	// we have space for the '\0\n' sequence and can return a valid string.
-	char *bar_str = malloc(bar_str_len > 0 ? bar_str_len : 2);
+	char *bar_str = malloc(bar_str_len);
 	bar_str[0] = '\0';
 
 	char align[5];
