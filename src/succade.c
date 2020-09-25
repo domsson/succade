@@ -474,7 +474,7 @@ static char *barstr(const state_s *state)
 
 	// Short blocks like temperature, volume or battery, will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
-	size_t bar_str_len = 256 * num_blocks; // TODO hardcoded value
+	size_t bar_str_len = BUFFER_BLOCK_RESULT * num_blocks;
 	char *bar_str = malloc(bar_str_len);
 	bar_str[0] = '\0';
 
@@ -507,7 +507,7 @@ static char *barstr(const state_s *state)
 		if (block_str_len > free_len)
 		{
 			// Let's make space for approx. two more blocks
-			bar_str_len += 256 * 2; 
+			bar_str_len += BUFFER_BLOCK_RESULT * 2; 
 			bar_str = realloc(bar_str, bar_str_len);
 		}
 		strcat(bar_str, block_str);
