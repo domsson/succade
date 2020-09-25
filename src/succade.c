@@ -469,7 +469,10 @@ static char *barstr(const state_s *state)
 	// Short blocks like temperature, volume or battery, will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
 	size_t bar_str_len = 256 * num_blocks; // TODO hardcoded value
-	char *bar_str = malloc(bar_str_len);
+	
+	// We need to allocate at least 2 byte, so that even if num_blocks is 0, 
+	// we have space for the '\0\n' sequence and can return a valid string.
+	char *bar_str = malloc(bar_str_len > 0 ? bar_str_len : 2);
 	bar_str[0] = '\0';
 
 	char align[5];
