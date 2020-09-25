@@ -57,6 +57,12 @@ Possible property values, based on their types as listed in the tables below, ar
 - `boolean`: Either `true` or `false`
 - `color`: RGB hex string, for example `#F3BD70`
 
+# Important Note
+
+In order to be light on resources, succade avoids invoking a shell when running blocks or action commands (commands to be run on mouse click or mouse wheel scroll). What that means is that for config options like `command`, `trigger` and `mouse-*`, you can not use shell-specific functionality. This includes shell built-ins like `echo`, as well as pipes (`|`), etc.
+
+If this poses a problem to you, don't worry, it can easily be worked around: simply put your shell-specific commands into a shell script, then use the path to that file in the aforementioned config options.
+
 ## lemonbar
 
 The special section `bar` configures Lemonbar itself and can define common formatting for all blocks. It is required for succade to run, but the only mandatory property is `blocks`.
