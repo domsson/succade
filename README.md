@@ -59,9 +59,11 @@ Possible property values, based on their types as listed in the tables below, ar
 
 # Important Note
 
-In order to be light on resources, succade avoids invoking a shell when running blocks or action commands (commands to be run on mouse click or mouse wheel scroll). What that means is that for config options like `command`, `trigger` and `mouse-*`, you can not use shell-specific functionality. This includes shell built-ins like `echo`, as well as pipes (`|`), etc. You *can*, however, use `.` and `~` - these will correcly be expanded by succade.
+In order to be light on resources, succade avoids invoking a shell when running blocks or action commands (commands to be run on mouse click or mouse wheel scroll). What that means is that for config options like `command`, `trigger` and `mouse-*`, you can not use shell-specific functionality. This includes shell built-ins like `echo`, as well as pipes (`|`) or redirection (`>` etc). succade internally uses [wordexp](https://linux.die.net/man/3/wordexp), which means that you *can* use quite some useful stuff, however:
 
-If this poses a problem to you, don't worry, it can easily be worked around: simply put your shell-specific commands into a shell script, then use the path to that file in the aforementioned config options.
+> The expansion done consists of the following stages: tilde expansion (replacing ~user by user's home directory), variable substitution (replacing $FOO by the value of the environment variable FOO), command substitution (replacing $(command) or `command` by the output of command), arithmetic expansion, field splitting, wildcard expansion, quote removal. 
+
+If you do need shell-specific functionality, simply put your commands into a shell script, then use the path to that file in the aforementioned config options.
 
 ## lemonbar
 
