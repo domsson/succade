@@ -73,6 +73,11 @@ int cfg_has(const cfg_s *cfg, size_t idx)
 	return (idx < cfg->size && cfg->type[idx] != 0);
 }
 
+cfg_opt_type_e cfg_type(const cfg_s *cfg, size_t idx)
+{
+	return cfg->type[idx];
+}
+
 void cfg_set_int(const cfg_s *cfg, size_t idx, int val)
 {
 	if (idx >= cfg->size)
@@ -114,7 +119,7 @@ int cfg_get_int(const cfg_s *cfg, size_t idx)
 float cfg_get_float(const cfg_s *cfg, size_t idx)
 {
 	return (idx < cfg->size && cfg->type[idx] == OPT_TYPE_FLOAT) ?
-		cfg->opts[idx].f : 0;
+		cfg->opts[idx].f : 0.0;
 }
 
 char *cfg_get_str(const cfg_s *cfg, size_t idx)

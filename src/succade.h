@@ -24,6 +24,8 @@
 
 #define DEFAULT_CFG_FILE "succaderc"
 
+#define ALBEDO_SID "default"
+
 #define DEFAULT_LEMON_BIN     "lemonbar"
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"
 #define DEFAULT_LEMON_SECTION "bar"
@@ -62,67 +64,58 @@ typedef enum succade_fdesc_type fdesc_type_e;
 
 enum succade_lemon_opt
 {
-	LEMON_OPT_NAME,
-	LEMON_OPT_BIN,
-	LEMON_OPT_WIDTH,
-	LEMON_OPT_HEIGHT,
-	LEMON_OPT_X,
-	LEMON_OPT_Y,
-	LEMON_OPT_BOTTOM,
-	LEMON_OPT_FORCE,
-	LEMON_OPT_AREAS,
-	LEMON_OPT_FORMAT,
-	LEMON_OPT_FG, // block
-	LEMON_OPT_BG,
-	LEMON_OPT_LW,
-	LEMON_OPT_LC, // block
-	LEMON_OPT_OL, // block
-	LEMON_OPT_UL, // block
-	LEMON_OPT_BLOCK_BG, // block
-	LEMON_OPT_LABEL_FG, // block
-	LEMON_OPT_LABEL_BG, // block
-	LEMON_OPT_AFFIX_FG, // block
-	LEMON_OPT_AFFIX_BG, // block
-	LEMON_OPT_BLOCK_MARGIN, // block
-	LEMON_OPT_BLOCK_PADDING, // block
-	LEMON_OPT_BLOCK_PREFIX, // block
-	LEMON_OPT_BLOCK_SUFFIX, // block
-	LEMON_OPT_BLOCK_FONT,
-	LEMON_OPT_LABEL_FONT,
-	LEMON_OPT_AFFIX_FONT,
+	LEMON_OPT_BIN,         // lemonbar binary
+	LEMON_OPT_FORMAT,      // blocks to display
+	LEMON_OPT_WIDTH,       // -g: lemonbar width
+	LEMON_OPT_HEIGHT,      // -g: lemonbar height
+	LEMON_OPT_X,           // -g: lemonbar x pos
+	LEMON_OPT_Y,           // -g: lemonbar y pos
+	LEMON_OPT_BOTTOM,      // -b: dock at bottom
+	LEMON_OPT_FORCE,       // -d: force docking
+	LEMON_OPT_BLOCK_FONT,  // -f: font for blocks
+	LEMON_OPT_LABEL_FONT,  // -f: font for blocks' labels
+	LEMON_OPT_AFFIX_FONT,  // -a: font for blocks' affixes
+	LEMON_OPT_AREAS,       // -a: number of clickable areas
+	LEMON_OPT_NAME,        // -n: WM_NAME
+	LEMON_OPT_LW,          // -u: underline width
+	LEMON_OPT_BG,          // -B: default background color
+	LEMON_OPT_FG,          // -F: default font color
+	LEMON_OPT_LC,          // -U: underline color
 	LEMON_OPT_COUNT
 };
 
 enum succade_block_opt
 {
-	BLOCK_OPT_BIN,
-	BLOCK_OPT_FG,
-	BLOCK_OPT_BG,
-	BLOCK_OPT_LABEL_FG,
-	BLOCK_OPT_LABEL_BG,
-	BLOCK_OPT_AFFIX_FG,
-	BLOCK_OPT_AFFIX_BG,
-	BLOCK_OPT_LC,
-	BLOCK_OPT_OL,
-	BLOCK_OPT_UL,
-	BLOCK_OPT_WIDTH,
-	BLOCK_OPT_MARGIN_LEFT,
-	BLOCK_OPT_MARGIN_RIGHT,
-	BLOCK_OPT_ALIGN,
-	BLOCK_OPT_PREFIX,
-	BLOCK_OPT_SUFFIX,
-	BLOCK_OPT_LABEL,
-	BLOCK_OPT_UNIT,
-	BLOCK_OPT_TRIGGER,
-	BLOCK_OPT_CONSUME,
-	BLOCK_OPT_RELOAD,
-	BLOCK_OPT_LIVE,
-	BLOCK_OPT_RAW,
-	BLOCK_OPT_CMD_LMB,
-	BLOCK_OPT_CMD_MMB,
-	BLOCK_OPT_CMD_RMB,
-	BLOCK_OPT_CMD_SUP,
-	BLOCK_OPT_CMD_SDN,
+	BLOCK_OPT_BIN,           // string: binary
+	BLOCK_OPT_FG,            // color: font
+	BLOCK_OPT_BG,            // color: background
+	BLOCK_OPT_LABEL_FG,      // color: label
+	BLOCK_OPT_LABEL_BG,      // color: label backgorund
+	BLOCK_OPT_AFFIX_FG,      // color: affix font
+	BLOCK_OPT_AFFIX_BG,      // color: affix background
+	BLOCK_OPT_LC,            // color: underline / overline
+	BLOCK_OPT_OL,            // bool: draw overline
+	BLOCK_OPT_UL,            // bool: draw underline
+	BLOCK_OPT_WIDTH,         // int: minimum result width
+	BLOCK_OPT_MARGIN_LEFT,   // int: margin left 
+	BLOCK_OPT_MARGIN_RIGHT,  // int: margin right
+	BLOCK_OPT_PADDING_LEFT,  // int: padding left
+	BLOCK_OPT_PADDING_RIGHT, // int: padding right
+	BLOCK_OPT_ALIGN,         // TODO 
+	BLOCK_OPT_PREFIX,        // string: prefix
+	BLOCK_OPT_SUFFIX,        // string: suffix
+	BLOCK_OPT_LABEL,         // string: label
+	BLOCK_OPT_UNIT,          // string: unit
+	BLOCK_OPT_TRIGGER,       // string: trigger binary
+	BLOCK_OPT_CONSUME,       // bool: consume trigger output
+	BLOCK_OPT_RELOAD,        // bool: reload if dead
+	BLOCK_OPT_LIVE,          // bool: live (keeps running)
+	BLOCK_OPT_RAW,           // bool: don't escape '%'
+	BLOCK_OPT_CMD_LMB,       // string: run on left click
+	BLOCK_OPT_CMD_MMB,       // string: run on middle click
+	BLOCK_OPT_CMD_RMB,       // string: run on right click
+	BLOCK_OPT_CMD_SUP,       // string: run on scroll up
+	BLOCK_OPT_CMD_SDN,       // string: run on scroll down
 	BLOCK_OPT_COUNT
 };
 
@@ -171,6 +164,7 @@ struct succade_state
 {
         prefs_s  prefs;          // Preferences (options/config)
 	thing_s  lemon;
+	thing_s  albedo;         // Dummy block for the default configuration
 	thing_s *blocks;         // Reference to block array
 	thing_s *sparks;         // Reference to spark array (prev. 'trigger')
 	size_t   num_blocks;     // Number of blocks in blocks array

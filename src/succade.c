@@ -328,11 +328,10 @@ static double time_to_wait(state_s *state, double now)
  * string this function is putting together, otherwise truncation will happen.
  * Alternatively, set `len` to 0 to let this function calculate the buffer.
  */
-static char *blockstr(const thing_s *lemon, const thing_s *block)
+static char *blockstr(const thing_s *block)
 {
 	// for convenience
 	const cfg_s *bcfg = &block->cfg;
-	const cfg_s *lcfg = &lemon->cfg;
 
 	char action_start[(5 * strlen(block->sid)) + 64];
 	char action_end[24];  
@@ -383,29 +382,29 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 	//      calculating the padding (fixed width) of the block, no?
 	
 	size_t diff = 0;
-	char *result = (cfg_has(bcfg, BLOCK_OPT_RAW) && cfg_get_int(bcfg, BLOCK_OPT_RAW)) ? 
+	char *result = cfg_get_int(bcfg, BLOCK_OPT_RAW) ? 
 		strdup(block->output) : escape(block->output, '%', &diff);
 	int min_width = cfg_get_int(bcfg, BLOCK_OPT_WIDTH) + diff;
 
-	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG), "-", "-");
-	const char *block_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_BG), cfg_get_str(lcfg, LEMON_OPT_BLOCK_BG), "-");
-	const char *label_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL_FG), cfg_get_str(lcfg, LEMON_OPT_LABEL_FG), "-");
-	const char *label_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL_BG), cfg_get_str(lcfg, LEMON_OPT_LABEL_BG), "-");
-	const char *affix_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_FG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_FG), "-");
-	const char *affix_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_BG), cfg_get_str(lcfg, LEMON_OPT_AFFIX_BG), "-");
+	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG),       "-", "");
+	const char *block_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_BG),       "-", "");
+	const char *label_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL_FG), "-", "");
+	const char *label_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL_BG), "-", "");
+	const char *affix_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_FG), "-", "");
+	const char *affix_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_BG), "-", "");
+	const char *lc       = strsel(cfg_get_str(bcfg, BLOCK_OPT_LC),       "-", "");
 
-	int padding  = cfg_get_int(lcfg, LEMON_OPT_BLOCK_PADDING);
-	int margin   = cfg_get_int(lcfg, LEMON_OPT_BLOCK_MARGIN);
-	int margin_l = cfg_has(bcfg, BLOCK_OPT_MARGIN_LEFT) ? cfg_get_int(bcfg, BLOCK_OPT_MARGIN_LEFT) : -1;
-	int margin_r = cfg_has(bcfg, BLOCK_OPT_MARGIN_RIGHT) ? cfg_get_int(bcfg, BLOCK_OPT_MARGIN_RIGHT) : -1;
-	int ol     = cfg_has(bcfg, BLOCK_OPT_OL) ? cfg_get_int(bcfg, BLOCK_OPT_OL) : cfg_get_int(lcfg, LEMON_OPT_OL);
-	int ul     = cfg_has(bcfg, BLOCK_OPT_UL) ? cfg_get_int(bcfg, BLOCK_OPT_UL) : cfg_get_int(lcfg, LEMON_OPT_UL);
-	const char *lc   = strsel(cfg_get_str(bcfg, BLOCK_OPT_LC), cfg_get_str(lcfg, LEMON_OPT_LC) , "-");
+	const char *prefix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), "", "");
+	const char *suffix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), "", "");
+	const char *label    = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL),  "", "");
+	//const char *unit     = strsel(cfg_get_str(bcfg, BLOCK_OPT_UNIT),   "", "");
 
-	const char *prefix = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), cfg_get_str(lcfg, LEMON_OPT_BLOCK_PREFIX), "");
-	const char *suffix = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), cfg_get_str(lcfg, LEMON_OPT_BLOCK_SUFFIX), "");
-	const char *label  = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL), "", "");
-	//const char *unit   = strsel(cfg_get_str(bcfg, BLOCK_OPT_UNIT), "", "");
+	int padding_l = cfg_get_int(bcfg, BLOCK_OPT_PADDING_LEFT);
+	int padding_r = cfg_get_int(bcfg, BLOCK_OPT_PADDING_RIGHT);
+	int margin_l  = cfg_get_int(bcfg, BLOCK_OPT_MARGIN_LEFT);
+	int margin_r  = cfg_get_int(bcfg, BLOCK_OPT_MARGIN_RIGHT);
+	int ol        = cfg_get_int(bcfg, BLOCK_OPT_OL);
+	int ul        = cfg_get_int(bcfg, BLOCK_OPT_UL);
 
 	// TODO currently we are adding the format thingies for label, 
 	//      prefix and suffix, even if those are empty anyway, which
@@ -416,29 +415,34 @@ static char *blockstr(const thing_s *lemon, const thing_s *block)
 
 	char *str = malloc(BUFFER_BLOCK_STR);
 	snprintf(str, BUFFER_BLOCK_STR,
-		"%%{O%d}"
-		"%s%%{F%s B%s U%s %co %cu}"
-		"%%{T3 F%s B%s}%s"
-		"%%{T2 F%s B%s}%s"
-		"%%{T1 F%s B%s}%*s%*s%*s"
-		"%%{T3 F%s B%s}%s"
-		"%%{T- F- B- U- -o -u}%s"
-		"%%{O%d}",
+		"%%{O%d}"                                      // margin left
+		"%s"                                           // action start
+		"%%{F%s B%s U%s %co %cu}"                      // format start
+		"%%{T3 F%s B%s}%s"                             // prefix
+		"%%{T2 F%s B%s}%s"                             // label
+		"%%{T1 F%s B%s}%*s%*s%*s"                      // block
+		"%%{T3 F%s B%s}%s"                             // suffix
+		"%%{T- F- B- U- -o -u}"                        // format end
+		"%s"                                           // action end
+		"%%{O%d}",                                     // margin right
 		// margin left
-		margin_l >= 0 ? margin_l : margin,
-		// start
-		action_start, block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
+		margin_l,
+		// action start
+		action_start,
+		// format start       
+		block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
 		// prefix
 		affix_fg, affix_bg, prefix,
 		// label
 		label_fg, label_bg, label,
 		// block
-		block_fg, block_bg, padding, "", min_width, result, padding, "",
+		block_fg, block_bg, padding_l, "", min_width, result, padding_r, "",
 		// suffix
 		affix_fg, affix_bg, suffix,
-		// end
+		// action end
 		action_end,
-		margin_r >= 0 ? margin_r : margin
+		// margin right
+		margin_r
 	);
 
 	free(result);
@@ -468,7 +472,6 @@ static char *barstr(const state_s *state)
 	}
 	
 	// For convenience...
-	const thing_s *bar = &state->lemon;
 	size_t num_blocks = state->num_blocks;
 
 	// Short blocks like temperature, volume or battery, will usually use 
@@ -493,7 +496,7 @@ static char *barstr(const state_s *state)
 
 		int block_align = cfg_get_int(&block->cfg, BLOCK_OPT_ALIGN);
 
-		char *block_str = blockstr(bar, block);
+		char *block_str = blockstr(block);
 		size_t block_str_len = strlen(block_str);
 		if (block_align != last_align)
 		{
@@ -671,7 +674,7 @@ int block_cfg_handler(void *data, const char *section, const char *name, const c
 	}
 
 	// Find the block whose name fits the section name
-	thing_s *block = get_block(state, section);
+	thing_s *block = equals(section, ALBEDO_SID) ? &state->albedo : get_block(state, section);
 
 	// Abort if we couldn't find that block
 	if (block == NULL)
@@ -1276,6 +1279,16 @@ int main(int argc, char **argv)
 	}
 
 	//
+	// ALBEDO
+	//
+	
+	thing_s *albedo = &(state.albedo); // For convenience
+	albedo->sid    = ALBEDO_SID;
+	albedo->t_type = THING_BLOCK;
+	albedo->b_type = BLOCK_NONE;
+	cfg_init(&albedo->cfg, ALBEDO_SID, BLOCK_OPT_COUNT);
+	
+	//
 	// BLOCKS
 	//
 
@@ -1308,6 +1321,28 @@ int main(int argc, char **argv)
 		char *block_bin = cfg_get_str(&block->cfg, BLOCK_OPT_BIN);
 		char *block_cmd = block_bin ? block_bin : block->sid;
 		block->child = make_child(&state, block_cmd, 0, 1, 1);
+
+		// TODO merge albedo (default config) with this block's config
+		for (int i = 0; i < BLOCK_OPT_COUNT; ++i)
+		{
+			if (cfg_has(&albedo->cfg, i) && !cfg_has(&block->cfg, i))
+			{
+				switch (cfg_type(&albedo->cfg, i))
+				{
+					case OPT_TYPE_INT:
+						cfg_set_int(&block->cfg, i, cfg_get_int(&albedo->cfg, i));
+						break;
+					case OPT_TYPE_FLOAT:
+						cfg_set_float(&block->cfg, i, cfg_get_float(&albedo->cfg, i));
+						break;
+					case OPT_TYPE_STRING:
+						cfg_set_str(&block->cfg, i, strdup(cfg_get_str(&albedo->cfg, i)));
+						break;
+					default:
+						break;
+				}
+			}
+		}
 	}
 
 	//
