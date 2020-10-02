@@ -21,12 +21,23 @@ static volatile int handled;   // last signal that has been handled
  */
 static void free_thing(thing_s *thing)
 {
-	free(thing->sid);
-	free(thing->output);
+	if (thing->sid)
+	{
+		free(thing->sid);
+	}
+
+	if (thing->output)
+	{
+		free(thing->output);
+	}
+
 	cfg_free(&thing->cfg);
 
-	char *arg = kita_child_get_arg(thing->child);
-	free(arg);
+	if (thing->child)
+	{
+		char *arg = kita_child_get_arg(thing->child);
+		free(arg);
+	}
 }
 
 /*
@@ -329,7 +340,7 @@ static double time_to_wait(state_s *state, double now)
  *      the buffer; hence there is no need for malloc. We could just hand in
  *      a buffer and the buffer length (BUFFER_BLOCK_STR) instead.
  */
-static char *blockstr(const thing_s *block)
+int blockstr(const thing_s *block, char *buf, size_t len)
 {
 	// for convenience
 	const cfg_s *bcfg = &block->cfg;
@@ -414,8 +425,9 @@ static char *blockstr(const thing_s *block)
 	//      but of course, replacing a couple bytes with lots of malloc
 	//      would not be great either, so... not sure about it yet.
 
-	char *str = malloc(BUFFER_BLOCK_STR);
-	snprintf(str, BUFFER_BLOCK_STR,
+	//char *str = malloc(BUFFER_BLOCK_STR);
+	//snprintf(str, BUFFER_BLOCK_STR,
+	int res = snprintf(buf, len,
 		"%%{O%d}"                                      // margin left
 		"%s"                                           // action start
 		"%%{F%s B%s U%s %co %cu}"                      // format start
@@ -447,7 +459,8 @@ static char *blockstr(const thing_s *block)
 	);
 
 	free(result);
-	return str;
+	//return str;
+	return res;
 }
 
 /*
@@ -484,6 +497,7 @@ static char *barstr(const state_s *state)
 	char align[5];
 	int last_align = -1;
 
+	char block_str[BUFFER_BLOCK_STR];
 	const thing_s *block = NULL;
 	for (size_t i = 0; i < num_blocks; ++i)
 	{
@@ -497,8 +511,7 @@ static char *barstr(const state_s *state)
 
 		int block_align = cfg_get_int(&block->cfg, BLOCK_OPT_ALIGN);
 
-		char *block_str = blockstr(block);
-		size_t block_str_len = strlen(block_str);
+		int block_str_len = blockstr(block, block_str, BUFFER_BLOCK_STR);
 		if (block_align != last_align)
 		{
 			last_align = block_align;
@@ -514,7 +527,6 @@ static char *barstr(const state_s *state)
 			bar_str = realloc(bar_str, bar_str_len);
 		}
 		strcat(bar_str, block_str);
-		free(block_str);
 	}
 	strcat(bar_str, "\n");
 	bar_str = realloc(bar_str, strlen(bar_str) + 1);
@@ -811,6 +823,7 @@ int run_cmd(const char *cmd)
 	kita_child_s *child = kita_child_new(cmd, 0, 0, 0);
 	kita_child_open(child);  // runs the child via fork/execvp
 	kita_child_close(child); // does not stop the child, just closes com channels
+	kita_child_free(&child);
 	return 1; // TODO
 }
 
@@ -1091,6 +1104,9 @@ static void cleanup(state_s *state)
 	state->sparks = NULL;
 	state->num_sparks = 0;
 
+	// free albedo
+	free_thing(&state->albedo);
+
 	// free blocks
 	free_blocks(state);
 	free(state->blocks);
@@ -1284,7 +1300,7 @@ int main(int argc, char **argv)
 	//
 	
 	thing_s *albedo = &(state.albedo); // For convenience
-	albedo->sid    = ALBEDO_SID;
+	albedo->sid    = strdup(ALBEDO_SID);
 	albedo->t_type = THING_BLOCK;
 	albedo->b_type = BLOCK_NONE;
 	cfg_init(&albedo->cfg, ALBEDO_SID, BLOCK_OPT_COUNT);
