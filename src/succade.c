@@ -32,6 +32,8 @@ static void free_thing(thing_s *thing)
 /*
  * Command line options and arguments string for lemonbar.
  * Allocated with malloc(), so please free() it at some point.
+ * TODO we're now using a fixed buffer size (BUFFER_LEMON_ARG),
+ *      so why are we still using malloc()?
  */
 static char *lemon_arg(thing_s *lemon)
 {
@@ -323,10 +325,9 @@ static double time_to_wait(state_s *state, double now)
  * Given a block, it returns a pointer to a string that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
  * label and suffix. The string is malloc'd and should be free'd by the caller.
- * If `len` is positive, it will be used as buffer size for the result string.
- * This means that `len` needs to be big enough to contain the fully formatted 
- * string this function is putting together, otherwise truncation will happen.
- * Alternatively, set `len` to 0 to let this function calculate the buffer.
+ * TODO We're now internally using a constant (BUFFER_BLOCK_STR) to allocate
+ *      the buffer; hence there is no need for malloc. We could just hand in
+ *      a buffer and the buffer length (BUFFER_BLOCK_STR) instead.
  */
 static char *blockstr(const thing_s *block)
 {
@@ -384,7 +385,7 @@ static char *blockstr(const thing_s *block)
 	size_t diff = 0;
 	char *result = cfg_get_int(bcfg, BLOCK_OPT_RAW) ? 
 		strdup(block->output) : escape(block->output, '%', &diff);
-	int min_width = cfg_get_int(bcfg, BLOCK_OPT_WIDTH) + diff;
+	int min_width = cfg_get_int(bcfg, BLOCK_OPT_MIN_WIDTH) + diff;
 
 	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG),       "-", "");
 	const char *block_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_BG),       "-", "");
@@ -395,7 +396,7 @@ static char *blockstr(const thing_s *block)
 	const char *lc       = strsel(cfg_get_str(bcfg, BLOCK_OPT_LC),       "-", "");
 
 	const char *prefix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), "", "");
-	const char *suffix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), "", "");
+	const char *suffix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_SUFFIX), "", "");
 	const char *label    = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL),  "", "");
 	//const char *unit     = strsel(cfg_get_str(bcfg, BLOCK_OPT_UNIT),   "", "");
 
@@ -1279,7 +1280,7 @@ int main(int argc, char **argv)
 	}
 
 	//
-	// ALBEDO
+	// ALBEDO - the 'default' block config
 	//
 	
 	thing_s *albedo = &(state.albedo); // For convenience
@@ -1322,7 +1323,7 @@ int main(int argc, char **argv)
 		char *block_cmd = block_bin ? block_bin : block->sid;
 		block->child = make_child(&state, block_cmd, 0, 1, 1);
 
-		// TODO merge albedo (default config) with this block's config
+		// merge albedo (default config) with this block's config
 		for (int i = 0; i < BLOCK_OPT_COUNT; ++i)
 		{
 			if (cfg_has(&albedo->cfg, i) && !cfg_has(&block->cfg, i))

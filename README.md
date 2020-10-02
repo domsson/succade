@@ -12,15 +12,15 @@ Feed your [Lemonbar](https://github.com/LemonBoy/bar) with succade! It repeatedl
 - Starts `lemonbar` for you
 - Reads the config file (default is `~/.config/succade/succaderc`)
 - Loads blocks (programs or scripts defined in the config file)
-- Updates Lemonbar based on the block's output 
+- Updates Lemonbar based on the blocks' output 
 
-The config file needs to have one section for lemonbar and one per block. The bar's section lists the blocks that should be displayed on the bar (and where), as well as some styling for all blocks (like prefixes and suffixes). Block sections define the styling of individual blocks, as well as how often the blocks should be reloaded. Alternatively, trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument). 
+The config needs to have one section for lemonbar (`bar`) and one per block, plus an optional section for common styles (`default`) that will apply to all blocks. The bar's section lists the blocks that should be displayed on the bar (and where), and can set some lemonbar properties like its size and position. Block sections define the styling of individual blocks, as well as how often the blocks should be reloaded. Alternatively, trigger commands can be defined. Once a trigger produces output, the associated block will be run (optionally with the trigger's output as command line argument).
 
 # Notable features
 
 - Define **labels** for your blocks. E.g., for a volume block, have it return `35 %` and define the label `Vol.` in the config.
 - Define a **prefix and suffix** for every block. Want to wrap all blocks in square brackets? That's 2 lines in the main config.
-- Define **padding** (fixed width) for your blocks to achieve a uniform look when using fixed-width fonts.
+- Define a **minimum width** for your blocks to achieve a uniform look when using fixed-width fonts.
 - Prefix, suffix, label and actual block content can have different foreground and background colors.
 - Most settings can be set once for all blocks, then overwritten for individual blocks, if need be.
 
@@ -41,14 +41,14 @@ Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code)
 3. Create the config directory (assuming `.config` as your config dir):  
    `mkdir ~/.config/succade`  
 4. Copy the example config:  
-   `cp ./cfg/succaderc.1 ~/.config/succade/succaderc`  
+   `cp ./cfg/example1.ini ~/.config/succade/succaderc`  
 5. Make `succade` executable and put it somewhere that's included in your path:  
    `chmod +x ./bin/succade`  
    `cp ./bin/succade ~/.local/bin/`
 
 # Configuration
 
-Take a look at the example configuration in this repository and refer to the following documentation.
+Take a look at the example configurations in this repository and refer to the following documentation.
 
 Possible property values, based on their types as listed in the tables below, are:
 
@@ -57,13 +57,13 @@ Possible property values, based on their types as listed in the tables below, ar
 - `boolean`: Either `true` or `false`
 - `color`: RGB hex string, for example `#F3BD70`
 
-# Important Note
+# Commands in config options 
 
-In order to be light on resources, succade avoids invoking a shell when running blocks or action commands (commands to be run on mouse click or mouse wheel scroll). What that means is that for config options like `command`, `trigger` and `mouse-*`, you can not use shell-specific functionality. This includes shell built-ins like `echo`, as well as pipes (`|`) or redirection (`>` etc). succade internally uses [wordexp](https://linux.die.net/man/3/wordexp), which means that you *can* use quite some useful stuff, however:
+The config options `command`, `trigger`, `mouse-left`, `mouse-middle`, `mouse-right`, `scroll-up`, `scroll-down` expect a script or binary to execute. For performance reasons, succade does _not_ invoke a shell to run the commands. This means that shell built-in functionality, like `echo`, pipes or redirection, will not work (as expected). If you want to use those, wrap those commands in a simple shell script and give succade the path to that script in these config options. You also don't need (and should not) background commands via `&`, succade will take care of that for you already.
+
+You can, however, use variable substituion, `.` and `~`, as succade internally uses [wordexp](https://linux.die.net/man/3/wordexp). Also see the following paragraph from the wordexp man page:
 
 > The expansion done consists of the following stages: tilde expansion (replacing ~user by user's home directory), variable substitution (replacing $FOO by the value of the environment variable FOO), command substitution (replacing $(command) or `command` by the output of command), arithmetic expansion, field splitting, wildcard expansion, quote removal. 
-
-If you do need shell-specific functionality, simply put your commands into a shell script, then use the path to that file in the aforementioned config options.
 
 ## lemonbar
 
@@ -71,36 +71,25 @@ The special section `bar` configures Lemonbar itself and can define common forma
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
-| `blocks`           | string  | Specifies the blocks to display on the bar. Example: <code>desktop  &#124; title  &#124; volume time</code> |
 | `command`          | string  | The command to start the bar; defaults to `lemonbar` | 
+| `blocks`           | string  | Specifies the blocks to display on the bar. Example: <code>desktop  &#124; title  &#124; volume time</code> |
 | `width`            | number  | Width of the bar in pixel - omit this value for a full-width bar. |
-| `height`           | number  | Height of the bar in pixel. |  
+| `height`           | number  | Height of the bar in pixel - omit to get the minimum required height. |  
 | `left`             | number  | x-position of the bar - omit to have it sit at the edge of your screen. |
 | `top`              | number  | y-position of the bar - omit to have it sit at the edge of your screen. |
 | `bottom`           | boolean | Dock the bar at the bottom instead of the top of the screen. |
 | `force`            | boolean | Set to `true` if you want to force docking of Lemonbar; default is `false`. |
-| `foreground`       | color   | Foreground (font) color for all blocks. |
-| `background`       | color   | Background color for the entire bar. |
-| `block-background` | color   | Background color for all blocks. |
-| `label-foreground` | color   | Font color for all block's labels. |
-| `label-background` | color   | Background color for all block's labels. |
-| `affix-foreground` | color   | Font color for all block's prefixes / suffixes. |
-| `affix-background` | color   | Background color for all block's prefixes / suffixes. |
-| `block-prefix`     | string  | A string that will be prepended to every block, for example a space: `" "`. |
-| `block-suffix`     | string  | Same as the prefix, but will be added to the end of every block. |
+| `foreground`       | color   | Default foreground (font) color for all blocks. |
+| `background`       | color   | Default background color for the entire bar. |
 | `font`             | string  | Font to use for all blocks. |
 | `label-font`       | string  | Font to use for all block's labels, if any. |
 | `affix-font`       | string  | Font to use for all block's prefixes / suffixes, if any. |
 | `line-color`       | color   | Color for all underlines / overlines, if any. |
 | `line-width`       | number  | Thickness of all underlines / overlines, if any, in pixels. |
-| `overline`         | boolean | Whether or not to draw an overline for all blocks. |
-| `underline`        | boolean | Whether or not to draw an underline for all blocks. |
-| `block-margin`     | number  | Sets margin-left and margin-right for all blocks, in pixels. |
-| `block-padding`    | number  | Adds the given number of spaces to both sides of the block's output. |
 
 ## blocks
 
-Every block that has been named in `blocks` needs its own config section. Some of the values that can be set here are the same as in the `bar` section - if so, they will overwrite the values specified there. This way, you can set a default font color for the entire bar, but decide to give some blocks a different one.
+Every block that has been named in `blocks` needs its own config section. Most of these values can also be specified in the special `default` section, which will apply to all blocks.
 
 | Parameter          | Type    | Description |
 |--------------------|---------|-------------|
@@ -123,8 +112,12 @@ Every block that has been named in `blocks` needs its own config section. Some o
 | `line-color`       | color   | Overline / underline color for the block. |
 | `overline`         | boolean | Whether or not to draw an overline for the block. |
 | `underline`        | boolean | Whether or not to draw an underline for the block. |
+| `margin`           | number  | Distance to the next block (or edge of bar) on the left and right, in pixels. |
 | `margin-left`      | number  | Distance to the next block (or edge of bar) on the left, in pixels. |
 | `margin-right`     | number  | Distance to the next block (or edge of bar) on the right, in pixels. |
+| `padding`          | number  | Number of spaces that will be added around a block's output on the left and right. |
+| `padding-left`     | number  | Number of spaces that will be added on the left side of a block's output. |
+| `padding-right`    | number  | Number of spaces that will be added on the right side of a block's output. |
 | `mouse-left`       | string  | Command to run when you left-click the block. |
 | `mouse-middle`     | string  | Command to run when you middle-click the block. |
 | `mouse-right`      | string  | Command to run when you right-click the block. |
@@ -153,6 +146,4 @@ For example, imagine someone created a fork of Lemonbar that works with Wayland.
 
 Additionally, I like minimalistic setups. I don't want most of the additional features of other bars, like true type fonts or rounded borders. Hence, I might as well save a bit of RAM by going with more minimalistic solutions.
 
-# License
-
-succade is free software, dedicated to the public domain. Do with it whatever you want, but don't hold me responsible for anything either. However, be aware that the libaries this project is using (see section _Dependencies_) might use a different license. If so, distribution of the executable binary of this project would be affected by such licenses. For that reason, I do not provide a binary, only the source code.
+Fun fact: polybar started out as a lemonbar wrapper just like succade, but eventually the project maintainers decided to include lemonbar's functionality right into the project. Therefore, in a way, succade is what the polybar project used to be originally.

@@ -8,9 +8,9 @@
 
 #define SUCCADE_NAME "succade"
 #define SUCCADE_URL  "https://github.com/domsson/succade"
-#define SUCCADE_VER_MAJOR 1
-#define SUCCADE_VER_MINOR 2
-#define SUCCADE_VER_PATCH 1
+#define SUCCADE_VER_MAJOR 2
+#define SUCCADE_VER_MINOR 0
+#define SUCCADE_VER_PATCH 0
 
 #define BUFFER_NUMERIC          8
 #define BUFFER_LEMON_ARG     1024
@@ -79,7 +79,7 @@ enum succade_lemon_opt
 	LEMON_OPT_NAME,        // -n: WM_NAME
 	LEMON_OPT_LW,          // -u: underline width
 	LEMON_OPT_BG,          // -B: default background color
-	LEMON_OPT_FG,          // -F: default font color
+	LEMON_OPT_FG,          // -F: default foreground color
 	LEMON_OPT_LC,          // -U: underline color
 	LEMON_OPT_COUNT
 };
@@ -87,16 +87,16 @@ enum succade_lemon_opt
 enum succade_block_opt
 {
 	BLOCK_OPT_BIN,           // string: binary
-	BLOCK_OPT_FG,            // color: font
+	BLOCK_OPT_FG,            // color: foreground
 	BLOCK_OPT_BG,            // color: background
-	BLOCK_OPT_LABEL_FG,      // color: label
+	BLOCK_OPT_LABEL_FG,      // color: label foreground
 	BLOCK_OPT_LABEL_BG,      // color: label backgorund
-	BLOCK_OPT_AFFIX_FG,      // color: affix font
+	BLOCK_OPT_AFFIX_FG,      // color: affix foreground
 	BLOCK_OPT_AFFIX_BG,      // color: affix background
 	BLOCK_OPT_LC,            // color: underline / overline
 	BLOCK_OPT_OL,            // bool: draw overline
 	BLOCK_OPT_UL,            // bool: draw underline
-	BLOCK_OPT_WIDTH,         // int: minimum result width
+	BLOCK_OPT_MIN_WIDTH,     // int: minimum result width
 	BLOCK_OPT_MARGIN_LEFT,   // int: margin left 
 	BLOCK_OPT_MARGIN_RIGHT,  // int: margin right
 	BLOCK_OPT_PADDING_LEFT,  // int: padding left

@@ -164,7 +164,13 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	}
 	if (equals(name, "min-width") || equals(name, "left-pad"))
 	{
-		cfg_set_int(bc, BLOCK_OPT_WIDTH, atoi(value));
+		cfg_set_int(bc, BLOCK_OPT_MIN_WIDTH, atoi(value));
+		return 1;
+	}
+	if (equals(name, "margin"))
+	{
+		cfg_set_int(bc, BLOCK_OPT_MARGIN_LEFT, atoi(value));
+		cfg_set_int(bc, BLOCK_OPT_MARGIN_RIGHT, atoi(value));
 		return 1;
 	}
 	if (equals(name, "margin-left"))
@@ -175,6 +181,12 @@ int block_ini_handler(void *data, const char *section, const char *name, const c
 	if (equals(name, "margin-right"))
 	{
 		cfg_set_int(bc, BLOCK_OPT_MARGIN_RIGHT, atoi(value));
+		return 1;
+	}
+	if (equals(name, "padding"))
+	{
+		cfg_set_int(bc, BLOCK_OPT_PADDING_LEFT, atoi(value));
+		cfg_set_int(bc, BLOCK_OPT_PADDING_RIGHT, atoi(value));
 		return 1;
 	}
 	if (equals(name, "padding-left"))
