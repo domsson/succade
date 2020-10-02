@@ -146,4 +146,4 @@ For example, imagine someone created a fork of Lemonbar that works with Wayland.
 
 Additionally, I like minimalistic setups. I don't want most of the additional features of other bars, like true type fonts or rounded borders. Hence, I might as well save a bit of RAM by going with more minimalistic solutions.
 
-Fun fact: polybar started out as a lemonbar wrapper just like succade, but eventually the project maintainers decided to include lemonbar's functionality right into the project. Therefore, in a way, succade is what the polybar project used to be originally.
+Fun fact: polybar started out as a lemonbar wrapper just like succade, but eventually the project maintainers decided to include lemonbar's functionality right into the project. Therefore, in a way, succade is what polybar used to be.
