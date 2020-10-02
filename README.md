@@ -138,6 +138,10 @@ Options:
 - `s SECTION`: config section name for the bar (default is "bar")
 - `V`: print version information and exit
 
+# Support
+
+[![ko-fi](https://www.ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L22BUD8)
+
 # Motivation 
 
 With projects like [polybar](https://github.com/polybar/polybar), the question for the relevance of succade is justified. Personally, I prefer succade - and similar solutions, like [Captain](https://github.com/muse/Captain) - because they enforce the separation of concerns as described by the [UNIX philosophy](https://en.wikipedia.org/wiki/Unix_philosophy).
