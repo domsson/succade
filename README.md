@@ -142,6 +142,10 @@ Options:
 
 [![ko-fi](https://www.ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L3L22BUD8)
 
+# Blocks - Fetching System Information
+
+Looking for scripts, programs or code that can fetch information to display on your bar? Check out [fetch-all-the-things](https://github.com/domsson/fetch-all-the-things).
+
 # Motivation 
 
 With projects like [polybar](https://github.com/polybar/polybar), the question for the relevance of succade is justified. Personally, I prefer succade - and similar solutions, like [Captain](https://github.com/muse/Captain) - because they enforce the separation of concerns as described by the [UNIX philosophy](https://en.wikipedia.org/wiki/Unix_philosophy).
