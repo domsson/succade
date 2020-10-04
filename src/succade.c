@@ -41,12 +41,10 @@ static void free_thing(thing_s *thing)
 }
 
 /*
- * Command line options and arguments string for lemonbar.
- * Allocated with malloc(), so please free() it at some point.
- * TODO we're now using a fixed buffer size (BUFFER_LEMON_ARG),
- *      so why are we still using malloc()?
+ * Builds the command line options and arguments string for lemonbar.
+ * Saves the string in buf and returns its length.
  */
-static char *lemon_arg(thing_s *lemon)
+int lemon_arg(thing_s *lemon, char *buf, size_t len)
 {
 	cfg_s *lcfg = &lemon->cfg;
 
@@ -65,9 +63,7 @@ static char *lemon_arg(thing_s *lemon)
 	char *bg = cfg_get_str(lcfg, LEMON_OPT_BG);
 	char *lc = cfg_get_str(lcfg, LEMON_OPT_LC);
 
-	char *arg = malloc(BUFFER_LEMON_ARG); 
-
-	snprintf(arg, BUFFER_LEMON_ARG,
+	int res = snprintf(buf, len,
 		"-g %sx%s+%d+%d -a%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
 		cfg_has(lcfg, LEMON_OPT_WIDTH)  ? w : "",    // max 8
 		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",    // max 8
@@ -91,7 +87,7 @@ static char *lemon_arg(thing_s *lemon)
 	free(affix_font);
 	free(name_str);
 
-	return arg;
+	return res;
 }
 
 /*
@@ -99,10 +95,18 @@ static char *lemon_arg(thing_s *lemon)
  */
 static int open_lemon(thing_s *lemon)
 {
-	char *old_arg = kita_child_get_arg(lemon->child);
-	free(old_arg);
+	// Make sure we free the previous argument string, if any
+	free(kita_child_get_arg(lemon->child));
 
-	kita_child_set_arg(lemon->child, lemon_arg(lemon));
+	// Need this on the heap, as kita_child_set_arg just saves a reference
+	char *arg = malloc(BUFFER_LEMON_ARG);
+	if (arg == NULL) return -1;
+
+	// Actually build the lemon's argument string
+	lemon_arg(lemon, arg, BUFFER_LEMON_ARG);
+
+	// Set the argument string, open the process, set stdin to line buffered
+	kita_child_set_arg(lemon->child, arg);
 	if (kita_child_open(lemon->child) == 0)
 	{
 		return kita_child_set_buf_type(lemon->child, KITA_IOS_IN, KITA_BUF_LINE);
