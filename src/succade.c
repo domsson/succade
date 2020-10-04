@@ -42,7 +42,7 @@ static void free_thing(thing_s *thing)
 
 /*
  * Builds the command line options and arguments string for lemonbar.
- * Saves the string in buf and returns its length.
+ * Saves the string in buf and returns its length as reported by snprintf().
  */
 int lemon_arg(thing_s *lemon, char *buf, size_t len)
 {
@@ -337,12 +337,9 @@ static double time_to_wait(state_s *state, double now)
 }
 
 /*
- * Given a block, it returns a pointer to a string that is the formatted result 
+ * Given a block, writes a string to the given buf that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
- * label and suffix. The string is malloc'd and should be free'd by the caller.
- * TODO We're now internally using a constant (BUFFER_BLOCK_STR) to allocate
- *      the buffer; hence there is no need for malloc. We could just hand in
- *      a buffer and the buffer length (BUFFER_BLOCK_STR) instead.
+ * label and suffix. Returns the number of characters written to buf.
  */
 int blockstr(const thing_s *block, char *buf, size_t len)
 {
@@ -429,8 +426,6 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	//      but of course, replacing a couple bytes with lots of malloc
 	//      would not be great either, so... not sure about it yet.
 
-	//char *str = malloc(BUFFER_BLOCK_STR);
-	//snprintf(str, BUFFER_BLOCK_STR,
 	int res = snprintf(buf, len,
 		"%%{O%d}"                                      // margin left
 		"%s"                                           // action start
@@ -463,7 +458,6 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	);
 
 	free(result);
-	//return str;
 	return res;
 }
 
