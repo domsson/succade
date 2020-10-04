@@ -814,15 +814,25 @@ static size_t create_sparks(state_s *state)
 
 /*
  * Run a command in a 'fire and forget' manner. Does not invoke a shell,
- * hence no fancy stuff like pipes can be used with this.
+ * hence no shell built-in functionality can be used in the command.
+ * Returns 0 on success, -1 on error.
  */
 int run_cmd(const char *cmd)
 {
 	kita_child_s *child = kita_child_new(cmd, 0, 0, 0);
-	kita_child_open(child);  // runs the child via fork/execvp
+	if (child == NULL)
+	{
+		return -1;
+	}
+
+	if (kita_child_open(child) == -1) // runs the child via fork/execvp
+	{
+		return -1;
+	}
+
 	kita_child_close(child); // does not stop the child, just closes com channels
 	kita_child_free(&child);
-	return 1; // TODO
+	return 0;
 }
 
 /*
