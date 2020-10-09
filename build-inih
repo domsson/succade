@@ -1,2 +1,2 @@
-#!/bin/bash
+#!/usr/bin/env bash
 gcc -Wall -O3 -o bin/succade src/ini.c src/succade.c
