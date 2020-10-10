@@ -141,7 +141,7 @@ struct kita_state
 
 	kita_call_c cbs[KITA_EVT_COUNT]; // event callbacks
 
-	int epfd;                // epoll file descriptor
+	int epfd;                // event poll/queue file descriptor
 	sigset_t sigset;         // signals to be ignored by epoll_wait
 	int error;               // last error that occured
 	unsigned char options[KITA_OPT_COUNT]; // boolean options
@@ -218,7 +218,12 @@ void* kita_get_context(kita_state_s* s);
 #include <fcntl.h>     // fcntl(), F_GETFL, F_SETFL, O_NONBLOCK
 #include <spawn.h>     // posix_spawnp()
 #include <wordexp.h>   // wordexp(), wordfree(), ...
-#include <sys/epoll.h> // epoll_create, epoll_wait(), ... 
+#include <sys/param.h> // BSD define, etc
+#ifdef BSD
+#include <sys/event.h> // kqueue(), EV_SET()
+#else
+#include <sys/epoll.h> // epoll_create(), epoll_wait(), ... 
+#endif
 #include <sys/types.h> // pid_t
 #include <sys/wait.h>  // waitpid()
 #include <sys/ioctl.h> // ioctl(), FIONREAD
@@ -462,8 +467,30 @@ libkita_stream_reg_ev(kita_state_s *state, kita_stream_s *stream)
 	}
 
 	int fd = fileno(stream->fp);
-	int ev = stream->ios_type == KITA_IOS_IN ? EPOLLOUT : EPOLLIN;
+#ifdef BSD
+	struct kevent event;
+	int ev = stream->ios_type == KITA_IOS_IN ? EVFILT_WRITE : EVFILT_READ; 
+	EV_SET(&event, fd, ev, EV_ADD | EV_CLEAR, 0, 0, stream->fp);
 
+	// TODO this has a severe BUG: kevent() is also the function used to
+	//      wait on events; however, once you use it to do that (in the 
+	//      main loop), it blocks (at least for most of the time), which 
+	//      means we can't use it here to add events - it will time out 
+	//      or fail with "resource busy"... I don't know a workaround :-(
+	
+	// TODO also add the EVFILT_PROC event
+	int res = 0;
+	if ((res = kevent(state->epfd, &event, 1, NULL, 0, NULL)) == 1)
+	{
+		stream->registered = 1;
+		return 0;
+	}
+	else
+	{
+		fprintf(stderr, "kevent() failed: %d - %s\n", res, strerror(errno));
+	}
+#elif
+	int ev = stream->ios_type == KITA_IOS_IN ? EPOLLOUT : EPOLLIN;
 	struct epoll_event epev = { .events = ev | EPOLLET, .data.fd = fd };
 	
 	if (epoll_ctl(state->epfd, EPOLL_CTL_ADD, fd, &epev) == 0)
@@ -471,6 +498,7 @@ libkita_stream_reg_ev(kita_state_s *state, kita_stream_s *stream)
 		stream->registered = 1;
 		return 0;
 	}
+#endif
 	return -1;
 }
 
@@ -480,11 +508,30 @@ libkita_stream_reg_ev(kita_state_s *state, kita_stream_s *stream)
 static int
 libkita_stream_rem_ev(kita_state_s *state, kita_stream_s *stream)
 {
+#ifdef BSD
+	if (stream->fp == NULL)
+	{
+		// this should not be necessary, but just in case...
+		return -1;
+	}
+
+	// TODO also remove the EVFILT_PROC event
+	struct kevent event;
+	int ev = stream->ios_type == KITA_IOS_IN ? EVFILT_WRITE : EVFILT_READ;
+	EV_SET(&event, fileno(stream->fp), ev, EV_DELETE, 0, 0, stream->fp);
+
+	if (kevent(state->epfd, &event, 0, 0, 0, NULL) == 1)
+	{
+		stream->registered = 0;
+		return 0;
+	}
+#elif
 	if (epoll_ctl(state->epfd, EPOLL_CTL_DEL, stream->fd, NULL) == 0)
 	{
 		stream->registered = 0;
 		return 0;
 	}
+#endif
 	return -1;
 }
 
@@ -772,7 +819,11 @@ libkita_child_del(kita_state_s *state, kita_child_s *child)
 static int
 libkita_init_epoll(kita_state_s *state)
 {
+	#ifdef BSD
+	int epfd = kqueue();
+	#else
 	int epfd = epoll_create(1);
+	#endif
 	if (epfd < 0)
 	{
 		return -1;
@@ -926,9 +977,18 @@ libkita_autoterm(kita_state_s *state)
 }
 
 static int
-libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
+//libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
+libkita_handle_event(kita_state_s *state, void *ev)
 {
-	kita_child_s *child = libkita_child_get_by_fd(state, epev->data.fd);
+#ifdef BSD
+	struct kevent *kev = (struct kevent*) ev;
+	int fd = fileno((FILE*) kev->udata);
+#elif
+	struct epoll_event *epev = (struct epoll_event*) ev;
+	int fd = epev->data.fd;
+#endif
+
+	kita_child_s *child = libkita_child_get_by_fd(state, fd);
 	if (child == NULL)
 	{
 		return 0;
@@ -936,11 +996,15 @@ libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
 
 	kita_event_s event = { 0 };
 	event.child = child;
-	event.fd    = epev->data.fd; 
-	event.ios   = libkita_child_fd_get_type(child, epev->data.fd);
+	event.fd    = fd; 
+	event.ios   = libkita_child_fd_get_type(child, fd);
 
 	// EPOLLIN: We've got data coming in
-	if(epev->events & EPOLLIN)
+#ifdef BSD
+	if (kev->filter == EVFILT_READ)
+#elif
+	if (epev->events & EPOLLIN)
+#endif
 	{
 		event.type = KITA_EVT_CHILD_READOK; 
 		event.size = libkita_fd_data_avail(event.fd);
@@ -949,7 +1013,11 @@ libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
 	}
 	
 	// EPOLLOUT: We're ready to send data
+#ifdef BSD
+	if (kev->filter == EVFILT_WRITE)
+#elif
 	if (epev->events & EPOLLOUT)
+#endif
 	{
 		event.type = KITA_EVT_CHILD_FEEDOK;
 		libkita_dispatch_event(state, &event);
@@ -958,6 +1026,9 @@ libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
 	
 	// EPOLLRDHUP: Server closed the connection
 	// EPOLLHUP:   Unexpected hangup on socket 
+#ifdef BSD
+	// TODO
+#elif
 	if (epev->events & EPOLLRDHUP || epev->events & EPOLLHUP)
 	{
 		// dispatch hangup event
@@ -976,9 +1047,14 @@ libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
 		libkita_dispatch_event(state, &event_closed);
 		return 0;
 	}
+#endif
 	
 	// EPOLLERR: Error on file descriptor (could also mean: stdin closed)
+#ifdef BSD
+	if ((kev->filter == EVFILT_PROC) && (kev->fflags & NOTE_EXIT))
+#elif
 	if (epev->events & EPOLLERR) // fires even if not added explicitly
+#endif
 	{
 		event.type = KITA_EVT_CHILD_ERROR;
 		libkita_dispatch_event(state, &event);
@@ -1000,7 +1076,6 @@ libkita_handle_event(kita_state_s *state, struct epoll_event *epev)
 	// Handled everything and no error occurred
 	return 0;
 }
-
 
 /*
  * Closes the given stream, then frees its memory and sets it to NULL. 
@@ -1118,7 +1193,12 @@ libkita_stream_read(kita_stream_s *stream, int last, int no_nl)
 int
 libkita_poll(kita_state_s *s, int timeout)
 {
+#ifdef BSD
+	struct kevent epev;
+	struct timespec to = { .tv_sec = timeout, .tv_nsec = 0 };
+#elif
 	struct epoll_event epev;
+#endif
 	
 	// epoll_wait()/epoll_pwait() will return -1 if a signal is caught.
 	// User code might catch "harmless" signals, like SIGWINCH, that are
@@ -1139,7 +1219,11 @@ libkita_poll(kita_state_s *s, int timeout)
 
 	// timeout = -1 -> block indefinitely, until events available
 	// timeout =  0 -> return immediately, even if no events available
+#ifdef BSD
+	int num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to); 
+#elif
 	int num_events = epoll_pwait(s->epfd, &epev, 1, timeout, &sigset);
+#endif
 
 	// An error has occured
 	if (num_events == -1)
