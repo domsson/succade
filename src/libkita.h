@@ -142,6 +142,7 @@ struct kita_state
 	kita_call_c cbs[KITA_EVT_COUNT]; // event callbacks
 
 	int epfd;                // event poll/queue file descriptor
+	FILE* pipe[2];           // pipe for internal interrupt event
 	sigset_t sigset;         // signals to be ignored by epoll_wait
 	int error;               // last error that occured
 	unsigned char options[KITA_OPT_COUNT]; // boolean options
@@ -470,7 +471,7 @@ libkita_stream_reg_ev(kita_state_s *state, kita_stream_s *stream)
 #ifdef BSD
 	struct kevent event;
 	int ev = stream->ios_type == KITA_IOS_IN ? EVFILT_WRITE : EVFILT_READ; 
-	EV_SET(&event, fd, ev, EV_ADD | EV_CLEAR, 0, 0, stream->fp);
+	EV_SET(&event, fd, ev, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, stream->fp);
 
 	// TODO this has a severe BUG: kevent() is also the function used to
 	//      wait on events; however, once you use it to do that (in the 
@@ -487,7 +488,7 @@ libkita_stream_reg_ev(kita_state_s *state, kita_stream_s *stream)
 	}
 	else
 	{
-		fprintf(stderr, "kevent() failed: %d - %s\n", res, strerror(errno));
+		fprintf(stderr, "kevent() failed: %d (%s)\n", res, strerror(errno));
 	}
 #elif
 	int ev = stream->ios_type == KITA_IOS_IN ? EPOLLOUT : EPOLLIN;
@@ -812,6 +813,64 @@ libkita_child_del(kita_state_s *state, kita_child_s *child)
 	return state->num_children;
 }
 
+static int
+libkita_init_pipe(kita_state_s *state)
+{
+	// 0 = read end of pipes, 1 = write end of pipes
+	int pipe_fd[2];
+
+	// create pipe
+	if (pipe(pipe_fd) < 0)
+	{
+		return -1;
+	}
+
+	state->pipe[KITA_IOS_IN]  = fdopen(pipe_fd[1], "w");
+	state->pipe[KITA_IOS_OUT] = fdopen(pipe_fd[0], "r");
+
+	if (state->pipe[KITA_IOS_IN] == NULL)
+	{
+		return -1;
+	}
+
+	if (state->pipe[KITA_IOS_OUT] == NULL)
+	{
+		return -1;
+	}
+
+	// make line-buffered
+	if (setvbuf(state->pipe[KITA_IOS_IN], NULL, KITA_BUF_LINE, 0) != 0)
+	{
+		return -1;
+	}
+
+	if (setvbuf(state->pipe[KITA_IOS_OUT], NULL, KITA_BUF_LINE, 0) != 0)
+	{
+		return -1;
+	}
+	
+	// make non-blocking
+	int flags[2];
+	flags[0] = fcntl(pipe_fd[0], F_GETFL, 0);
+	flags[1] = fcntl(pipe_fd[1], F_GETFL, 0);
+	if (flags[0] == -1 || flags[1] == -1)
+	{
+		return -1;
+	}
+	flags[0] |= O_NONBLOCK;
+	flags[1] |= O_NONBLOCK;
+	if (fcntl(pipe_fd[0], F_SETFL, flags) != 0)
+	{
+		return -1;
+	}
+	if (fcntl(pipe_fd[1], F_SETFL, flags) != 0)
+	{
+		return -1;
+	}
+
+	return 0;
+}
+
 /*
  * Init the epoll instance for the given state.
  * Returns 0 on success, -1 on error.
@@ -828,6 +887,23 @@ libkita_init_epoll(kita_state_s *state)
 	{
 		return -1;
 	}
+	
+	#ifdef BSD
+	// create the state's interrupt pipe
+	if (libkita_init_pipe(state) == -1)
+	{
+		fprintf(stderr, "Failed to init state pipe\n");
+		return -1;
+	}
+
+	// register the interrupt event
+	struct kevent interrupt;
+	int interrupt_out = fileno(state->pipe[KITA_IOS_OUT]);
+	EV_SET(&interrupt, interrupt_out, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, NULL);
+	int ret = kevent(epfd, &interrupt, 1, NULL, 0, NULL);
+	fprintf(stderr, "kevent(interrupt) = %d\n", ret);
+	#endif
+
 	state->epfd = epfd;
 	return 0;
 }
@@ -1195,7 +1271,8 @@ libkita_poll(kita_state_s *s, int timeout)
 {
 #ifdef BSD
 	struct kevent epev;
-	struct timespec to = { .tv_sec = timeout, .tv_nsec = 0 };
+	struct timespec to = { .tv_sec = timeout / 1000, .tv_nsec = 0 };
+	//fprintf(stderr, "timeout = %d s\n", timeout);
 #elif
 	struct epoll_event epev;
 #endif
@@ -1217,11 +1294,13 @@ libkita_poll(kita_state_s *s, int timeout)
 	sigaddset(&sigset, SIGURG);   // default: ignore
 	sigaddset(&sigset, SIGWINCH); // default: ignore
 
-	// timeout = -1 -> block indefinitely, until events available
-	// timeout =  0 -> return immediately, even if no events available
+	// timeout = NULL -> block indefinitely, until events available
+	// timeout =    0 -> return immediately, even if no events available
 #ifdef BSD
 	int num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to); 
 #elif
+	// timeout = -1 -> block indefinitely, until events available
+	// timeout =  0 -> return immediately, even if no events available
 	int num_events = epoll_pwait(s->epfd, &epev, 1, timeout, &sigset);
 #endif
 
