@@ -221,6 +221,7 @@ void* kita_get_context(kita_state_s* s);
 #include <wordexp.h>   // wordexp(), wordfree(), ...
 #include <sys/param.h> // BSD define, etc
 #ifdef BSD
+#include <time.h>   // clockid_t, struct timespec, clock_gettime(), ... 
 #include <sys/event.h> // kqueue(), EV_SET()
 #else
 #include <sys/epoll.h> // epoll_create(), epoll_wait(), ... 
@@ -244,6 +245,16 @@ libkita_empty(const char *str)
 {
 	return (str == NULL || str[0] == '\0');
 }
+
+/*
+static double
+libkita_time()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (double) ts.tv_sec + ts.tv_nsec / 1000000000.0;
+}
+*/
 
 /*
  * Opens the process `cmd` similar to popen() but does not invoke a shell.
@@ -1324,7 +1335,7 @@ libkita_poll(kita_state_s *s, int timeout)
 #ifdef BSD
 	struct kevent epev;
 	struct timespec to = { .tv_sec = 0, .tv_nsec = timeout * 1000000 };
-	fprintf(stderr, "timeout = %d ms\n", timeout);
+	fprintf(stderr, "timeout = %d\n", timeout);
 #elif
 	struct epoll_event epev;
 #endif
@@ -1349,9 +1360,13 @@ libkita_poll(kita_state_s *s, int timeout)
 	// timeout = NULL -> block indefinitely, until events available
 	// timeout =    0 -> return immediately, even if no events available
 #ifdef BSD
-	//int num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to); 
 	int num_events = 0;
-	while (num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to))
+	struct timespec *ts = timeout == -1 ? NULL : &to;
+	//num_events = kevent(s->epfd, NULL, 0, &epev, 1, &ts); 
+	struct timespec before = { 0 };
+	struct timespec after  = { 0 };
+	clock_gettime(CLOCK_MONOTONIC, &before);
+	while (num_events = kevent(s->epfd, NULL, 0, &epev, 1, ts))
 	{
 		if (epev.udata == s->pipe[KITA_IOS_OUT])
 		{
@@ -1361,6 +1376,7 @@ libkita_poll(kita_state_s *s, int timeout)
 		{
 			break;
 		}
+		clock_gettime(CLOCK_MONOTONIC, &after);
 	}
 #elif
 	// timeout = -1 -> block indefinitely, until events available
