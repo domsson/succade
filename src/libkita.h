@@ -108,7 +108,7 @@ struct kita_stream
 
 	kita_ios_type_e ios_type;
 	kita_buf_type_e buf_type;
-	unsigned registered : 1;  // child registered with epoll? TODO do we need this?
+	unsigned registered : 2; // child registered with epoll?
 };
 
 struct kita_child
@@ -481,7 +481,7 @@ libkita_stream_reg_ev(kita_state_s *state, kita_stream_s *stream)
 	
 	// TODO also add the EVFILT_PROC event
 	int res = 0;
-	if ((res = kevent(state->epfd, &event, 1, NULL, 0, NULL)) == 1)
+	if ((res = kevent(state->epfd, &event, 1, NULL, 0, NULL)) == 0)
 	{
 		stream->registered = 1;
 		return 0;
@@ -534,6 +534,27 @@ libkita_stream_rem_ev(kita_state_s *state, kita_stream_s *stream)
 	}
 #endif
 	return -1;
+}
+
+static int
+libkita_child_sch_events(kita_state_s *state, kita_child_s *child)
+{
+	// TODO send _something_ to the state's interrupt pipe!
+	fprintf(stderr, "> scheduling\n");
+	if (fputs("sch\n", state->pipe[KITA_IOS_IN]) == EOF)
+	//if (write(state->pipe[KITA_IOS_IN], "lol", 4) < 1)
+	{
+		return -1;
+	}
+
+	for (int i = 0; i < 3; ++i)
+	{
+		if (child->io[i])
+		{
+			child->io[i]->registered = 2;
+		}
+	}
+	return 0;
 }
 
 /*
@@ -867,7 +888,6 @@ libkita_init_pipe(kita_state_s *state)
 	{
 		return -1;
 	}
-
 	return 0;
 }
 
@@ -899,7 +919,9 @@ libkita_init_epoll(kita_state_s *state)
 	// register the interrupt event
 	struct kevent interrupt;
 	int interrupt_out = fileno(state->pipe[KITA_IOS_OUT]);
-	EV_SET(&interrupt, interrupt_out, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, NULL);
+	//int interrupt_out = state->pipe[KITA_IOS_OUT];
+	EV_SET(&interrupt, interrupt_out, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, state->pipe[KITA_IOS_OUT]);
+	//EV_SET(&interrupt, interrupt_out, EVFILT_READ, EV_ADD | EV_ENABLE | EV_CLEAR, 0, 0, state);
 	int ret = kevent(epfd, &interrupt, 1, NULL, 0, NULL);
 	fprintf(stderr, "kevent(interrupt) = %d\n", ret);
 	#endif
@@ -941,6 +963,26 @@ libkita_child_status(kita_child_s *child)
 	// we don't need to inspect info.si_code, because
 	// we only wait for exited/stopped children anyway
 	return 0;
+}
+
+static int
+libkita_register(kita_state_s *state)
+{
+	int reg = 0;
+	kita_child_s *child = NULL;
+
+	for (size_t i = 0; i < state->num_children; ++i)
+	{
+		child = state->children[i];
+		for (size_t s = 0; s < 3; ++s)
+		{
+			if (child->io[s] && child->io[s]->registered == 2)
+			{
+				reg += libkita_stream_reg_ev(state, child->io[s]) == 0;
+			}
+		}
+	}
+	return reg;
 }
 
 /*
@@ -1058,10 +1100,19 @@ libkita_handle_event(kita_state_s *state, void *ev)
 {
 #ifdef BSD
 	struct kevent *kev = (struct kevent*) ev;
-	int fd = fileno((FILE*) kev->udata);
+	int fd = kev->ident;
 #elif
 	struct epoll_event *epev = (struct epoll_event*) ev;
 	int fd = epev->data.fd;
+#endif
+
+#ifdef BSD
+	if (kev->udata == state->pipe[KITA_IOS_OUT])
+	{
+		//fprintf(stderr, "> interrupt!\n");
+		fflush(state->pipe[KITA_IOS_OUT]);
+		return 0;
+	}
 #endif
 
 	kita_child_s *child = libkita_child_get_by_fd(state, fd);
@@ -1074,6 +1125,7 @@ libkita_handle_event(kita_state_s *state, void *ev)
 	event.child = child;
 	event.fd    = fd; 
 	event.ios   = libkita_child_fd_get_type(child, fd);
+// 1120
 
 	// EPOLLIN: We've got data coming in
 #ifdef BSD
@@ -1271,8 +1323,8 @@ libkita_poll(kita_state_s *s, int timeout)
 {
 #ifdef BSD
 	struct kevent epev;
-	struct timespec to = { .tv_sec = timeout / 1000, .tv_nsec = 0 };
-	//fprintf(stderr, "timeout = %d s\n", timeout);
+	struct timespec to = { .tv_sec = 0, .tv_nsec = timeout * 1000000 };
+	fprintf(stderr, "timeout = %d ms\n", timeout);
 #elif
 	struct epoll_event epev;
 #endif
@@ -1297,7 +1349,19 @@ libkita_poll(kita_state_s *s, int timeout)
 	// timeout = NULL -> block indefinitely, until events available
 	// timeout =    0 -> return immediately, even if no events available
 #ifdef BSD
-	int num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to); 
+	//int num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to); 
+	int num_events = 0;
+	while (num_events = kevent(s->epfd, NULL, 0, &epev, 1, &to))
+	{
+		if (epev.udata == s->pipe[KITA_IOS_OUT])
+		{
+			libkita_handle_event(s, &epev);
+		}
+		else
+		{
+			break;
+		}
+	}
 #elif
 	// timeout = -1 -> block indefinitely, until events available
 	// timeout =  0 -> return immediately, even if no events available
@@ -1323,11 +1387,13 @@ libkita_poll(kita_state_s *s, int timeout)
 		//  - KITA_ERR_EPOLL_SIG  if epoll_pwait() caught a signal
 		//  - KITA_ERR_EPOLL_WAIT for any other error in epoll_wait()
 		s->error = errno == EINTR ? KITA_ERR_EPOLL_SIG : KITA_ERR_EPOLL_WAIT;
-		
 		return -1;
 	}
 
-	libkita_handle_event(s, &epev); // TODO what to do with the return val?
+	if (num_events > 0)
+	{
+		libkita_handle_event(s, &epev); // TODO what to do with the return val?
+	}
 	return 0;
 }
 
@@ -1545,7 +1611,11 @@ kita_child_open(kita_child_s *child)
 	// if child is tracked, register events for it
 	if (child->state)
 	{
+#ifdef BSD
+		libkita_child_sch_events(child->state, child);
+#elif
 		libkita_child_reg_events(child->state, child);
+#endif
 	}
 	return 0;
 }
@@ -1804,6 +1874,13 @@ kita_set_callback(kita_state_s *state, kita_evt_type_e type, kita_call_c cb)
 int
 kita_tick(kita_state_s *state, int timeout)
 {
+	// register children that are scheduled for it
+	int r = libkita_register(state);
+	if (r > 0)
+	{
+		//fprintf(stderr, "registered: %d\n", r);
+	}
+
 	// wait for child events via epoll_pwait()
 	libkita_poll(state, timeout);
 	
