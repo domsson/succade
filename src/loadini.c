@@ -40,6 +40,11 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 		cfg_set_int(lc, LEMON_OPT_LW, atoi(value));
 		return 1;
 	}
+	if (equals(name, "separator"))
+	{
+		cfg_set_str(lc, LEMON_OPT_SEPARATOR, is_quoted(value) ? unquote(value) : strdup(value));
+		return 1;
+	}
 	if (equals(name, "height") || equals(name, "h"))
 	{
 		cfg_set_int(lc, LEMON_OPT_HEIGHT, atoi(value));

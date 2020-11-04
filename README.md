@@ -28,6 +28,10 @@ The config needs to have one section for lemonbar (`bar`) and one per block, plu
 
 - [`inih`](https://github.com/benhoyt/inih) (`libinih-dev` in Debian, but also included in this repo, see below)
 
+# Portability
+
+succade uses [libkita](https://github.com/domsson/libkita) to manage child processes. libkita uses `epoll`, which is Linux only. I've attempted to port libkita to BSD using `kqueue`, but couldn't get it to work reliably (yet).
+
 # Installation 
 
 Make sure you have `lemonbar` (obviously), `gcc` (for compiling the source code) and all dependencies, as listed above, installed. If `inih` is not available in your distribution, just replace `./build` with `./build-inih` below and you should be good to go.
@@ -86,6 +90,7 @@ The special section `bar` configures Lemonbar itself and can define common forma
 | `affix-font`       | string  | Font to use for all block's prefixes / suffixes, if any. |
 | `line-color`       | color   | Color for all underlines / overlines, if any. |
 | `line-width`       | number  | Thickness of all underlines / overlines, if any, in pixels. |
+| `separator`        | string  | String to place in between any two blocks of the same alignment. |
 
 ## blocks
 
@@ -145,6 +150,10 @@ Options:
 # Blocks - Fetching System Information
 
 Looking for scripts, programs or code that can fetch information to display on your bar? Check out [fetch-all-the-things](https://github.com/domsson/fetch-all-the-things).
+
+# License
+
+succade is public domain software, do with it whatever you want. However, succade uses [`inih`](https://github.com/benhoyt/inih), which is under the New BSD license. 
 
 # Motivation 
 

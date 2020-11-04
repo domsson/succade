@@ -483,8 +483,12 @@ static char *barstr(const state_s *state)
 		return NULL;
 	}
 	
-	// For convenience...
+	// For convenience
 	size_t num_blocks = state->num_blocks;
+
+	// String to place in between any two blocks
+	char *sep = cfg_get_str(&state->lemon.cfg, LEMON_OPT_SEPARATOR);
+	size_t sep_len = sep ? strlen(sep) : 0;
 
 	// Short blocks like temperature, volume or battery, will usually use 
 	// something in the range of 130 to 200 byte. So let's go with 256 byte.
@@ -507,25 +511,40 @@ static char *barstr(const state_s *state)
 			continue;
 		}
 
+		// Figure out the alignment of this block
 		int block_align = cfg_get_int(&block->cfg, BLOCK_OPT_ALIGN);
+		int same_align = block_align == last_align;
 
+		// Build the block string
 		int block_str_len = blockstr(block, block_str, BUFFER_BLOCK_STR);
-		if (block_align != last_align)
+
+		// Potentially change the alignment
+		if (!same_align)
 		{
 			last_align = block_align;
 			snprintf(align, 5, "%%{%c}", get_align(last_align));
 			strcat(bar_str, align);
 		}
+		
 		// Let's check if this block string can fit in our buffer
-		size_t free_len = bar_str_len - (strlen(bar_str) + 1);
+		size_t free_len = bar_str_len - (strlen(bar_str) + sep_len + 1);
 		if (block_str_len > free_len)
 		{
 			// Let's make space for approx. two more blocks
 			bar_str_len += BUFFER_BLOCK_RESULT * 2; 
 			bar_str = realloc(bar_str, bar_str_len);
 		}
+
+		// Possibly add the block separator in front of the block
+		if (sep && same_align && i)
+		{
+			strcat(bar_str, sep);
+		}
+
+		// Add this block's result to the bar string
 		strcat(bar_str, block_str);
 	}
+
 	strcat(bar_str, "\n");
 	bar_str = realloc(bar_str, strlen(bar_str) + 1);
 	return bar_str;
