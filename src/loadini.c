@@ -9,7 +9,6 @@ int lemon_ini_handler(void *data, const char *section, const char *name, const c
 	thing_s *lemon = (thing_s*) data;
 	cfg_s *lc = &lemon->cfg;
 
-	// Check for `name` and set the appropriate property
 	if (equals(name, "name") || equals(name, "wm-name"))
 	{
 		cfg_set_str(lc, LEMON_OPT_NAME, is_quoted(value) ? unquote(value) : strdup(value));

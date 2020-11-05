@@ -116,25 +116,14 @@ static int open_lemon(thing_s *lemon)
 }
 
 /*
- * Runs the block's child process. Returns 0 on success, -1 on error.
+ * Runs the thing's child process. Returns 0 on success, -1 on error.
  */
-static int open_block(thing_s *block)
+static int open_thing(thing_s *thing)
 {
-	if (kita_child_open(block->child) == 0)
+	if (kita_child_open(thing->child) == 0)
 	{
-		block->last_open = get_time();
-		block->alive = 1;
-		return 0;
-	}
-	return -1;
-}
-
-static int open_spark(thing_s *spark)
-{
-	if (kita_child_open(spark->child) == 0)
-	{
-		spark->last_open = get_time();
-		spark->alive = 1;
+		thing->last_open = get_time();
+		thing->alive = 1;
 		return 0;
 	}
 	return -1;
@@ -181,7 +170,7 @@ static size_t open_sparks(state_s *state)
 	size_t num_sparks_opened = 0;
 	for (size_t i = 0; i < state->num_sparks; ++i)
 	{
-		num_sparks_opened += (open_spark(&state->sparks[i]) == 0);
+		num_sparks_opened += (open_thing(&state->sparks[i]) == 0);
 	}
 	return num_sparks_opened;
 }
@@ -198,7 +187,7 @@ static void free_blocks(state_s *state)
 }
 
 /*
- * Convenience function: simply frees all given triggers.
+ * Convenience function: simply frees all given sparks.
  */
 static void free_sparks(state_s *state)
 {
@@ -298,12 +287,12 @@ static size_t open_due_blocks(state_s *state, double now)
 			if (block_can_consume(block))
 			{
 				kita_child_set_arg(block->child, block->other->output);
-				opened += (open_block(block) == 0);
+				opened += (open_thing(block) == 0);
 				kita_child_set_arg(block->child, NULL);
 			}
 			else
 			{
-				opened += (open_block(block) == 0);
+				opened += (open_thing(block) == 0);
 			}
 			if (block->b_type == BLOCK_SPARKED)
 			{
@@ -317,6 +306,7 @@ static size_t open_due_blocks(state_s *state, double now)
 
 /*
  * Returns the time, in seconds, until the next block should be run.
+ * If no blocks are scheduled for execution, -1 will be returned.
  */
 static double time_to_wait(state_s *state, double now)
 {
@@ -665,7 +655,7 @@ static thing_s *add_block(state_s *state, const char *sid)
 
 	// Create the block, setting its name and default values
 	state->blocks[current] = (thing_s) { 0 };
-	state->blocks[current].sid = strdup(sid);
+	state->blocks[current].sid    = strdup(sid);
 	state->blocks[current].t_type = THING_BLOCK;
 	state->blocks[current].b_type = BLOCK_ONCE;
 	cfg_init(&state->blocks[current].cfg, "default", BLOCK_OPT_COUNT);
@@ -791,7 +781,7 @@ static thing_s *add_spark(state_s *state, thing_s *block, const char *cmd)
 	 
 	state->sparks[current] = (thing_s) { 0 };
 	state->sparks[current].t_type = THING_SPARK;
-	state->sparks[current].other = block;
+	state->sparks[current].other  = block;
 
 	// Add a reference of this spark to the block we've created it for
 	block->other = &state->sparks[current];
@@ -863,18 +853,16 @@ int run_cmd(const char *cmd)
  */
 static int process_action(const state_s *state, const char *action)
 {
-	size_t len = strlen(action);
-	if (len < 5)
-	{
-		return -1;	// Can not be an action command, too short
-	}
-
 	// A valid action command should have the format <blockname>_<cmd-type>
 	// For example, for a block named `datetime` that was clicked with the 
 	// left mouse button, `action` should be "datetime_lmb"
 
-	char types[5][5] = {"_lmb", "_mmb", "_rmb", "_sup", "_sdn"};
-
+	size_t len = strlen(action);
+	if (len < 5) 
+	{
+		return -1;	// Can not be an action command, too short
+	}
+	
 	// Extract the type suffix, including the underscore
 	char type[5]; 
 	snprintf(type, 5, "%s", action + len - 4);
@@ -882,24 +870,6 @@ static int process_action(const state_s *state, const char *action)
 	// Extract everything _before_ the suffix (this is the block name)
 	char block[len-3];
 	snprintf(block, len - 3, "%s", action); 
-
-	// We check if the action type is valid (see types)
-	int b = 0;
-	int found = 0;
-	for (; b < 5; ++b)
-	{
-		if (equals(type, types[b]))
-		{
-			found = 1;
-			break;
-		}
-	}
-
-	// Not a recognized action type
-	if (!found)
-	{
-		return -1;
-	}
 
 	// Find the source block of the action
 	thing_s *source = get_block(state, block);
@@ -909,26 +879,29 @@ static int process_action(const state_s *state, const char *action)
 	}
 
 	// Now to fire the right command for the action type
-	switch (b) {
-		case 0:
-			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_LMB));
-			return 0;
-		case 1:
-			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_MMB));
-			return 0;
-		case 2:
-			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_RMB));
-			return 0;
-		case 3:
-			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_SUP));
-			return 0;
-		case 4:
-			run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_SDN));
-			return 0;
-		default:
-			// Should never happen...
-			return -1;
+	if (equals(type, "_lmb"))
+	{
+		return run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_LMB));
 	}
+	if (equals(type, "_mmb"))
+	{
+		return run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_MMB));
+	}
+	if (equals(type, "_rmb"))
+	{
+		return run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_RMB));
+	}
+	if (equals(type, "_sup"))
+	{
+		return run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_SUP));
+	}
+	if (equals(type, "_sdn"))
+	{
+		return run_cmd(cfg_get_str(&source->cfg, BLOCK_OPT_CMD_SDN));
+	}
+
+	// Invalid action type (how in the world did that happen?)
+	return -1;
 }
 
 static void feed_lemon(state_s *state)
