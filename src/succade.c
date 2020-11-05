@@ -63,23 +63,30 @@ int lemon_arg(thing_s *lemon, char *buf, size_t len)
 	char *bg = cfg_get_str(lcfg, LEMON_OPT_BG);
 	char *lc = cfg_get_str(lcfg, LEMON_OPT_LC);
 
+	char areas[8] = { 0 };
+	int num_areas = cfg_get_int(lcfg, LEMON_OPT_AREAS);
+	if (num_areas)
+	{
+		snprintf(areas, 8, "-a%d", num_areas);
+	}
+
 	int res = snprintf(buf, len,
-		"-g %sx%s+%d+%d -a%d -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
-		cfg_has(lcfg, LEMON_OPT_WIDTH)  ? w : "",    // max 8
-		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",    // max 8
-		cfg_get_int(lcfg, LEMON_OPT_X),              // max 8
-		cfg_get_int(lcfg, LEMON_OPT_Y),              // max 8
-		cfg_get_int(lcfg, LEMON_OPT_AREAS),          // 
-		fg ? fg : "-",                               // strlen, max 9
-		bg ? bg : "-",                               // strlen, max 9
-		lc ? lc : "-",                               // strlen, max 9
-		cfg_get_int(lcfg, LEMON_OPT_LW),             // max 4
-		cfg_get_int(lcfg, LEMON_OPT_BOTTOM) ? "-b" : "",   // max 2
-		cfg_get_int(lcfg, LEMON_OPT_FORCE)  ? "-d" : "",   // max 2
-		block_font,                                  // strlen, max 255
-		label_font,                                  // strlen, max 255
-		affix_font,                                  // strlen, max 255
-		name_str                                     // strlen
+		"-g %sx%s+%d+%d %s -F%s -B%s -U%s -u%d %s %s %s %s %s %s",
+		cfg_has(lcfg, LEMON_OPT_WIDTH)  ? w : "",
+		cfg_has(lcfg, LEMON_OPT_HEIGHT) ? h : "",
+		cfg_get_int(lcfg, LEMON_OPT_X),
+		cfg_get_int(lcfg, LEMON_OPT_Y),
+		areas,
+		fg ? fg : "-",
+		bg ? bg : "-",
+		lc ? lc : "-",
+		cfg_get_int(lcfg, LEMON_OPT_LW),
+		cfg_get_int(lcfg, LEMON_OPT_BOTTOM) ? "-b" : "",
+		cfg_get_int(lcfg, LEMON_OPT_FORCE)  ? "-d" : "",
+		block_font,
+		label_font,
+		affix_font,
+		name_str
 	);
 
 	free(block_font);
@@ -383,11 +390,6 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	//      but, be careful! the length of the unit string, plus the 
 	//      separating space, need to be taken into account when 
 	//      calculating the padding (fixed width) of the block, no?
-	
-	size_t diff = 0;
-	char *result = cfg_get_int(bcfg, BLOCK_OPT_RAW) ? 
-		strdup(block->output) : escape(block->output, '%', &diff);
-	int min_width = cfg_get_int(bcfg, BLOCK_OPT_MIN_WIDTH) + diff;
 
 	const char *block_fg = strsel(cfg_get_str(bcfg, BLOCK_OPT_FG),       "-", "");
 	const char *block_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_BG),       "-", "");
@@ -408,6 +410,11 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	int margin_r  = cfg_get_int(bcfg, BLOCK_OPT_MARGIN_RIGHT);
 	int ol        = cfg_get_int(bcfg, BLOCK_OPT_OL);
 	int ul        = cfg_get_int(bcfg, BLOCK_OPT_UL);
+
+	size_t diff = 0;
+	char *result = cfg_get_int(bcfg, BLOCK_OPT_RAW) ? 
+		strdup(block->output) : escape(block->output, '%', &diff);
+	int min_width = cfg_get_int(bcfg, BLOCK_OPT_MIN_WIDTH) + diff;
 
 	// TODO currently we are adding the format thingies for label, 
 	//      prefix and suffix, even if those are empty anyway, which
@@ -1273,10 +1280,10 @@ int main(int argc, char **argv)
 		cfg_set_str(&lemon->cfg, LEMON_OPT_NAME, strdup(DEFAULT_LEMON_NAME));
 	}
 
-	// if no 'areas' option was present in the config, set it to the default
+	// if no 'areas' option was present in the config, set it to 0
 	if (!cfg_has(&lemon->cfg, LEMON_OPT_AREAS))
 	{
-		cfg_set_int(&lemon->cfg, LEMON_OPT_AREAS, DEFAULT_LEMON_AREAS);
+		cfg_set_int(&lemon->cfg, LEMON_OPT_AREAS, 0);
 	}
 
 	// create the child process and add it to the kita state

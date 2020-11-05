@@ -29,7 +29,6 @@
 #define DEFAULT_LEMON_BIN     "lemonbar"
 #define DEFAULT_LEMON_NAME    "succade_lemonbar"
 #define DEFAULT_LEMON_SECTION "bar"
-#define DEFAULT_LEMON_AREAS   10
 
 //
 // ENUMS
