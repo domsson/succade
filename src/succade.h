@@ -10,7 +10,7 @@
 #define SUCCADE_URL  "https://github.com/domsson/succade"
 #define SUCCADE_VER_MAJOR 2
 #define SUCCADE_VER_MINOR 1
-#define SUCCADE_VER_PATCH 2
+#define SUCCADE_VER_PATCH 3
 
 #define BUFFER_NUMERIC          8
 #define BUFFER_LEMON_ARG     1024
@@ -101,7 +101,7 @@ enum succade_block_opt
 	BLOCK_OPT_MARGIN_RIGHT,  // int: margin right
 	BLOCK_OPT_PADDING_LEFT,  // int: padding left
 	BLOCK_OPT_PADDING_RIGHT, // int: padding right
-	BLOCK_OPT_ALIGN,         // TODO 
+	BLOCK_OPT_ALIGN,         // string: 'left', 'center' or 'right' 
 	BLOCK_OPT_PREFIX,        // string: prefix
 	BLOCK_OPT_SUFFIX,        // string: suffix
 	BLOCK_OPT_LABEL,         // string: label

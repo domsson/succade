@@ -334,14 +334,54 @@ static double time_to_wait(state_s *state, double now)
 }
 
 /*
+ * Given a block, returns a malloc'd string that contains both the block's
+ * output, as well as its unit string (if any). The length (excluding the 
+ * null terminator) of the resulting string will be returned in `len` and 
+ * the additional characters, that have been added due to escaping of the 
+ * result and unit string, will be returned in `diff`, if given.
+ */
+char* resultstr(const thing_s *block, int *len, size_t *diff)
+{
+	// The 'diff' will tell us how many extra characters the string gained
+	// because of escaping '%' signs; we need this amount for the min_width 
+	// value, because while those additional characters have to be taken 
+	// into account for snprintf(), they aren't part of the visible output
+
+	const cfg_s *bcfg = &block->cfg;
+	
+	size_t rdiff = 0;
+	char *result = cfg_get_int(bcfg, BLOCK_OPT_RAW) ? 
+		strdup(block->output) : escape(block->output, '%', &rdiff);
+
+	size_t udiff = 0;
+	char *unit = escape(strsel(cfg_get_str(bcfg, BLOCK_OPT_UNIT), "", ""), '%', &udiff);
+
+	if (diff)
+	{
+		*diff = rdiff + udiff;
+	}
+
+	size_t output_len = strlen(result) + strlen(unit) + 1;
+	char *output = malloc(sizeof(char) * output_len);
+
+	*len = snprintf(output, output_len, "%s%s", result, unit);
+
+	free(result);
+	free(unit);
+
+	return output;
+}
+
+/*
  * Given a block, writes a string to the given buf that is the formatted result 
  * of this block's script output, ready to be fed to Lemonbar, including prefix,
  * label and suffix. Returns the number of characters written to buf.
  */
-int blockstr(const thing_s *block, char *buf, size_t len)
+int blockstr(const thing_s *lemon, const thing_s *block, char *buf, size_t len)
 {
 	// for convenience
 	const cfg_s *bcfg = &block->cfg;
+	const cfg_s *lcfg = &lemon->cfg;
 
 	char action_start[(5 * strlen(block->sid)) + 64];
 	char action_end[24];  
@@ -399,10 +439,15 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	const char *affix_bg = strsel(cfg_get_str(bcfg, BLOCK_OPT_AFFIX_BG), "-", "");
 	const char *lc       = strsel(cfg_get_str(bcfg, BLOCK_OPT_LC),       "-", "");
 
+	int font_count = 0;
+
+	char block_font_idx = cfg_get_str(lcfg, LEMON_OPT_BLOCK_FONT) ? (++font_count) + '0' : '-'; // 1st slot
+	char label_font_idx = cfg_get_str(lcfg, LEMON_OPT_LABEL_FONT) ? (++font_count) + '0' : '-'; // 2nd slot
+	char affix_font_idx = cfg_get_str(lcfg, LEMON_OPT_AFFIX_FONT) ? (++font_count) + '0' : '-'; // 3rd slot
+
 	const char *prefix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_PREFIX), "", "");
 	const char *suffix   = strsel(cfg_get_str(bcfg, BLOCK_OPT_SUFFIX), "", "");
 	const char *label    = strsel(cfg_get_str(bcfg, BLOCK_OPT_LABEL),  "", "");
-	//const char *unit     = strsel(cfg_get_str(bcfg, BLOCK_OPT_UNIT),   "", "");
 
 	int padding_l = cfg_get_int(bcfg, BLOCK_OPT_PADDING_LEFT);
 	int padding_r = cfg_get_int(bcfg, BLOCK_OPT_PADDING_RIGHT);
@@ -411,10 +456,10 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	int ol        = cfg_get_int(bcfg, BLOCK_OPT_OL);
 	int ul        = cfg_get_int(bcfg, BLOCK_OPT_UL);
 
-	size_t diff = 0;
-	char *result = cfg_get_int(bcfg, BLOCK_OPT_RAW) ? 
-		strdup(block->output) : escape(block->output, '%', &diff);
-	int min_width = cfg_get_int(bcfg, BLOCK_OPT_MIN_WIDTH) + diff;
+	int     rlen      = 0;
+	size_t  rdiff     = 0;
+	char   *result    = resultstr(block, &rlen, &rdiff);
+	int     min_width = cfg_get_int(bcfg, BLOCK_OPT_MIN_WIDTH) + rdiff;
 
 	// TODO currently we are adding the format thingies for label, 
 	//      prefix and suffix, even if those are empty anyway, which
@@ -423,14 +468,17 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 	//      but of course, replacing a couple bytes with lots of malloc
 	//      would not be great either, so... not sure about it yet.
 
+	// TODO bug! bug! bug! we just used font slots 1 to 3 here, but maybe
+	//      we're only loading one or two (or zero) fonts! NO BUENO!
+
 	int res = snprintf(buf, len,
 		"%%{O%d}"                                      // margin left
 		"%s"                                           // action start
 		"%%{F%s B%s U%s %co %cu}"                      // format start
-		"%%{T3 F%s B%s}%s"                             // prefix
-		"%%{T2 F%s B%s}%s"                             // label
-		"%%{T1 F%s B%s}%*s%*s%*s"                      // block
-		"%%{T3 F%s B%s}%s"                             // suffix
+		"%%{T%c F%s B%s}%s"                            // prefix
+		"%%{T%c F%s B%s}%s"                            // label
+		"%%{T%c F%s B%s}%*s%*s%*s"                     // block
+		"%%{T%c F%s B%s}%s"                            // suffix
 		"%%{T- F- B- U- -o -u}"                        // format end
 		"%s"                                           // action end
 		"%%{O%d}",                                     // margin right
@@ -441,13 +489,13 @@ int blockstr(const thing_s *block, char *buf, size_t len)
 		// format start       
 		block_fg, block_bg, lc, (ol ? '+' : '-'), (ul ? '+' : '-'),
 		// prefix
-		affix_fg, affix_bg, prefix,
+		affix_font_idx, affix_fg, affix_bg, prefix,
 		// label
-		label_fg, label_bg, label,
+		label_font_idx, label_fg, label_bg, label,
 		// block
-		block_fg, block_bg, padding_l, "", min_width, result, padding_r, "",
+		block_font_idx, block_fg, block_bg, padding_l, "", min_width, result, padding_r, "",
 		// suffix
-		affix_fg, affix_bg, suffix,
+		affix_font_idx, affix_fg, affix_bg, suffix,
 		// action end
 		action_end,
 		// margin right
@@ -513,7 +561,7 @@ static char *barstr(const state_s *state)
 		int same_align = block_align == last_align;
 
 		// Build the block string
-		int block_str_len = blockstr(block, block_str, BUFFER_BLOCK_STR);
+		int block_str_len = blockstr(&state->lemon, block, block_str, BUFFER_BLOCK_STR);
 
 		// Potentially change the alignment
 		if (!same_align)
